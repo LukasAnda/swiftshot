@@ -32,6 +32,14 @@ record() {  # scenario seconds outdir exit
     echo "== $1: $2 s, $n screenshots, exit $4"
 }
 
+FAILED=0
+failed() {  # scenario log: surface the error lines (also as GitHub annotations)
+    FAILED=1
+    sed 's/\x1b\[[0-9;]*m//g' "$2" | grep -E '!|✘|error|rror:|failed' | tail -8 | while IFS= read -r line; do
+        [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=$1::${line}" || echo "   $line"
+    done
+}
+
 swiftshot_run() {  # scenario device-set template-dir [extra args…]
     local name=$1 set=$2 templates=$3; shift 3
     local out=$BENCH_DIR/$name
@@ -42,6 +50,7 @@ swiftshot_run() {  # scenario device-set template-dir [extra args…]
         -o "$out/screenshots" "$@") 2>&1 | tee "$out/log.txt"
     local code=${PIPESTATUS[0]}
     record "$name" $(( $(date +%s) - start )) "$out/screenshots" "$code"
+    [ "$code" = 0 ] || failed "$name" "$out/log.txt"
     [ -f "$out/screenshots/swiftshot-report.json" ] && python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))["timings"]; print("   stages: " + ", ".join(f"{k} {v:.1f}s" for k,v in t.items()))' "$out/screenshots/swiftshot-report.json"
 }
 
@@ -80,8 +89,10 @@ print(ok[-1]["identifier"], ok[-1]["version"])' "$DEVICES")
         --output_directory "$out/screenshots") 2>&1 | tee "$out/log.txt"
     code=${PIPESTATUS[0]}
     record fastlane $(( $(date +%s) - start )) "$out/screenshots" "$code"
+    [ "$code" = 0 ] || failed fastlane "$out/log.txt"
     for n in "${FL_NAMES[@]}"; do xcrun simctl delete "$n" 2>/dev/null; done
     ;;
 *) echo "usage: $0 swiftshot|fastlane"; exit 2 ;;
 esac
 column -t -s $'\t' "$RESULTS"
+exit $FAILED
