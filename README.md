@@ -30,8 +30,12 @@ simulators). It's `.github/workflows/benchmark.yml`, so anyone can re-run it.
 | `macos-26` (Xcode 26.6, iOS 26.5) | `fastlane snapshot` | 45 (iOS) | **4683 s** (78 min) |
 | `macos-26` | swiftshot, booted simulators (`--boot`) | 64 (iOS + watch) | 990 s |
 | `macos-26` | swiftshot, no boot (default) | 55 (iOS) | **38 s** warm |
-| `xcode-27` (Xcode 27, iOS 27.0) | swiftshot, no boot (default) | 55 (iOS) | **75 s** cold, **48 s** warm |
-| `xcode-27` | swiftshot, no boot, iOS + Apple Watch | 70 | 65 s |
+| `xcode-27` (Xcode 27, iOS 27.0) | `fastlane snapshot` | 45 (iOS) | **3583 s** (60 min) |
+| `xcode-27` | swiftshot, no boot (default) | 55 (iOS) | **61 s** cold, **34 s** warm |
+| `xcode-27` | swiftshot, no boot, iOS + Apple Watch | 70 | 48 s |
+
+On the same `xcode-27` run, swiftshot produced more screenshots **59× faster** than fastlane from a
+cold start (105× warm).
 
 On an Apple Silicon laptop (warm DerivedData), the same 55 iOS screenshots take **8–9 s**; with the
 watch, 70 take 17 s.
