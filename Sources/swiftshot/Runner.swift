@@ -223,8 +223,10 @@ final class Runner {
         var targets: [Target] = []
         var plannedHosts: [Platform: [Host]] = [:]
         let placeholder = BuiltApp(path: "", bundleID: "")
-        var planned: [(SimDeviceType, SimRuntime, String)] = []
+        var plannedBy: [Platform: [(SimDeviceType, SimRuntime, String)]] = [:]
         for platform in [Platform.ios, .watchos] {
+            var planned: [(SimDeviceType, SimRuntime, String)] = []
+            defer { plannedBy[platform] = planned }
             let types = allTypes.filter { Platform.of($0) == platform }
             if types.isEmpty { continue }
             let runtimes = try await resolveRuntimes(platform)
@@ -246,7 +248,16 @@ final class Runner {
                 }
             }
         }
-        try await startBoots(planned)
+        // Scheduling experiments for small CI machines (3-core / 7 GB VMs), see bench/:
+        // SWIFTSHOT_BOOT_AFTER_BUILD=1 boots only once the apps are built (no CPU contention with
+        // xcodebuild); SWIFTSHOT_STAGED=1 handles one platform at a time (fewer simulators alive).
+        let env = ProcessInfo.processInfo.environment
+        let bootAfterBuild = env["SWIFTSHOT_BOOT_AFTER_BUILD"] == "1", staged = env["SWIFTSHOT_STAGED"] == "1"
+        if !bootAfterBuild {
+            for (index, target) in targets.enumerated() where !staged || index == 0 {
+                try await startBoots(plannedBy[target.platform] ?? [])
+            }
+        }
         // Builds run one after another (they share DerivedData), but each platform starts
         // rendering as soon as its own app is built.
         var builds: [Task<BuiltApp, Error>] = []
@@ -260,26 +271,34 @@ final class Runner {
                 return app
             })
         }
+        if bootAfterBuild && !staged {
+            for build in builds { _ = try await build.value }
+            for target in targets { try await startBoots(plannedBy[target.platform] ?? []) }
+        }
 
         let renderStart = Date()
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            for (index, unbuilt) in targets.enumerated() {
-                group.addTask {
-                    var target = unbuilt
-                    target.app = try await builds[index].value
-                    // Watch previews are always captured from the real watch screen (one simulator per
-                    // watch model); iOS uses virtual devices unless --mode device is requested.
-                    if self.options.mode == .device || target.platform == .watchos {
-                        try await self.runDevice(target)
-                    } else {
-                        let hosts = (plannedHosts[target.platform] ?? []).map {
-                            Host(target: target, runtime: $0.runtime, type: $0.type, profiles: $0.profiles)
-                        }
-                        try await self.runVirtual(target, hosts: hosts)
-                    }
+        let render: @Sendable (Int, Target) async throws -> Void = { index, unbuilt in
+            var target = unbuilt
+            target.app = try await builds[index].value
+            if staged && (bootAfterBuild || index > 0) { try await self.startBoots(plannedBy[target.platform] ?? []) }
+            // Watch previews are always captured from the real watch screen (one simulator per
+            // watch model); iOS uses virtual devices unless --mode device is requested.
+            if self.options.mode == .device || target.platform == .watchos {
+                try await self.runDevice(target)
+            } else {
+                let hosts = (plannedHosts[target.platform] ?? []).map {
+                    Host(target: target, runtime: $0.runtime, type: $0.type, profiles: $0.profiles)
                 }
+                try await self.runVirtual(target, hosts: hosts)
             }
-            try await group.waitForAll()
+        }
+        if staged {
+            for (index, target) in targets.enumerated() { try await render(index, target) }
+        } else {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                for (index, target) in targets.enumerated() { group.addTask { try await render(index, target) } }
+                try await group.waitForAll()
+            }
         }
         record("render (all simulators)", renderStart)
 

@@ -45,10 +45,16 @@ swiftshot_run() {  # scenario device-set template-dir [extra args…]
     local out=$BENCH_DIR/$name
     rm -rf "$out"; mkdir -p "$out"
     local start; start=$(date +%s)
+    # Peak load average and swap use during the run (small CI VMs run out of both).
+    ( while true; do echo "$(sysctl -n vm.loadavg | awk '{print $2}') $(sysctl -n vm.swapusage | awk '{print $6}' | tr -d M)"; sleep 5; done ) > "$out/resources.txt" &
+    local sampler=$!
     (cd Example/DemoApp && "$SWIFTSHOT" --config "$CONFIG" --device-set "$set" --template-cache "$templates" \
         --derived-data "$BENCH_DIR/DerivedData" \
         -o "$out/screenshots" "$@") 2>&1 | tee "$out/log.txt"
     local code=${PIPESTATUS[0]}
+    kill $sampler 2>/dev/null
+    local peak; peak=$(sort -n -k1 "$out/resources.txt" | tail -1 | cut -d' ' -f1)/$(sort -n -k2 "$out/resources.txt" | tail -1 | cut -d' ' -f2)
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::notice title=$name resources::peak load ${peak%/*}, peak swap used ${peak#*/} MB"; else echo "   peak load ${peak%/*}, swap ${peak#*/} MB"; fi
     record "$name" $(( $(date +%s) - start )) "$out/screenshots" "$code"
     [ "$code" = 0 ] || failed "$name" "$out/log.txt"
     [ -f "$out/screenshots/swiftshot-report.json" ] && python3 -c '

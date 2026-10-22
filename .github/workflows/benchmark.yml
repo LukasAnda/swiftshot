@@ -20,6 +20,15 @@ jobs:
   swiftshot:
     runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # Scheduling experiments for small runners (see Runner.run): default overlaps build and
+        # all boots; boot-after-build builds first; staged does one platform at a time.
+        variant: [default, boot-after-build, staged]
+    env:
+      SWIFTSHOT_BOOT_AFTER_BUILD: ${{ matrix.variant == 'boot-after-build' && '1' || '' }}
+      SWIFTSHOT_STAGED: ${{ matrix.variant == 'staged' && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
       - name: Machine
@@ -33,11 +42,11 @@ jobs:
         run: BENCH_DIR="$RUNNER_TEMP/bench.noindex" bench/run.sh swiftshot
       - name: Summary
         if: always()
-        run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" swiftshot >> "$GITHUB_STEP_SUMMARY"
+        run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" "swiftshot ${{ matrix.variant }}" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: swiftshot-bench
+          name: swiftshot-bench-${{ matrix.variant }}
           path: |
             ${{ runner.temp }}/bench.noindex/results.tsv
             ${{ runner.temp }}/bench.noindex/*/log.txt
