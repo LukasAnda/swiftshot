@@ -19,13 +19,14 @@ on:
 jobs:
   swiftshot:
     runs-on: ${{ inputs.runner || 'macos-26' }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Machine
         run: |
           sw_vers; xcodebuild -version; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
           xcrun simctl list runtimes
+          echo "::notice title=machine::$(sysctl -n machdep.cpu.brand_string), $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, $(xcodebuild -version | head -1), runtimes: $(xcrun simctl list runtimes | grep -oE '^(iOS|watchOS) [0-9.]+' | tr '\n' ' ')"
       - name: Build swiftshot
         run: make
       - name: Benchmark (cold, cached templates, warm)
@@ -45,7 +46,7 @@ jobs:
   fastlane:
     if: ${{ github.event_name == 'push' || inputs.fastlane }}
     runs-on: ${{ inputs.runner || 'macos-26' }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - name: Machine
