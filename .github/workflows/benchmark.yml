@@ -1,0 +1,67 @@
+# Performance on real, fresh GitHub-hosted macOS runners: every job starts with an empty
+# DerivedData and brand-new simulators, exactly like a CI screenshot job. Swiftshot and fastlane
+# run on separate runners so they don't compete for CPU.
+name: benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: macOS runner image
+        default: macos-26
+      fastlane:
+        description: Also benchmark fastlane snapshot
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ["Sources/**", "Agent/**", "Shared/**", "bench/**", "Makefile", ".github/workflows/benchmark.yml"]
+
+jobs:
+  swiftshot:
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Machine
+        run: |
+          sw_vers; xcodebuild -version; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          xcrun simctl list runtimes
+      - name: Build swiftshot
+        run: make
+      - name: Benchmark (cold, cached templates, warm)
+        run: BENCH_DIR="$RUNNER_TEMP/bench.noindex" bench/run.sh swiftshot
+      - name: Summary
+        if: always()
+        run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" swiftshot >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftshot-bench
+          path: |
+            ${{ runner.temp }}/bench.noindex/results.tsv
+            ${{ runner.temp }}/bench.noindex/*/log.txt
+            ${{ runner.temp }}/bench.noindex/*/screenshots
+
+  fastlane:
+    if: ${{ github.event_name == 'push' || inputs.fastlane }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Machine
+        run: |
+          sw_vers; xcodebuild -version; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          command -v fastlane || brew install fastlane
+          fastlane --version
+      - name: Benchmark (cold)
+        run: BENCH_DIR="$RUNNER_TEMP/bench.noindex" bench/run.sh fastlane
+      - name: Summary
+        if: always()
+        run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" fastlane >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fastlane-bench
+          path: |
+            ${{ runner.temp }}/bench.noindex/results.tsv
+            ${{ runner.temp }}/bench.noindex/fastlane/log.txt

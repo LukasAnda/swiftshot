@@ -1,0 +1,87 @@
+#!/bin/bash
+# Swiftshot benchmark on the demo app: cold / cached-template / warm runs, optionally fastlane.
+#
+#   bench/run.sh swiftshot      # cold, then new simulators with cached templates, then warm
+#   bench/run.sh fastlane       # fastlane snapshot on the same iOS devices and languages, new simulators
+#
+# The cold run starts from an empty DerivedData (fastlane's build is cold on a fresh runner too).
+# Every run uses brand-new simulators (a private device set for swiftshot, freshly created
+# "FL …" devices for fastlane), so "cold" means what it means on a fresh CI machine.
+# Results: $BENCH_DIR/results.tsv (scenario, seconds, screenshots, exit code) and per-run logs.
+set -u
+cd "$(dirname "$0")/.."
+ROOT=$PWD
+BENCH_DIR=${BENCH_DIR:-$ROOT/.bench.noindex}
+SWIFTSHOT=${SWIFTSHOT:-$ROOT/bin/swiftshot}
+mkdir -p "$BENCH_DIR"
+RESULTS=$BENCH_DIR/results.tsv
+[ -f "$RESULTS" ] || printf 'scenario\tseconds\tscreenshots\texit\n' > "$RESULTS"
+
+# Drop the watch from the matrix when the machine has no watchOS runtime.
+CONFIG=$BENCH_DIR/bench.json
+if xcrun simctl list runtimes | grep -q '^watchOS'; then
+    cp bench/bench.json "$CONFIG"
+else
+    echo "No watchOS runtime installed: benchmarking iOS only"
+    python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); c["devices"]=[d for d in c["devices"] if "Watch" not in d]; c.pop("watch_scheme",None); json.dump(c,open(sys.argv[2],"w"))' bench/bench.json "$CONFIG"
+fi
+
+record() {  # scenario seconds outdir exit
+    local n; n=$(find "$3" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+    printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$n" "$4" >> "$RESULTS"
+    echo "== $1: $2 s, $n screenshots, exit $4"
+}
+
+swiftshot_run() {  # scenario device-set template-dir [extra args…]
+    local name=$1 set=$2 templates=$3; shift 3
+    local out=$BENCH_DIR/$name
+    rm -rf "$out"; mkdir -p "$out"
+    local start; start=$(date +%s)
+    (cd Example/DemoApp && "$SWIFTSHOT" --config "$CONFIG" --device-set "$set" --template-cache "$templates" \
+        --derived-data "$BENCH_DIR/DerivedData" \
+        -o "$out/screenshots" "$@") 2>&1 | tee "$out/log.txt"
+    local code=${PIPESTATUS[0]}
+    record "$name" $(( $(date +%s) - start )) "$out/screenshots" "$code"
+    [ -f "$out/screenshots/swiftshot-report.json" ] && python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))["timings"]; print("   stages: " + ", ".join(f"{k} {v:.1f}s" for k,v in t.items()))' "$out/screenshots/swiftshot-report.json"
+}
+
+case "${1:-swiftshot}" in
+swiftshot)
+    T=$BENCH_DIR/templates.noindex
+    rm -rf "${T:?}"
+    # Fresh set paths every invocation: CoreSimulator keeps a loaded set's state, so reusing a
+    # deleted set's path can confuse it.
+    RUN=$(date +%s)
+    rm -rf "$BENCH_DIR/DerivedData"   # cold means cold: the first run also compiles from scratch
+    swiftshot_run cold   "$BENCH_DIR/set-$RUN-cold.noindex"   "$T" --shutdown
+    swiftshot_run cached "$BENCH_DIR/set-$RUN-cached.noindex" "$T"
+    swiftshot_run warm   "$BENCH_DIR/set-$RUN-cached.noindex" "$T" --shutdown
+    ;;
+fastlane)
+    DEVICES=$(python3 -c 'import json,sys; print("\n".join(d for d in json.load(open(sys.argv[1]))["devices"] if "Watch" not in d))' "$CONFIG")
+    LANGS=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["languages"]))' "$CONFIG")
+    # Newest iOS runtime that supports every benchmark device (what swiftshot picks by default).
+    read -r RUNTIME VERSION < <(xcrun simctl list runtimes -j | python3 -c '
+import json, sys
+want = set(sys.argv[1].splitlines())
+rts = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r.get("isAvailable")]
+rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+ok = [r for r in rts if want <= {t["name"] for t in r.get("supportedDeviceTypes", [])}] or rts
+print(ok[-1]["identifier"], ok[-1]["version"])' "$DEVICES")
+    echo "fastlane on iOS $VERSION"
+    FL_NAMES=()
+    while IFS= read -r d; do
+        xcrun simctl create "FL $d" "$d" "$RUNTIME" >/dev/null && FL_NAMES+=("FL $d")
+    done <<< "$DEVICES"
+    out=$BENCH_DIR/fastlane; rm -rf "$out"; mkdir -p "$out"
+    start=$(date +%s)
+    (cd Example/DemoApp && FL_OUT="$out/screenshots" fastlane snapshot \
+        --devices "$(IFS=,; echo "${FL_NAMES[*]}")" --languages "$LANGS" --ios_version "$VERSION" \
+        --output_directory "$out/screenshots") 2>&1 | tee "$out/log.txt"
+    code=${PIPESTATUS[0]}
+    record fastlane $(( $(date +%s) - start )) "$out/screenshots" "$code"
+    for n in "${FL_NAMES[@]}"; do xcrun simctl delete "$n" 2>/dev/null; done
+    ;;
+*) echo "usage: $0 swiftshot|fastlane"; exit 2 ;;
+esac
+column -t -s $'\t' "$RESULTS"
