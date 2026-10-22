@@ -8,11 +8,19 @@ import Foundation
 import UIKit
 import SwiftUI
 import ObjectiveC
+import Metal
 
 
 @_cdecl("SwiftshotAgentStart")
 public func SwiftshotAgentStart() {
     guard let jobPath = ProcessInfo.processInfo.environment["SWIFTSHOT_JOB"] else { return }
+    // No-boot mode (experimental): the process runs straight on the Mac against the runtime, with
+    // no simulator, so there is no app scene to wait for. Render right away, before the app's main.
+    if NoBoot.enabled {
+        NoBoot.install()
+        MainActor.assumeIsolated { AgentRunner.startOnce(jobPath: jobPath) }
+        return
+    }
     // Fires once the app's first scene is in the foreground; the agent then owns the process.
     _ = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated { AgentRunner.startOnce(jobPath: jobPath) }
@@ -41,6 +49,13 @@ final class AgentRunner {
     var scene: UIWindowScene {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         return scenes.first { $0.activationState == .foregroundActive } ?? scenes[0]
+    }
+
+    /// A window for off-screen rendering: in the app's scene, or scene-less without a simulator.
+    func makeWindow() -> DeviceWindow {
+        guard NoBoot.enabled else { return DeviceWindow(windowScene: scene) }
+        if let scene = NoBoot.screenScene { return DeviceWindow(windowScene: scene) }
+        return DeviceWindow(frame: .zero)
     }
 
     func run() {
@@ -113,6 +128,15 @@ final class AgentRunner {
     func applyTraits(_ window: UIWindow, device: DeviceProfile, appearance: String, size: CGSize) {
         window.overrideUserInterfaceStyle = appearance == "dark" ? .dark : .light
         window.traitOverrides.displayScale = device.scale
+        if NoBoot.enabled {
+            // No display to inherit these from. The corner radius trait (private) decides e.g. how far
+            // the floating tab bar sits above the bottom edge.
+            window.traitOverrides.displayGamut = .P3
+            NoBoot.setDisplayCornerRadius(device.cornerRadius, on: window)
+            // A booted app takes the layout direction from UIApplication (none here).
+            let rtl = Locale.Language(identifier: job.language).characterDirection == .rightToLeft
+            window.traitOverrides.layoutDirection = rtl ? .rightToLeft : .leftToRight
+        }
         // Rendering an iPad on an iPhone host (runtimes that can't boot an iPad): override the idiom.
         let hostIdiom = DeviceIdiom.host
         if device.idiom == "pad" && hostIdiom != .pad { window.traitOverrides.userInterfaceIdiom = .pad }
@@ -168,21 +192,22 @@ final class AgentRunner {
     // MARK: Virtual mode — every device rendered off-screen in this one process
 
     func renderVirtual(_ previews: [DiscoveredPreview]) {
-        let useLayerRender = ProcessInfo.processInfo.environment["SWIFTSHOT_CAPTURE"] == "layer"
+        let capture = NoBoot.enabled ? "carenderer" : ProcessInfo.processInfo.environment["SWIFTSHOT_CAPTURE"] ?? "hierarchy"
         // Off-screen so the window inherits no system safe area; we supply the device's instead.
-        let offscreenOrigin = CGPoint(x: scene.screen.bounds.width * 4, y: scene.screen.bounds.height * 4)
+        let offscreenOrigin = NoBoot.enabled ? .zero : CGPoint(x: scene.screen.bounds.width * 4, y: scene.screen.bounds.height * 4)
 
         for preview in previews where job.wants(preview.name) {
             for device in job.devices where job.wants(preview.name, device: device.name) {
                 for appearance in job.appearances(for: preview.name) {
                     let t0 = now()
                     DeviceIdiom.current = device.idiom == "pad" ? .pad : .phone
+                    NoBoot.screen = device
                     defer { DeviceIdiom.current = nil }
                     guard let vc = controller(fromBody: preview.body()) else {
                         result.errors.append("\(preview.name): could not build preview body"); continue
                     }
                     var geo = geometry(for: preview, on: device)
-                    let window = DeviceWindow(windowScene: scene)
+                    let window = makeWindow()
                     applyTraits(window, device: device, appearance: appearance, size: geo.size)
 
                     switch preview.layout.kind {
@@ -217,8 +242,9 @@ final class AgentRunner {
                     format.scale = device.scale
                     format.opaque = preview.layout.kind.isDevice
                     let bounds = CGRect(origin: .zero, size: geo.size)
-                    let image = UIGraphicsImageRenderer(size: geo.size, format: format).image { ctx in
-                        if useLayerRender {
+                    let rendered = capture == "carenderer" ? GPUCapture.shared.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque) : nil
+                    let image = rendered ?? UIGraphicsImageRenderer(size: geo.size, format: format).image { ctx in
+                        if capture == "layer" {
                             window.layer.render(in: ctx.cgContext)
                         } else {
                             window.drawHierarchy(in: bounds, afterScreenUpdates: true)
@@ -321,6 +347,136 @@ final class AgentRunner {
             runtime: job.runtime, file: "\(job.language)/\(file)",
             width: Int(min(px.width, px.height)), height: Int(max(px.width, px.height)),
             renderMs: (now() - t0) * 1000))
+    }
+}
+
+/// Renders a window's layer tree with Core Animation's own renderer into a Metal texture: the
+/// same engine the render server uses (materials, Liquid Glass), but in-process, so it also works
+/// without a booted simulator (see NoBoot).
+@MainActor
+final class GPUCapture {
+    static let shared = GPUCapture()
+    let device = MTLCreateSystemDefaultDevice()
+    lazy var queue = device?.makeCommandQueue()
+
+    func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
+        guard let device, let queue else { log("carenderer: no Metal device"); return nil }
+        let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+        desc.usage = [.renderTarget, .shaderRead]; desc.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        // The window's layer goes under a flipped pixel-sized root (UIKit layers expect a flipped
+        // parent) for the capture and back afterwards.
+        let layer = window.layer
+        let saved = (layer.superlayer, layer.anchorPoint, layer.position, layer.affineTransform())
+        let root = CALayer()
+        root.frame = CGRect(x: 0, y: 0, width: w, height: h)
+        root.isGeometryFlipped = true
+        root.addSublayer(layer)
+        layer.anchorPoint = .zero; layer.position = .zero
+        layer.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
+        defer {
+            layer.removeFromSuperlayer()
+            layer.setAffineTransform(saved.3); layer.anchorPoint = saved.1; layer.position = saved.2
+            saved.0?.addSublayer(layer)
+        }
+        let renderer = CARenderer(mtlTexture: texture, options: [kCARendererMetalCommandQueue: queue])
+        renderer.layer = root
+        renderer.bounds = root.frame
+        CATransaction.flush()
+        renderer.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
+        renderer.addUpdate(renderer.bounds)
+        renderer.render()
+        renderer.endFrame()
+        let done = queue.makeCommandBuffer(); done?.commit(); done?.waitUntilCompleted()
+
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        texture.getBytes(&bytes, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        let info = (opaque ? CGImageAlphaInfo.noneSkipFirst : .premultipliedFirst).rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
+              let raw = ctx.makeImage() else { return nil }
+        // Metal rows are top-down; draw into a UIKit context to get an upright image.
+        let format = UIGraphicsImageRendererFormat(); format.scale = scale; format.opaque = opaque
+        return UIGraphicsImageRenderer(size: size, format: format).image { c in
+            c.cgContext.draw(raw, in: CGRect(origin: .zero, size: size))
+        }
+    }
+}
+
+/// No-boot mode: the app runs as a plain process on the Mac against the simulator runtime, with
+/// swiftshot-simhost providing Metal, IOSurface and the shader compiler (see Agent/NoBoot.c).
+/// There is no display, so UIScreen reports the device being rendered.
+enum NoBoot {
+    static let enabled = ProcessInfo.processInfo.environment["SWIFTSHOT_NOBOOT"] == "1"
+    nonisolated(unsafe) static var screen: DeviceProfile?
+
+    /// UIKit's scene for a bare UIScreen (no FrontBoard). Windows in it get scene-provided layout
+    /// (home affordance, …) like in a booted simulator; scene-less windows don't.
+    @MainActor static let screenScene: UIWindowScene? = {
+        guard ProcessInfo.processInfo.environment["SWIFTSHOT_NOBOOT_SCENE"] != "0",
+              let cls = NSClassFromString("_UIScreenBasedWindowScene") else { return nil }
+        let selector = NSSelectorFromString("_unassociatedWindowSceneForScreen:create:")
+        guard let method = class_getClassMethod(cls, selector) else { return nil }
+        typealias Make = @convention(c) (AnyClass, Selector, UIScreen, Bool) -> UIWindowScene?
+        return unsafeBitCast(method_getImplementation(method), to: Make.self)(cls, selector, UIScreen.main, true)
+    }()
+
+    @MainActor static func setDisplayCornerRadius(_ radius: CGFloat, on window: UIWindow) {
+        guard let trait = NSClassFromString("UITraitDisplayCornerRadius"),
+              let overrides = window.value(forKey: "traitOverrides") as AnyObject? else { return }
+        let selector = NSSelectorFromString("setCGFloatValue:forTrait:")
+        guard let method = class_getInstanceMethod(type(of: overrides), selector) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, CGFloat, AnyClass) -> Void
+        unsafeBitCast(method_getImplementation(method), to: Setter.self)(overrides, selector, radius, trait)
+    }
+
+    static func install() {
+        // QuartzCore polls ~5 s for a render server's displays that will never appear.
+        if let cls = NSClassFromString("CADisplay"), let m = class_getClassMethod(cls, NSSelectorFromString("displays")) {
+            let none: @convention(block) (AnyObject) -> NSArray = { _ in NSArray() }
+            method_setImplementation(m, imp_implementationWithBlock(none))
+        }
+        // Without a display UIScreen describes an external screen of scale 1. Report the rendered
+        // device's built-in panel instead (values as a booted simulator of that model reports them).
+        let scale: @convention(block) (AnyObject) -> CGFloat = { _ in screen?.scale ?? 3 }
+        let bounds: @convention(block) (AnyObject) -> CGRect = { _ in
+            CGRect(x: 0, y: 0, width: screen?.width ?? 390, height: screen?.height ?? 844)
+        }
+        let native: @convention(block) (AnyObject) -> CGRect = { _ in
+            let s = screen?.scale ?? 3
+            return CGRect(x: 0, y: 0, width: (screen?.width ?? 390) * s, height: (screen?.height ?? 844) * s)
+        }
+        let corner: @convention(block) (AnyObject) -> CGFloat = { _ in screen?.cornerRadius ?? 0 }
+        let yes: @convention(block) (AnyObject) -> Bool = { _ in true }
+        let no: @convention(block) (AnyObject) -> Bool = { _ in false }
+        // Plus/Max-size phones get wider layout margins.
+        let wideMargins: @convention(block) (AnyObject) -> Bool = { _ in screen.map { $0.idiom == "phone" && $0.width >= 414 } ?? false }
+        let touchRadius: @convention(block) (AnyObject) -> CGFloat = { _ in screen?.height ?? 844 }
+        let fps: @convention(block) (AnyObject) -> Int = { _ in 60 }
+        let refresh: @convention(block) (AnyObject) -> Double = { _ in 1.0 / 60 }
+        let gamut: @convention(block) (AnyObject) -> Int = { _ in 1 }   // P3
+        let orientation: @convention(block) (AnyObject) -> Int = { _ in 0 }
+        let brightness: @convention(block) (AnyObject) -> CGFloat = { _ in 0.5 }
+        let getters: [(String, Any)] = [
+            ("scale", scale), ("nativeScale", scale), ("_scale", scale), ("_nativeScale", scale), ("_maximumSupportedScale", scale),
+            ("bounds", bounds), ("nativeBounds", native),
+            ("_displayCornerRadius", corner), ("_displayCornerRadiusIgnoringZoom", corner), ("_traitCollectionDisplayCornerRadius", corner),
+            ("_isEmbeddedScreen", yes), ("_isRotatable", yes), ("_isExternal", no),
+            ("_wantsWideContentMargins", wideMargins), ("_touchRadiusScaleFactor", touchRadius),
+            ("maximumFramesPerSecond", fps), ("_maximumFramesPerSecond", fps), ("_refreshRate", refresh),
+            ("gamut", gamut), ("_interfaceOrientation", orientation), ("brightness", brightness),
+        ]
+        for (name, block) in getters {
+            if let m = class_getInstanceMethod(UIScreen.self, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(block)) }
+        }
+        // A booted host scene is portrait (landscape previews are just landscape-sized windows);
+        // a screen-based scene would report "unknown", which changes e.g. the tab bar's layout.
+        let portrait: @convention(block) (AnyObject) -> Int = { _ in UIInterfaceOrientation.portrait.rawValue }
+        for (cls, name) in [(UIWindowScene.self as AnyClass, "interfaceOrientation"), (UIWindowScene.self, "_interfaceOrientation"),
+                            (UIWindow.self, "interfaceOrientation"), (UIWindow.self, "_windowInterfaceOrientation")] {
+            if let m = class_getInstanceMethod(cls, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(portrait)) }
+        }
     }
 }
 

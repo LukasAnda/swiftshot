@@ -253,6 +253,9 @@ final class Runner {
         // xcodebuild); SWIFTSHOT_STAGED=1 handles one platform at a time (fewer simulators alive).
         let env = ProcessInfo.processInfo.environment
         let bootAfterBuild = env["SWIFTSHOT_BOOT_AFTER_BUILD"] == "1", staged = env["SWIFTSHOT_STAGED"] == "1"
+        // --no-boot renders iOS without any simulator: nothing to boot for it.
+        let noBoot = options.noBoot && options.mode == .virtual
+        if noBoot { plannedBy[.ios] = [] }
         if !bootAfterBuild {
             for (index, target) in targets.enumerated() where !staged || index == 0 {
                 try await startBoots(plannedBy[target.platform] ?? [])
@@ -289,7 +292,7 @@ final class Runner {
                 let hosts = (plannedHosts[target.platform] ?? []).map {
                     Host(target: target, runtime: $0.runtime, type: $0.type, profiles: $0.profiles)
                 }
-                try await self.runVirtual(target, hosts: hosts)
+                if noBoot { try await self.runNoBoot(target, hosts: hosts) } else { try await self.runVirtual(target, hosts: hosts) }
             }
         }
         if staged {

@@ -201,6 +201,33 @@ device (~8 s alone instead of ~31 s, and without the slow-down of parallel first
   pays off for ≥ 2 (or when it's persisted with `--template-cache`).
 * First boots run one at a time; cheap boots run in parallel.
 
+### `--no-boot` (experimental): iOS without any simulator
+
+The app is a simulator binary, but nothing forces it to run *inside* a booted simulator: started
+directly on the Mac with the environment a booted device's launchd would give it
+(`DYLD_ROOT_PATH` = the runtime, an empty home directory, `SIMULATOR_*` device variables) UIKit and
+SwiftUI work. What a booted device adds for rendering is provided by `swiftshot-simhost`:
+
+* **Metal** — macOS' `MTLSimImplementation` (what CoreSimulator's `SimMetalHost` loads) on an XPC
+  listener in the simulator wire format;
+* **IOSurface** — macOS' `IOSurfaceRemoteServer` on a second listener;
+* **shader compiler** — the runtime's `MTLCompilerService`, started by simhost instead of launchd.
+
+Their Mach ports reach the app as registered task ports, and `SwiftshotNoBoot.dylib` routes the
+app's `com.apple.metal.simulator` / `com.apple.IOSurface.Remote` / `com.apple.MTLCompilerService`
+connections to them. The agent then captures with Core Animation's own renderer (`CARenderer` into
+a Metal texture — the render server's engine, Liquid Glass included) and, without a display,
+reports each rendered device's screen (scale, bounds, corner radius, embedded panel, P3) itself.
+Because every device gets its own scale, one process renders all devices of a runtime: one app
+launch (~1 s) per language, no device set, no boot, no template.
+
+Measured on `Example/DemoApp` (iOS 27.0, 3 devices × 3 languages + per-screen rules = 55 shots,
+warm DerivedData): **8–9 s** vs 46–52 s warm / 136 s cold booted. Against the booted
+`drawHierarchy` output: **52/55 identical** (0 pixels off by > 8/255); `CARenderer` itself matches
+`drawHierarchy` 55/55 in a booted simulator. Known difference: the floating tab bar on Face ID
+iPhones sits 13 pt higher (UIKit takes its bottom padding from display/scene data that only a
+booted device provides). Not supported yet: Apple Watch (still booted), `--mode device`.
+
 ### `--mode device` (pixel-exact, with status bar)
 
 Boots a real simulator per device, overrides the status bar (9:41, full battery, Wi-Fi), shows
@@ -327,6 +354,7 @@ swiftshot [run|list|devices|calibrate] [options]
 | `--watch-scheme`, `--watch-app`, `--watchos` | – | |
 | `--content-size L` (Dynamic Type) | – | iOS `L`, watch default |
 | `--device-set <dir>` | – | system set |
+| `--no-boot` | Experimental: render iOS previews without any simulator (see *--no-boot*) |
 | `--template-cache <dir>` / `--no-templates` | – | `~/Library/Caches/swiftshot/templates.noindex` |
 | `--allow-unsupported-devices` | – | skip |
 | `--config file.json` | `Snapfile` | `./swiftshot.json` |

@@ -2,6 +2,7 @@
 # Swiftshot benchmark on the demo app: cold / cached-template / warm runs, optionally fastlane.
 #
 #   bench/run.sh swiftshot      # cold, then new simulators with cached templates, then warm
+#   bench/run.sh noboot         # --no-boot: iOS rendered without any simulator (experimental)
 #   bench/run.sh fastlane       # fastlane snapshot on the same iOS devices and languages, new simulators
 #
 # The cold run starts from an empty DerivedData (fastlane's build is cold on a fresh runner too).
@@ -80,6 +81,16 @@ swiftshot)
     swiftshot_run cached "$BENCH_DIR/set-$RUN-cached.noindex" "$T"
     swiftshot_run warm   "$BENCH_DIR/set-$RUN-cached.noindex" "$T" --shutdown
     ;;
+noboot)
+    # iOS without any simulator (--no-boot); the watch still boots (no-boot is iOS-only).
+    T=$BENCH_DIR/templates.noindex
+    rm -rf "${T:?}" "$BENCH_DIR/DerivedData"
+    RUN=$(date +%s)
+    swiftshot_run noboot-cold "$BENCH_DIR/set-$RUN-nb.noindex" "$T" --no-boot --shutdown
+    python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); c["devices"]=[d for d in c["devices"] if "Watch" not in d]; c.pop("watch_scheme",None); json.dump(c,open(sys.argv[2],"w"))' "$CONFIG" "$BENCH_DIR/ios.json"
+    CONFIG=$BENCH_DIR/ios.json swiftshot_run noboot-ios-warm "$BENCH_DIR/set-$RUN-nb.noindex" "$T" --no-boot
+    ;;
+
 fastlane)
     DEVICES=$(python3 -c 'import json,sys; print("\n".join(d for d in json.load(open(sys.argv[1]))["devices"] if "Watch" not in d))' "$CONFIG")
     LANGS=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["languages"]))' "$CONFIG")
@@ -106,7 +117,7 @@ print(ok[-1]["identifier"], ok[-1]["version"])' "$DEVICES")
     [ "$code" = 0 ] || failed fastlane "$out/log.txt"
     for n in "${FL_NAMES[@]}"; do xcrun simctl delete "$n" 2>/dev/null; done
     ;;
-*) echo "usage: $0 swiftshot|fastlane"; exit 2 ;;
+*) echo "usage: $0 swiftshot|noboot|fastlane"; exit 2 ;;
 esac
 column -t -s $'\t' "$RESULTS"
 exit $FAILED

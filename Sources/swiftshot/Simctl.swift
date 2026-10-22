@@ -19,6 +19,7 @@ struct SimDeviceType: Decodable {
     let name: String
     let productFamily: String?
     let bundlePath: String
+    let modelIdentifier: String?
     let minRuntimeVersionString: String?
     let maxRuntimeVersionString: String?
 }

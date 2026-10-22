@@ -43,6 +43,7 @@ struct Options: Codable {
     var allowUnsupportedDevices = false
     var deviceSet: String?
     var templates = true
+    var noBoot = false
     var templateCache: String?
     var verbose = false
 
@@ -53,7 +54,7 @@ struct Options: Codable {
              clearOutput = "clear_previous_screenshots", shutdownAfter = "shutdown_simulators",
              downloadRuntimes = "download_missing_runtimes", html, parallelLanguages = "parallel_languages", timeout, screens, deviceSet = "device_set", watchScheme = "watch_scheme", watchAppPath = "watch_app",
              watchosVersions = "watchos_versions", contentSize = "content_size", allowUnsupportedDevices = "allow_unsupported_devices",
-             templates = "device_templates", templateCache = "template_cache", verbose
+             templates = "device_templates", templateCache = "template_cache", noBoot = "no_boot", verbose
     }
 
     init() {}
@@ -78,7 +79,7 @@ struct Options: Codable {
         try read(.screens, &screens); try readOpt(.deviceSet, &deviceSet)
         try readOpt(.watchScheme, &watchScheme); try readOpt(.watchAppPath, &watchAppPath); try read(.watchosVersions, &watchosVersions)
         try readOpt(.contentSize, &contentSize); try read(.allowUnsupportedDevices, &allowUnsupportedDevices)
-        try read(.templates, &templates); try readOpt(.templateCache, &templateCache)
+        try read(.templates, &templates); try readOpt(.templateCache, &templateCache); try read(.noBoot, &noBoot)
     }
 
     static let usage = """
@@ -146,6 +147,9 @@ struct Options: Codable {
                                               swiftshot/templates.noindex). Cache it between CI jobs and even the
                                               first boot is skipped.
       --no-templates                          Boot every new simulator from scratch (~35 s each, slow in parallel)
+      --no-boot                               Experimental: render iOS previews without any simulator — the app
+                                              runs directly on the Mac against the runtime (swiftshot-simhost
+                                              provides Metal/IOSurface). Virtual mode, iOS only.
 
       --config <file>                         JSON config (default ./swiftshot.json if present)
       --verbose
@@ -207,6 +211,7 @@ struct Options: Codable {
             case "--device-set": options.deviceSet = try value()
             case "--template-cache": options.templateCache = try value()
             case "--no-templates": options.templates = false
+            case "--no-boot": options.noBoot = true
             case "--watch-scheme": options.watchScheme = try value()
             case "--watch-app": options.watchAppPath = try value()
             case "--watchos": options.watchosVersions = list(try value())

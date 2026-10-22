@@ -9,9 +9,9 @@ on:
         description: macOS runner image
         default: macos-26
       fastlane:
-        description: Also benchmark fastlane snapshot
+        description: Also benchmark fastlane snapshot (~80 min)
         type: boolean
-        default: true
+        default: false
   push:
     branches: [main]
     paths: ["Sources/**", "Agent/**", "Shared/**", "bench/**", "Makefile", ".github/workflows/benchmark.yml"]
@@ -23,9 +23,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Scheduling experiments for small runners (see Runner.run): default overlaps build and
-        # all boots; boot-after-build builds first; staged does one platform at a time.
-        variant: [default, boot-after-build, staged]
+        # default: booted simulators (cold, cached templates, warm); noboot: --no-boot (iOS without
+        # any simulator). The scheduling experiments (SWIFTSHOT_BOOT_AFTER_BUILD / SWIFTSHOT_STAGED)
+        # can be added back as variants.
+        variant: [default, noboot]
     env:
       SWIFTSHOT_BOOT_AFTER_BUILD: ${{ matrix.variant == 'boot-after-build' && '1' || '' }}
       SWIFTSHOT_STAGED: ${{ matrix.variant == 'staged' && '1' || '' }}
@@ -39,7 +40,7 @@ jobs:
       - name: Build swiftshot
         run: make
       - name: Benchmark (cold, cached templates, warm)
-        run: BENCH_DIR="$RUNNER_TEMP/bench.noindex" bench/run.sh swiftshot
+        run: BENCH_DIR="$RUNNER_TEMP/bench.noindex" bench/run.sh ${{ matrix.variant == 'noboot' && 'noboot' || 'swiftshot' }}
       - name: Summary
         if: always()
         run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" "swiftshot ${{ matrix.variant }}" >> "$GITHUB_STEP_SUMMARY"
@@ -53,7 +54,8 @@ jobs:
             ${{ runner.temp }}/bench.noindex/*/screenshots
 
   fastlane:
-    if: ${{ github.event_name == 'push' || inputs.fastlane }}
+    # ~80 min on a hosted runner; run it on demand (workflow_dispatch) only.
+    if: ${{ inputs.fastlane }}
     runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 120
     steps:
