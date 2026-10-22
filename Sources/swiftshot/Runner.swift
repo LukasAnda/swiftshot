@@ -155,7 +155,8 @@ final class Runner {
             appearances: options.appearances, previewFilter: options.previews, format: options.format,
             settleFrames: options.settleFrames, settleDelay: options.delay, controlDir: controlDir,
             fileNamePattern: "{device}-{preview}{appearance}{textSize}", includeRuntimeInName: target?.includeRuntimeInName ?? false,
-            screenRules: options.screens, targetPlatform: (target?.platform ?? .ios).rawValue, textSizes: options.textSizes)
+            screenRules: options.screens, targetPlatform: (target?.platform ?? .ios).rawValue, textSizes: options.textSizes,
+            fullLength: options.fullLength)
     }
 
     func writeJob(_ job: Job, tag: String) throws -> String {

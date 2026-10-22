@@ -89,44 +89,6 @@ NSString *swiftshot_watch_make_application(void) {
 - (CGRect)bounds;
 @end
 
-@interface NSObject (SwiftshotWatchDraw)
-- (CGRect)bounds;
-@end
-
-/// Without a booted watch, the contexts Core Animation hands to -drawInContext: have the opposite
-/// orientation of what watchOS drawing code (SwiftUI's CGDrawingLayer, UIKit's label/text
-/// layers) expects, so their text came out upside down inside correctly placed layers. Flip the
-/// context around every -drawInContext: of CALayer and of each subclass that overrides it.
-void swiftshot_watch_flip_layer_drawing(void) {
-    Class base = NSClassFromString(@"CALayer");
-    SEL sel = @selector(drawInContext:);
-    unsigned count = 0;
-    Class *classes = objc_copyClassList(&count);
-    for (unsigned i = 0; i < count; i++) {
-        Class cls = classes[i];
-        BOOL isLayer = NO;
-        for (Class c = cls; c; c = class_getSuperclass(c)) if (c == base) { isLayer = YES; break; }
-        if (!isLayer) continue;
-        unsigned n = 0;
-        Method *methods = class_copyMethodList(cls, &n);
-        for (unsigned j = 0; j < n; j++) {
-            if (method_getName(methods[j]) != sel) continue;
-            typedef void (*Draw)(id, SEL, CGContextRef);
-            Draw original = (Draw)method_getImplementation(methods[j]);
-            method_setImplementation(methods[j], imp_implementationWithBlock(^(id layer, CGContextRef ctx) {
-                CGRect b = [layer bounds];
-                CGContextSaveGState(ctx);
-                CGContextTranslateCTM(ctx, 0, CGRectGetMinY(b) + CGRectGetMaxY(b));
-                CGContextScaleCTM(ctx, 1, -1);
-                original(layer, sel, ctx);
-                CGContextRestoreGState(ctx);
-            }));
-        }
-        free(methods);
-    }
-    free(classes);
-}
-
 id swiftshot_watch_make_window(double width, double height) {
     Class cls = NSClassFromString(@"UIWindow");
     id window = cls ? [[cls alloc] initWithFrame:CGRectMake(0, 0, width, height)] : nil;

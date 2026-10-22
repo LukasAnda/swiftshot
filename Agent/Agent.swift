@@ -201,6 +201,8 @@ final class AgentRunner {
         // Off-screen so the window inherits no system safe area; we supply the device's instead.
         let offscreenOrigin = NoBoot.enabled ? .zero : CGPoint(x: scene.screen.bounds.width * 4, y: scene.screen.bounds.height * 4)
 
+        // Screenshots want end states: sheets, alerts and other presentations appear at once.
+        UIView.setAnimationsEnabled(false)
         for preview in previews where job.wants(preview.name) {
             for device in job.devices where job.wants(preview.name, device: device.name) {
                 for appearance in job.appearances(for: preview.name) {
@@ -248,6 +250,10 @@ final class AgentRunner {
                         log("\(preview.name) \(device.name): UIDevice idiom \(UIDevice.current.userInterfaceIdiom.rawValue) window safe \(window.safeAreaInsets) view safe \(vc.view.safeAreaInsets) additional \(vc.additionalSafeAreaInsets) frame \(window.frame) vcframe \(vc.view.frame)")
                     }
                     settle(frames: job.settleFrames, delay: job.delay(for: preview.name))
+                    if NoBoot.enabled { NoBoot.finishPresentations(of: vc, in: window, settle: { self.settle(frames: 2, delay: 0) }) }
+                    if preview.layout.kind.isDevice && job.fullLength(for: preview.name) {
+                        geo.size = growToContent(of: vc, in: window, size: geo.size, scale: device.scale, name: preview.name)
+                    }
                     let format = UIGraphicsImageRendererFormat()
                     format.scale = device.scale
                     format.opaque = preview.layout.kind.isDevice
@@ -284,6 +290,32 @@ final class AgentRunner {
                 }
             }
         }
+    }
+
+    /// Full-length screenshots: make the window tall enough that the main vertical scroll view
+    /// shows all of its content (repeated, lazy stacks grow as they are revealed). Capped at what
+    /// one Metal texture holds.
+    func growToContent(of vc: UIViewController, in window: UIWindow, size: CGSize, scale: CGFloat, name: String) -> CGSize {
+        let maxHeight = floor(16384 / scale)
+        var size = size
+        for _ in 0..<8 {
+            func scrollViews(_ v: UIView) -> [UIScrollView] { (v as? UIScrollView).map { [$0] } ?? v.subviews.flatMap(scrollViews) }
+            guard let scroll = scrollViews(vc.view).filter({ !$0.isHidden && $0.bounds.height > 0 })
+                    .max(by: { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height }) else { break }
+            let inset = scroll.adjustedContentInset
+            let hidden = ceil(scroll.contentSize.height + inset.top + inset.bottom - scroll.bounds.height)
+            guard hidden > 0.5 else { break }
+            let target = min(size.height + hidden, maxHeight)
+            guard target > size.height else {
+                log("warning: \(name): full length capped at \(Int(maxHeight)) pt"); break
+            }
+            size.height = target
+            window.frame.size = size
+            scroll.contentOffset = CGPoint(x: scroll.contentOffset.x, y: -inset.top)
+            window.setNeedsLayout(); window.layoutIfNeeded()
+            settle(frames: job.settleFrames, delay: 0)
+        }
+        return size
     }
 
     /// UIKit can add host-specific insets (status bar) on top of the window's. Measure what the
@@ -542,6 +574,7 @@ enum NoBoot {
             method_setImplementation(m, imp_implementationWithBlock(skip))
         }
         installDisplayInfo()
+        makeApplication()
         // A booted host scene is portrait (landscape previews are just landscape-sized windows);
         // a screen-based scene would report "unknown", which changes e.g. the tab bar's layout.
         let portrait: @convention(block) (AnyObject) -> Int = { _ in UIInterfaceOrientation.portrait.rawValue }
@@ -551,6 +584,47 @@ enum NoBoot {
                             (UIApplication.self, "activeInterfaceOrientation"), (UIApplication.self, "_currentExpectedInterfaceOrientation")] {
             if let m = class_getInstanceMethod(cls, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(portrait)) }
         }
+    }
+
+    /// Without a display, nothing runs the layout pass a device would after a presentation: the
+    /// presented controller (sheet, alert, dialog) keeps its initial frame and SwiftUI never builds
+    /// its content. Lay the window out until presentations have settled.
+    static func finishPresentations(of root: UIViewController, in window: UIWindow, settle: () -> Void) {
+        func tree(_ c: UIViewController) -> [UIViewController] { [c] + c.children.flatMap(tree) }
+        guard tree(root).contains(where: { $0.presentedViewController != nil }) else { return }
+        for _ in 0..<3 {
+            window.setNeedsLayout(); window.layoutIfNeeded()
+            for view in window.subviews { view.setNeedsLayout(); view.layoutIfNeeded() }
+            settle()
+        }
+    }
+
+    /// No UIApplicationMain runs without a simulator, but UIKit schedules work (presentation
+    /// transitions…) through the shared application. Register one like UIApplicationMain does
+    /// (UIApp must be set before -init). Its windows would ask the render server for a context
+    /// (there is none; CARenderer draws the layers directly), and the blocks it runs after Core
+    /// Animation commits would wait for a run-loop observer only UIApplicationMain installs: run
+    /// them on the main queue instead. With an application, drawing layers expect the flipped
+    /// context orientation (like watchOS).
+    static func makeApplication() {
+        if let binder = NSClassFromString("_UIContextBinder"), let m = class_getInstanceMethod(binder, NSSelectorFromString("attachBindable:")) {
+            let skip: @convention(block) (AnyObject, AnyObject) -> Void = { _, _ in }
+            method_setImplementation(m, imp_implementationWithBlock(skip))
+        }
+        typealias Block = @convention(block) () -> Void
+        let later: @convention(block) (AnyObject, @escaping Block) -> Void = { _, block in DispatchQueue.main.async { block() } }
+        for name in ["_performBlockAfterCATransactionCommits:", "_performBlockAfterCATransactionCommitSynchronizes:"] {
+            if let m = class_getInstanceMethod(UIApplication.self, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(later)) }
+        }
+        let legacy: @convention(block) (AnyObject, Bool, @escaping Block) -> Void = { _, _, block in DispatchQueue.main.async { block() } }
+        if let m = class_getInstanceMethod(UIApplication.self, NSSelectorFromString("_performAfterCATransactionCommitsWithLegacyRunloopObserverBasedTiming:block:")) {
+            method_setImplementation(m, imp_implementationWithBlock(legacy))
+        }
+        swiftshot_flip_layer_drawing()
+        guard let global = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "UIApp")?.assumingMemoryBound(to: UnsafeMutableRawPointer?.self),
+              global.pointee == nil, let app = class_createInstance(UIApplication.self, 0) as? NSObject else { return }
+        global.pointee = Unmanaged.passRetained(app).toOpaque()
+        _ = app.perform(NSSelectorFromString("init"))
     }
 }
 

@@ -265,7 +265,7 @@ enum WatchNoBoot {
         // watch's application class (the UIApplication subclass providing those metrics).
         let app = swiftshot_watch_make_application().map { $0.takeUnretainedValue() as String } ?? "not created"
         log("no-boot: application \(app)")
-        swiftshot_watch_flip_layer_drawing()
+        swiftshot_flip_layer_drawing()
         // See the iOS agent: after-commit bookkeeping asserts without an app; it draws nothing.
         if let cls = NSClassFromString("_UIAppCACommitFuture"), let m = class_getInstanceMethod(cls, NSSelectorFromString("_invoke")) {
             let skip: @convention(block) (AnyObject) -> Void = { _ in }
@@ -274,7 +274,6 @@ enum WatchNoBoot {
     }
 }
 
-@_silgen_name("swiftshot_watch_flip_layer_drawing") func swiftshot_watch_flip_layer_drawing()
 @_silgen_name("swiftshot_watch_make_application") func swiftshot_watch_make_application() -> Unmanaged<NSString>?
 @_silgen_name("swiftshot_watch_fitting_size") func swiftshot_watch_fitting_size(_ controller: AnyObject, _ width: Double) -> CGSize
 @_silgen_name("swiftshot_watch_resize") func swiftshot_watch_resize(_ window: AnyObject, _ width: Double, _ height: Double)

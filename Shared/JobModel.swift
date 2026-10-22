@@ -75,11 +75,13 @@ struct ScreenRule: Codable {
     var devices: [String]?
     var iosVersions: [String]?
     var textSizes: [String]?
+    var fullLength: Bool?
     var delay: Double?
     var skip: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case preview, appearances, languages, devices, iosVersions = "ios_versions", textSizes = "text_sizes", delay, skip
+        case preview, appearances, languages, devices, iosVersions = "ios_versions", textSizes = "text_sizes",
+             fullLength = "full_length", delay, skip
     }
 
     func matches(_ name: String) -> Bool { globMatch(preview, name) }
@@ -121,6 +123,8 @@ struct Job: Codable {
     /// Set when the whole process runs at one text size (watchOS: list cells follow the app-wide
     /// setting, not window traits); then only that size is rendered here.
     var processTextSize: String? = nil
+    /// Grow full-screen previews to show the whole content of their scroll view.
+    var fullLength: Bool? = nil
 
     var rules: [ScreenRule] { screenRules ?? [] }
     var platform: String { targetPlatform ?? "ios" }
@@ -150,6 +154,8 @@ struct Job: Codable {
         guard let devices = rule(for: preview)?.devices else { return true }
         return devices.contains { globMatch($0, device) }
     }
+
+    func fullLength(for preview: String) -> Bool { rule(for: preview)?.fullLength ?? fullLength ?? false }
 
     func delay(for preview: String) -> Double { rule(for: preview)?.delay ?? settleDelay }
 }

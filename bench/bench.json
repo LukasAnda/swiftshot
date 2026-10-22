@@ -36,6 +36,30 @@
     {
       "preview": "Habit row",
       "skip": true
+    },
+    {
+      "preview": "History",
+      "skip": true
+    },
+    {
+      "preview": "New habit sheet",
+      "skip": true
+    },
+    {
+      "preview": "Delete alert",
+      "skip": true
+    },
+    {
+      "preview": "Share dialog",
+      "skip": true
+    },
+    {
+      "preview": "Watch badge",
+      "skip": true
+    },
+    {
+      "preview": "Watch ring",
+      "skip": true
     }
   ]
 }

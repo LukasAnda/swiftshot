@@ -54,3 +54,51 @@ struct HabitListView: View {
 
 #Preview("Habit list") { HabitListView() }
 #Preview("Habit row", traits: .sizeThatFitsLayout) { HabitRow(habit: Habit.samples[0]).padding() }
+
+/// A month of check-ins: taller than any screen (full-length screenshot demo).
+struct HabitHistoryView: View {
+    var body: some View {
+        NavigationStack {
+            List(1...30, id: \.self) { day in
+                HStack {
+                    Text("Day \(day)")
+                    Spacer()
+                    Image(systemName: day % 4 == 0 ? "xmark.circle" : "checkmark.circle.fill")
+                        .foregroundStyle(day % 4 == 0 ? .red : .green)
+                }
+            }
+            .navigationTitle("History")
+        }
+    }
+}
+
+struct NewHabitView: View {
+    @State private var name = "Read 10 pages"
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Name", text: $name)
+                Toggle("Remind me", isOn: .constant(true))
+            }
+            .navigationTitle("New habit")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+#Preview("History") { HabitHistoryView() }
+#Preview("New habit sheet") {
+    HabitListView().sheet(isPresented: .constant(true)) { NewHabitView().presentationDetents([.medium]) }
+}
+#Preview("Delete alert") {
+    HabitListView().alert("Delete “Drink water”?", isPresented: .constant(true)) {
+        Button("Delete", role: .destructive) { }
+        Button("Cancel", role: .cancel) { }
+    } message: { Text("Your 12 day streak will be lost.") }
+}
+#Preview("Share dialog") {
+    HabitListView().confirmationDialog("Share progress", isPresented: .constant(true), titleVisibility: .visible) {
+        Button("Messages") { }
+        Button("Copy link") { }
+    }
+}

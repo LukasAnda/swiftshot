@@ -45,3 +45,5 @@ extension Job {
         fflush(stdout)
     }
 }
+
+@_silgen_name("swiftshot_flip_layer_drawing") func swiftshot_flip_layer_drawing()

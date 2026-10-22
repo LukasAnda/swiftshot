@@ -147,11 +147,14 @@ extension Runner {
             "SWIFTSHOT_NOBOOT_SHIM": (insert as NSString).components(separatedBy: ":")[0], "SWIFTSHOT_NOBOOT_INSERT": insert,
         ]
         if let dyldCache { env["SWIFTSHOT_NOBOOT_DYLD_CACHE"] = dyldCache }
+        // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
+        let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil
+        if osLog { env["OS_ACTIVITY_DT_MODE"] = "1" }
         // iOS: Dynamic Type pinned to the system default (L); watch models keep their own defaults.
         let contentSize = job.processTextSize.flatMap(contentSizeCategory) ?? options.contentSize.flatMap(contentSizeCategory) ?? deviceDefault ?? (job.platform == "ios" ? "UICTContentSizeCategoryL" : nil)
         let args = [simhost, root, executable, "-AppleLanguages", "(\(job.language))", "-AppleLocale", localeIdentifier(for: job.language)]
             + (contentSize.map { ["-UIPreferredContentSizeCategoryName", $0] } ?? [])
-        let output = try await sh(args, env: env, timeout: options.timeout, onLine: { line in if line.hasPrefix("[swiftshot]") { Log.debug(line) } })
+        let output = try await sh(args, env: env, timeout: options.timeout, onLine: { line in if osLog || line.hasPrefix("[swiftshot]") { Log.debug(line) } })
         guard let resultPath = job.resultPath, FileManager.default.fileExists(atPath: resultPath) else {
             throw CLIError("Agent did not report a result for \(tag). Output:\n\(output.suffix(3000))")
         }
