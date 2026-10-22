@@ -107,10 +107,12 @@ final class AgentRunner {
             : (portrait.top > 24 ? Insets(top: 0, left: portrait.top, bottom: min(portrait.bottom, 21), right: portrait.top) : Insets.zero)
         let width = min(screen.bounds.width, screen.bounds.height)
         let height = max(screen.bounds.width, screen.bounds.height)
+        let display = NoBoot.readDisplayInfo(of: screen)
         result.calibration = DeviceProfile(
             name: job.devices.first?.name ?? UIDevice.current.name, idiom: isPad ? "pad" : "phone",
             width: width, height: height, scale: screen.scale,
             safeArea: portrait, landscapeSafeArea: landscape, cornerRadius: corner)
+        result.calibration?.display = display
         window.isHidden = true
     }
 
@@ -380,6 +382,9 @@ final class GPUCapture {
             layer.setAffineTransform(saved.3); layer.anchorPoint = saved.1; layer.position = saved.2
             saved.0?.addSublayer(layer)
         }
+        // Composite in 8-bit sRGB like the render server (a colorspace option or a float target
+        // changes the result), convert to 16-bit Display P3 when writing like drawHierarchy.
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let renderer = CARenderer(mtlTexture: texture, options: [kCARendererMetalCommandQueue: queue])
         renderer.layer = root
         renderer.bounds = root.frame
@@ -393,11 +398,11 @@ final class GPUCapture {
         var bytes = [UInt8](repeating: 0, count: w * h * 4)
         texture.getBytes(&bytes, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
         let info = (opaque ? CGImageAlphaInfo.noneSkipFirst : .premultipliedFirst).rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
+        guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space, bitmapInfo: info),
               let raw = ctx.makeImage() else { return nil }
-        // Metal rows are top-down; draw into a UIKit context to get an upright image.
-        let format = UIGraphicsImageRendererFormat(); format.scale = scale; format.opaque = opaque
+        // Metal rows are top-down; draw into a UIKit context to get an upright image. Like
+        // drawHierarchy on a P3 screen, the result is a 16-bit Display P3 image.
+        let format = UIGraphicsImageRendererFormat(); format.scale = scale; format.opaque = opaque; format.preferredRange = .extended
         return UIGraphicsImageRenderer(size: size, format: format).image { c in
             c.cgContext.draw(raw, in: CGRect(origin: .zero, size: size))
         }
@@ -421,6 +426,54 @@ enum NoBoot {
         typealias Make = @convention(c) (AnyClass, Selector, UIScreen, Bool) -> UIWindowScene?
         return unsafeBitCast(method_getImplementation(method), to: Make.self)(cls, selector, UIScreen.main, true)
     }()
+
+    static func insets(_ value: Any?) -> Insets {
+        let e = (value as? NSValue)?.uiEdgeInsetsValue ?? .zero
+        return Insets(top: e.top, left: e.left, bottom: e.bottom, right: e.right)
+    }
+
+    /// Reads the display data of a booted device (calibration).
+    @MainActor static func readDisplayInfo(of screen: UIScreen) -> DisplayInfo? {
+        guard let info = screen.value(forKey: "_displayInfoProvider") as AnyObject? else { return nil }
+        func get(_ key: String) -> Any? { info.responds(to: NSSelectorFromString(key)) ? info.value(forKey: key) : nil }
+        return DisplayInfo(
+            safeAreaPortrait: insets(get("safeAreaInsetsPortrait")),
+            safeAreaPortraitUpsideDown: insets(get("safeAreaInsetsPortraitUpsideDown")),
+            safeAreaLandscapeLeft: insets(get("safeAreaInsetsLandscapeLeft")),
+            safeAreaLandscapeRight: insets(get("safeAreaInsetsLandscapeRight")),
+            periphery: insets(get("peripheryInsets")),
+            homeAffordanceOverlayAllowance: (get("homeAffordanceOverlayAllowance") as? Double) ?? 0,
+            systemMinimumMargin: (get("systemMinimumMargin") as? Double) ?? 0,
+            artworkSubtype: (get("artworkSubtype") as? Int) ?? 0,
+            screenPeriphery: insets(screen.value(forKey: "_peripheryInsets")),
+            screenDisplayPeriphery: insets(screen.value(forKey: "_displayPeripheryInsets")))
+    }
+
+    /// Reports the rendered device's display data from UIKit's display info provider and screen.
+    static func installDisplayInfo() {
+        func edge(_ i: Insets?) -> UIEdgeInsets { UIEdgeInsets(top: i?.top ?? 0, left: i?.left ?? 0, bottom: i?.bottom ?? 0, right: i?.right ?? 0) }
+        typealias InsetsGetter = @convention(block) (AnyObject) -> UIEdgeInsets
+        let insetGetters: [(AnyClass?, String, InsetsGetter)] = [
+            (NSClassFromString("_UIDisplayInfoProvider"), "safeAreaInsetsPortrait", { _ in edge(screen?.display?.safeAreaPortrait) }),
+            (NSClassFromString("_UIDisplayInfoProvider"), "safeAreaInsetsPortraitUpsideDown", { _ in edge(screen?.display?.safeAreaPortraitUpsideDown) }),
+            (NSClassFromString("_UIDisplayInfoProvider"), "safeAreaInsetsLandscapeLeft", { _ in edge(screen?.display?.safeAreaLandscapeLeft) }),
+            (NSClassFromString("_UIDisplayInfoProvider"), "safeAreaInsetsLandscapeRight", { _ in edge(screen?.display?.safeAreaLandscapeRight) }),
+            (NSClassFromString("_UIDisplayInfoProvider"), "peripheryInsets", { _ in edge(screen?.display?.periphery) }),
+            (UIScreen.self, "_peripheryInsets", { _ in edge(screen?.display?.screenPeriphery) }),
+            (UIScreen.self, "_displayPeripheryInsets", { _ in edge(screen?.display?.screenDisplayPeriphery) }),
+        ]
+        for (cls, name, block) in insetGetters {
+            if let cls, let m = class_getInstanceMethod(cls, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(block)) }
+        }
+        let allowance: @convention(block) (AnyObject) -> Double = { _ in screen?.display?.homeAffordanceOverlayAllowance ?? 0 }
+        let margin: @convention(block) (AnyObject) -> Double = { _ in screen?.display?.systemMinimumMargin ?? 0 }
+        let subtype: @convention(block) (AnyObject) -> UInt = { _ in UInt(screen?.display?.artworkSubtype ?? 0) }
+        for (name, block) in [("homeAffordanceOverlayAllowance", allowance as Any), ("systemMinimumMargin", margin), ("artworkSubtype", subtype)] {
+            if let cls = NSClassFromString("_UIDisplayInfoProvider"), let m = class_getInstanceMethod(cls, NSSelectorFromString(name)) {
+                method_setImplementation(m, imp_implementationWithBlock(block))
+            }
+        }
+    }
 
     @MainActor static func setDisplayCornerRadius(_ radius: CGFloat, on window: UIWindow) {
         guard let trait = NSClassFromString("UITraitDisplayCornerRadius"),
@@ -478,11 +531,14 @@ enum NoBoot {
             let skip: @convention(block) (AnyObject) -> Void = { _ in }
             method_setImplementation(m, imp_implementationWithBlock(skip))
         }
+        installDisplayInfo()
         // A booted host scene is portrait (landscape previews are just landscape-sized windows);
         // a screen-based scene would report "unknown", which changes e.g. the tab bar's layout.
         let portrait: @convention(block) (AnyObject) -> Int = { _ in UIInterfaceOrientation.portrait.rawValue }
         for (cls, name) in [(UIWindowScene.self as AnyClass, "interfaceOrientation"), (UIWindowScene.self, "_interfaceOrientation"),
-                            (UIWindow.self, "interfaceOrientation"), (UIWindow.self, "_windowInterfaceOrientation")] {
+                            (UIWindow.self, "interfaceOrientation"), (UIWindow.self, "_windowInterfaceOrientation"),
+                            (UIApplication.self, "statusBarOrientation"), (UIApplication.self, "_safeInterfaceOrientationForNoWindow"),
+                            (UIApplication.self, "activeInterfaceOrientation"), (UIApplication.self, "_currentExpectedInterfaceOrientation")] {
             if let m = class_getInstanceMethod(cls, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(portrait)) }
         }
     }

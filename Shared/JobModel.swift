@@ -11,6 +11,23 @@ struct Insets: Codable, Equatable {
     static let zero = Insets(top: 0, left: 0, bottom: 0, right: 0)
 }
 
+/// What the device's display reports to UIKit (UIScreen._displayInfoProvider and the screen's
+/// periphery insets). Only a booted device has a display; without one (no-boot rendering) the
+/// agent reports these values itself. Some layout depends on them, e.g. the floating tab bar's
+/// bottom padding on phones with a home indicator.
+struct DisplayInfo: Codable, Equatable {
+    var safeAreaPortrait: Insets
+    var safeAreaPortraitUpsideDown: Insets
+    var safeAreaLandscapeLeft: Insets
+    var safeAreaLandscapeRight: Insets
+    var periphery: Insets
+    var homeAffordanceOverlayAllowance: Double
+    var systemMinimumMargin: Double
+    var artworkSubtype: Int
+    var screenPeriphery: Insets
+    var screenDisplayPeriphery: Insets
+}
+
 /// Geometry of a device, in points.
 struct DeviceProfile: Codable {
     var name: String
@@ -25,6 +42,8 @@ struct DeviceProfile: Codable {
     /// are downsampled by the system to a smaller panel).
     var panelWidth: Double? = nil
     var panelHeight: Double? = nil
+    /// Display data for rendering without a booted device (see DisplayInfo).
+    var display: DisplayInfo? = nil
 
     /// Devices rendered on the same host must share the native scale, otherwise text, symbols and
     /// glass are rasterized at the host's scale. iPhones and iPads of one scale share a host

@@ -1,7 +1,13 @@
 import Foundation
 
 func log(_ message: String) {
-    FileHandle.standardError.write(("[swiftshot] " + message + "\n").data(using: .utf8)!)
+    let line = ("[swiftshot] " + message + "\n").data(using: .utf8)!
+    FileHandle.standardError.write(line)
+    // Booted apps' stderr isn't always visible to the host; $SWIFTSHOT_LOG_FILE collects it too.
+    if let path = ProcessInfo.processInfo.environment["SWIFTSHOT_LOG_FILE"] {
+        if !FileManager.default.fileExists(atPath: path) { FileManager.default.createFile(atPath: path, contents: nil) }
+        if let handle = FileHandle(forWritingAtPath: path) { handle.seekToEndOfFile(); handle.write(line); handle.closeFile() }
+    }
 }
 
 func now() -> Double { CFAbsoluteTimeGetCurrent() }
