@@ -40,13 +40,41 @@ enum DeviceCatalog {
         let profileURL = URL(fileURLWithPath: type.bundlePath).appendingPathComponent("Contents/Resources/profile.plist")
         let profile = (try? Data(contentsOf: profileURL)).flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] }
         let faceID = ((profile?["supportedFeatures"] as? [String: Any])?["com.apple.pearl-id"] as? Bool) ?? false
-        if let displays = caps["displays"] as? [[String: Any]],
-           let primary = displays.first(where: { ($0["deviceName"] as? String) == "primary" }),
-           let w = primary["width"] as? Double, let h = primary["height"] as? Double, let s = primary["scale"] as? Double {
-            return Screen(width: min(w, h) / s, height: max(w, h) / s, scale: s,
-                          corner: (primary["cornerRadiusUL"] as? Double) ?? 0, faceID: faceID)
+        func number(_ dict: [String: Any]?, _ keys: String...) -> Double? {
+            for key in keys { if let n = dict?[key] as? NSNumber { return n.doubleValue } }
+            return nil
         }
+        let corner = number(caps, "DeviceCornerRadius") ?? 0
+        func make(_ w: Double, _ h: Double, _ s: Double, _ c: Double) -> Screen {
+            Screen(width: min(w, h) / s, height: max(w, h) / s, scale: s, corner: c, faceID: faceID)
+        }
+        // Newer device types: a `displays` array; the main one is "primary" (or the integrated panel).
+        if let displays = caps["displays"] as? [[String: Any]],
+           let primary = displays.first(where: { ($0["deviceName"] as? String) == "primary" })
+                ?? displays.first(where: { ($0["displayType"] as? String) == "integrated" }),
+           let w = number(primary, "width"), let h = number(primary, "height"), let s = number(primary, "scale") {
+            return make(w, h, s, number(primary, "cornerRadiusUL") ?? corner)
+        }
+        // Older device types: MobileGestalt-style screen dimensions, or mainScreen* in profile.plist.
+        let dims = caps["ScreenDimensionsCapability"] as? [String: Any]
+        if let w = number(dims, "main-screen-width"), let h = number(dims, "main-screen-height"), let s = number(dims, "main-screen-scale") {
+            return make(w, h, s, corner)
+        }
+        if let w = number(profile, "mainScreenWidth"), let h = number(profile, "mainScreenHeight"), let s = number(profile, "mainScreenScale") {
+            return make(w, h, s, corner)
+        }
+        Log.debug("\(type.name): no screen size in \(url.path) (keys: \(caps.keys.sorted().joined(separator: ", ")))")
         return nil
+    }
+
+    /// Why `screen(of:)` found nothing, for the error message.
+    static func screenDiagnostics(_ type: SimDeviceType) -> String {
+        let url = URL(fileURLWithPath: type.bundlePath).appendingPathComponent("Contents/Resources/capabilities.plist")
+        guard let data = try? Data(contentsOf: url) else { return "cannot read \(url.path)" }
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return "\(url.path) is not a dictionary plist" }
+        let caps = plist["capabilities"] as? [String: Any] ?? [:]
+        let screenish = caps.keys.filter { $0.localizedCaseInsensitiveContains("screen") || $0.localizedCaseInsensitiveContains("display") }.sorted()
+        return "\(url.path): top-level keys [\(plist.keys.sorted().joined(separator: ", "))], screen keys [\(screenish.joined(separator: ", "))]"
     }
 
     static func heuristicSafeArea(idiom: String, screen: Screen) -> (Insets, Insets) {

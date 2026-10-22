@@ -310,7 +310,7 @@ final class Runner {
                     continue
                 }
                 guard let (profile, source) = DeviceCatalog.profile(for: type, runtime: runtime.version, cache: cache) else {
-                    errors.append("No screen information for \(type.name)"); continue
+                    errors.append("No screen information for \(type.name) (\(DeviceCatalog.screenDiagnostics(type)))"); continue
                 }
                 Log.debug("\(type.name) @ \(runtime.name): \(Int(profile.width))×\(Int(profile.height))pt @\(Int(profile.scale))x, safe area \(profile.safeArea) [\(source)]")
                 if source == "heuristic", warned.insert(type.name).inserted { Log.warn("\(type.name): safe area estimated; run `swiftshot calibrate --devices \"\(type.name)\"` once for exact insets") }
