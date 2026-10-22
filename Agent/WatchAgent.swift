@@ -117,77 +117,51 @@ extension WatchAgent {
 
     /// No-boot: every requested watch model in this one process, each in its own window.
     func renderNoBoot(_ previews: [DiscoveredPreview], job: Job, result: inout JobResult) {
+        var index = 0
         for device in job.devices {
             WatchNoBoot.screen = device
             for preview in previews where job.wants(preview.name) && job.wants(preview.name, device: device.name) {
+              for textSize in job.textSizes(for: preview.name) {
                 let t0 = now()
                 guard let view = swiftUIView(fromBody: preview.body()), let vc = makeHostingController(view) else {
                     result.errors.append("\(preview.name): watchOS previews must be SwiftUI views"); continue
                 }
-                // Like iOS: a preview can ask for its own size instead of the full screen.
-                var size = CGSize(width: device.width, height: device.height)
-                switch preview.layout.kind {
-                case .device: break
-                case .fixed(let w, let h): size = CGSize(width: w, height: h)
-                case .sizeThatFits:
-                    let fit = swiftshot_watch_fitting_size(vc, device.width)
-                    size = CGSize(width: ceil(min(fit.width, device.width)), height: ceil(fit.height))
-                }
-                guard let window = swiftshot_watch_make_window(size.width, size.height) as? NSObject else {
+                guard let window = swiftshot_watch_make_window(device.width, device.height) as? NSObject else {
                     result.errors.append("\(preview.name): no window"); continue
                 }
                 hostingControllers.append(vc); hostingControllers.append(window)
-                // No status bar without a booted watch: give the content the device's safe area.
-                if case .device = preview.layout.kind {
+                // Like iOS: a preview can ask for its own size instead of the full screen.
+                var size = CGSize(width: device.width, height: device.height)
+                switch preview.layout.kind {
+                case .device:
+                    // No status bar without a booted watch: give the content the device's safe area.
                     let a = device.safeArea
                     swiftshot_watch_set_safe_area(vc, a.top, a.left, a.bottom, a.right)
+                case .fixed(let w, let h): size = CGSize(width: w, height: h)
+                case .sizeThatFits:
+                    // Measured inside the window, so it sees the window's text size.
+                    swiftshot_watch_show(window, vc)
+                    let fit = swiftshot_watch_fitting_size(vc, device.width)
+                    size = CGSize(width: ceil(min(fit.width, device.width)), height: ceil(fit.height))
                 }
+                swiftshot_watch_resize(window, size.width, size.height)
                 swiftshot_watch_show(window, vc)
                 RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3 + job.delay(for: preview.name)))
-                dumpLayers(window, suffix: "-\(previews.firstIndex { $0.name == preview.name } ?? 0)")
-                if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil {
-                    func describe(_ l: NSObject, _ depth: Int) -> String {
-                        let subs = (l.value(forKey: "sublayers") as? [NSObject]) ?? []
-                        let delegate = l.value(forKey: "delegate").map { "\(type(of: $0 as AnyObject))" } ?? "-"
-                        let me = "\(String(repeating: " ", count: depth))\(type(of: l)) d=\(delegate) frame=\(l.value(forKey: "frame") ?? "?") flipped=\(l.value(forKey: "geometryFlipped") ?? "?") contents=\(l.value(forKey: "contents") != nil)"
-                        return ([me] + subs.map { describe($0, depth + 1) }).joined(separator: "\n")
-                    }
-                    let view = vc.value(forKey: "view") as? NSObject
-                    log("watch window \(window) rootVC=\(window.value(forKey: "rootViewController").map { "\(type(of: $0))" } ?? "nil") view=\(view.map { "\($0)" } ?? "nil")")
-                    if let path = ProcessInfo.processInfo.environment["SWIFTSHOT_CLASS_DUMP"] {
-                        var out = ""
-                        func firstDrawingLayer(_ l: NSObject) -> NSObject? {
-                            if String(describing: type(of: l)) == "CGDrawingLayer" { return l }
-                            return ((l.value(forKey: "sublayers") as? [NSObject]) ?? []).lazy.compactMap(firstDrawingLayer).first
-                        }
-                        if let sample = (window.value(forKey: "layer") as? NSObject).flatMap(firstDrawingLayer) {
-                            let cls: AnyClass = object_getClass(sample)!
-                            out += "class \(NSStringFromClass(cls))\n"
-                            var c: AnyClass? = cls
-                            while let k = c, NSStringFromClass(k) != "CALayer" {
-                                var n: UInt32 = 0
-                                if let ms = class_copyMethodList(k, &n) { for i in 0..<Int(n) { out += "\(NSStringFromClass(k)) -\(NSStringFromSelector(method_getName(ms[i])))\n" } }
-                                c = class_getSuperclass(k)
-                            }
-                        }
-                        try? out.write(toFile: path, atomically: true, encoding: .utf8)
-                    }
-                    if let layer = window.value(forKey: "layer") as? NSObject, let path = ProcessInfo.processInfo.environment["SWIFTSHOT_LAYER_DUMP"] {
-                        try? describe(layer, 0).write(toFile: path, atomically: true, encoding: .utf8)
-                    }
-                }
+                dumpLayers(window, suffix: "-\(index)"); index += 1
                 guard let image = swiftshot_watch_capture(window, size.width, size.height, device.scale)?.takeRetainedValue() else {
                     result.errors.append("\(preview.name) \(device.name): capture failed"); continue
                 }
-                let file = job.fileName(preview: preview.name, device: device.name, appearance: "")
+                let file = job.fileName(preview: preview.name, device: device.name, appearance: "", textSize: textSize)
                 let out = URL(fileURLWithPath: job.outputDir).appendingPathComponent(job.language).appendingPathComponent(file)
                 try? FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
                 guard let dest = CGImageDestinationCreateWithURL(out as CFURL, "public.png" as CFString, 1, nil) else { continue }
                 CGImageDestinationAddImage(dest, image, nil)
                 guard CGImageDestinationFinalize(dest) else { result.errors.append("\(out.path): write failed"); continue }
                 result.shots.append(ShotRecord(
-                    preview: preview.name, device: device.name, appearance: "dark", language: job.language, runtime: job.runtime,
+                    preview: preview.name, device: device.name, appearance: "dark",
+                    textSize: contentSizeCategory(textSize) == nil ? nil : textSize, language: job.language, runtime: job.runtime,
                     file: "\(job.language)/\(file)", width: image.width, height: image.height, renderMs: (now() - t0) * 1000))
+              }
             }
         }
     }
@@ -303,6 +277,7 @@ enum WatchNoBoot {
 @_silgen_name("swiftshot_watch_flip_layer_drawing") func swiftshot_watch_flip_layer_drawing()
 @_silgen_name("swiftshot_watch_make_application") func swiftshot_watch_make_application() -> Unmanaged<NSString>?
 @_silgen_name("swiftshot_watch_fitting_size") func swiftshot_watch_fitting_size(_ controller: AnyObject, _ width: Double) -> CGSize
+@_silgen_name("swiftshot_watch_resize") func swiftshot_watch_resize(_ window: AnyObject, _ width: Double, _ height: Double)
 @_silgen_name("swiftshot_watch_set_safe_area") func swiftshot_watch_set_safe_area(_ controller: AnyObject, _ top: Double, _ left: Double, _ bottom: Double, _ right: Double)
 @_silgen_name("swiftshot_watch_make_window") func swiftshot_watch_make_window(_ width: Double, _ height: Double) -> AnyObject?
 @_silgen_name("swiftshot_watch_show") func swiftshot_watch_show(_ window: AnyObject, _ controller: AnyObject)

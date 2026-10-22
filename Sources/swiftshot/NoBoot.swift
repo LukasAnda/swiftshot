@@ -23,6 +23,8 @@ extension Runner {
         let shim = try Runner.locateHelper(target.platform == .ios ? "SwiftshotNoBoot.dylib" : "SwiftshotNoBoot-watchOS.dylib")
         let agent = try Runner.locateAgent(target.platform)
         let executable = try appExecutable(target.app.path)
+        let allTextSizes = (options.textSizes + options.screens.flatMap { $0.textSizes ?? [] })
+            .reduce(into: [String]()) { list, s in if !list.contains(where: { $0.caseInsensitiveCompare(s) == .orderedSame }) { list.append(s) } }
         var dyldCaches: [String: String] = [:]
         for runtime in target.runtimes { dyldCaches[runtime.identifier] = try await dyldCache(for: runtime) }
         // Each language is one short-lived process; run a few side by side.
@@ -36,21 +38,30 @@ extension Runner {
                 // unless --content-size pins it for all.
                 // Watches: one process per model; MobileGestalt answers (screen class, pitch) are
                 // per process and watchOS lays out by them.
-                var groups: [(String, SimDeviceType, [DeviceProfile])] = []
+                // Watch text sizes: one process each, launched at that size (list cells follow the
+                // app-wide setting); iOS renders all sizes in one process via trait overrides.
+                var groups: [(String, SimDeviceType, [DeviceProfile], String?)] = []
                 if target.platform == .watchos {
-                    for h in runtimeHosts { for p in h.profiles { groups.append((options.contentSize == nil ? p.contentSizeCategory ?? "" : "", target.types.first { $0.name == p.name } ?? h.type, [p])) } }
+                    for h in runtimeHosts { for p in h.profiles {
+                        let type = target.types.first { $0.name == p.name } ?? h.type
+                        let base = options.contentSize == nil ? p.contentSizeCategory ?? "" : ""
+                        for size in allTextSizes {
+                            groups.append((contentSizeCategory(size) ?? base, type, [p], size))
+                        }
+                    } }
                 } else {
                     let byCategory = Dictionary(grouping: runtimeHosts.flatMap(\.profiles)) { options.contentSize == nil ? $0.contentSizeCategory ?? "" : "" }
-                    for (category, profiles) in byCategory.sorted(by: { $0.key < $1.key }) { groups.append((category, host.type, profiles)) }
+                    for (category, profiles) in byCategory.sorted(by: { $0.key < $1.key }) { groups.append((category, host.type, profiles, nil)) }
                 }
-                for (category, type, profiles) in groups {
+                for (category, type, profiles, textSize) in groups {
                 for language in options.languages {
                     group.addTask {
                         try await limiter.run {
                             let t = Date()
-                            let job = self.makeJob(mode: .virtual, language: language, runtime: runtime, devices: profiles, target: target)
+                            var job = self.makeJob(mode: .virtual, language: language, runtime: runtime, devices: profiles, target: target)
+                            job.processTextSize = textSize
                             do {
-                                let result = try await self.launchNoBoot(job, tag: "noboot-\(runtime.version)-\(language)-\(type.name)\(category.isEmpty ? "" : "-" + category)", simhost: simhost,
+                                let result = try await self.launchNoBoot(job, tag: "noboot-\(runtime.version)-\(language)-\(type.name)\(category.isEmpty ? "" : "-" + category)-\(textSize ?? "all")", simhost: simhost,
                                                                          insert: "\(shim):\(agent)", root: root, dyldCache: dyldCaches[runtime.identifier] ?? nil, runtime: runtime,
                                                                          type: type, profile: profiles[0], executable: executable,
                                                                          contentSize: category.isEmpty ? nil : category)
@@ -137,7 +148,7 @@ extension Runner {
         ]
         if let dyldCache { env["SWIFTSHOT_NOBOOT_DYLD_CACHE"] = dyldCache }
         // iOS: Dynamic Type pinned to the system default (L); watch models keep their own defaults.
-        let contentSize = options.contentSize.map(contentSizeCategory) ?? deviceDefault ?? (job.platform == "ios" ? "UICTContentSizeCategoryL" : nil)
+        let contentSize = job.processTextSize.flatMap(contentSizeCategory) ?? options.contentSize.flatMap(contentSizeCategory) ?? deviceDefault ?? (job.platform == "ios" ? "UICTContentSizeCategoryL" : nil)
         let args = [simhost, root, executable, "-AppleLanguages", "(\(job.language))", "-AppleLocale", localeIdentifier(for: job.language)]
             + (contentSize.map { ["-UIPreferredContentSizeCategoryName", $0] } ?? [])
         let output = try await sh(args, env: env, timeout: options.timeout, onLine: { line in if line.hasPrefix("[swiftshot]") { Log.debug(line) } })

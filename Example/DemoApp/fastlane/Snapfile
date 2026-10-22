@@ -1,4 +1,5 @@
-devices(["iPhone 17 Pro Max", "iPad Pro 13-inch (M5)"])
+# FL_DEVICES / FL_IOS: set by bench/run.sh (fastlane validates these before command-line overrides).
+devices(ENV["FL_DEVICES"] ? ENV["FL_DEVICES"].split(",") : ["iPhone 17 Pro Max", "iPad Pro 13-inch (M5)"])
 languages(["en-US", "de-DE", "sk", "ar", "ja"])
 project("./DemoApp.xcodeproj")
 scheme("DemoApp")
@@ -6,5 +7,5 @@ output_directory(ENV["FL_OUT"] || "./fastlane/screenshots")
 clear_previous_screenshots(true)
 override_status_bar(true)
 skip_open_summary(true)
-ios_version("26.5")
+ios_version(ENV["FL_IOS"] || "26.5")
 xcargs("CODE_SIGNING_ALLOWED=NO")

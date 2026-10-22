@@ -40,6 +40,7 @@ struct Options: Codable {
     var watchAppPath: String?
     var watchosVersions: [String] = []
     var contentSize: String?
+    var textSizes: [String] = ["default"]
     var allowUnsupportedDevices = false
     var deviceSet: String?
     var templates = true
@@ -55,7 +56,7 @@ struct Options: Codable {
              previews, output = "output_directory", mode, format, settleFrames = "settle_frames", delay,
              clearOutput = "clear_previous_screenshots", shutdownAfter = "shutdown_simulators",
              downloadRuntimes = "download_missing_runtimes", html, parallelLanguages = "parallel_languages", timeout, screens, deviceSet = "device_set", watchScheme = "watch_scheme", watchAppPath = "watch_app",
-             watchosVersions = "watchos_versions", contentSize = "content_size", allowUnsupportedDevices = "allow_unsupported_devices",
+             watchosVersions = "watchos_versions", contentSize = "content_size", textSizes = "text_sizes", allowUnsupportedDevices = "allow_unsupported_devices",
              templates = "device_templates", templateCache = "template_cache", noBoot = "no_boot", verbose
     }
 
@@ -80,7 +81,7 @@ struct Options: Codable {
         try read(.parallelLanguages, &parallelLanguages); try read(.timeout, &timeout); try read(.verbose, &verbose)
         try read(.screens, &screens); try readOpt(.deviceSet, &deviceSet)
         try readOpt(.watchScheme, &watchScheme); try readOpt(.watchAppPath, &watchAppPath); try read(.watchosVersions, &watchosVersions)
-        try readOpt(.contentSize, &contentSize); try read(.allowUnsupportedDevices, &allowUnsupportedDevices)
+        try readOpt(.contentSize, &contentSize); try read(.textSizes, &textSizes); try read(.allowUnsupportedDevices, &allowUnsupportedDevices)
         try read(.templates, &templates); try readOpt(.templateCache, &templateCache); try read(.noBoot, &noBoot)
     }
 
@@ -109,6 +110,9 @@ struct Options: Codable {
       --ios "26.5,27.1"                       iOS runtime versions (default: newest installed)
       --languages "en-US,de-DE"               Default: en-US
       --appearances "light,dark"              Default: light
+      --text-sizes "default,XXXL,AX5"         Dynamic Type sizes to render every preview at: XS S M L XL XXL XXXL
+                                              AX1…AX5, or default (the device's own: iOS L, watch L/XL by case
+                                              size). Non-default sizes get a "-<size>" file name suffix.
       --previews "Welcome,Onboarding*"        Only these previews (glob); default: all
 
     APPLE WATCH (add watch devices to --devices)
@@ -126,7 +130,7 @@ struct Options: Codable {
       --mode virtual|device                   virtual (default): one simulator per iOS version renders every device
                                               off-screen. device: real simulator per device, framebuffer capture
                                               incl. status bar (9:41, full battery).
-      --content-size <size>                   Dynamic Type: XS S M L XL XXL XXXL AX1…AX5 (default: iOS L, watch default)
+      --content-size <size>                   Change the default text size itself (no file name suffix)
       --delay <seconds>                       Extra settle time before each capture (async images, animations)
       --settle-frames <n>                     Run-loop frames to wait before capture (default 3)
       --parallel-languages <n>                Run n language processes concurrently per iOS version (clones)
@@ -138,7 +142,7 @@ struct Options: Codable {
 
     PER SCREENSHOT
       --screen "<preview>: key=v1,v2 key=v"     Override settings for previews matching <preview> (glob), repeatable.
-                                              keys: appearances, languages, devices, ios, delay, skip
+                                              keys: appearances, languages, devices, ios, text_sizes, delay, skip
                                               e.g. --screen "Welcome: appearances=light,dark languages=en-US"
                                               (or a "screens" array in the JSON config; first match wins)
 
@@ -221,6 +225,7 @@ struct Options: Codable {
             case "--watch-app": options.watchAppPath = try value()
             case "--watchos": options.watchosVersions = list(try value())
             case "--content-size": options.contentSize = try value()
+            case "--text-sizes", "--text-size": options.textSizes = list(try value())
             case "--allow-unsupported-devices": options.allowUnsupportedDevices = true
             case "--clear": options.clearOutput = true
             case "--shutdown": options.shutdownAfter = true
@@ -236,16 +241,17 @@ struct Options: Codable {
             i += 1
         }
         for a in options.appearances where !["light", "dark"].contains(a) { throw CLIError("Unknown appearance \(a)") }
+        try validateTextSizes(options.textSizes)
+        for rule in options.screens { try validateTextSizes(rule.textSizes ?? []) }
         if !["png", "jpeg"].contains(options.format) { throw CLIError("--format must be png or jpeg") }
         return options
     }
 }
 
-/// "XL" -> "UICTContentSizeCategoryXL", "AX2" -> "UICTContentSizeCategoryAccessibilityL"…
-func contentSizeCategory(_ short: String) -> String {
-    if short.hasPrefix("UICTContentSizeCategory") { return short }
-    let ax = ["AX1": "AccessibilityM", "AX2": "AccessibilityL", "AX3": "AccessibilityXL", "AX4": "AccessibilityXXL", "AX5": "AccessibilityXXXL"]
-    return "UICTContentSizeCategory" + (ax[short.uppercased()] ?? short.uppercased())
+func validateTextSizes(_ sizes: [String]) throws {
+    for s in sizes where s.lowercased() != "default" && !s.hasPrefix("UICTContentSizeCategory") && !textSizeNames.contains(s.uppercased()) {
+        throw CLIError("Unknown text size \(s) (use default, \(textSizeNames.joined(separator: ", ")))")
+    }
 }
 
 func parseScreenRule(_ text: String) throws -> ScreenRule {
@@ -260,6 +266,7 @@ func parseScreenRule(_ text: String) throws -> ScreenRule {
         case "languages", "language": rule.languages = values
         case "devices", "device": rule.devices = values
         case "ios", "ios_versions": rule.iosVersions = values
+        case "text_sizes", "text-sizes", "text_size", "text-size": rule.textSizes = values
         case "delay": rule.delay = Double(kv[1])
         case "skip": rule.skip = kv[1] == "true"
         default: throw CLIError("--screen: unknown key '\(kv[0])'")

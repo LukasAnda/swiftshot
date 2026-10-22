@@ -22,12 +22,13 @@ final class WriteSink: @unchecked Sendable {
 }
 
 extension Job {
-    func fileName(preview: String, device: String, appearance: String) -> String {
+    func fileName(preview: String, device: String, appearance: String, textSize: String = "default") -> String {
         let clean: (String) -> String = { $0.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-") }
         var name = fileNamePattern
             .replacingOccurrences(of: "{device}", with: clean(device))
             .replacingOccurrences(of: "{preview}", with: clean(preview))
             .replacingOccurrences(of: "{appearance}", with: platform == "watchos" || appearance.isEmpty || (appearance == "light" && appearances.count == 1) ? "" : "-\(appearance)")
+            .replacingOccurrences(of: "{textSize}", with: contentSizeCategory(textSize) == nil ? "" : "-\(textSize)")
             .replacingOccurrences(of: "{language}", with: language)
             .replacingOccurrences(of: "{runtime}", with: runtime)
         if includeRuntimeInName && !fileNamePattern.contains("{runtime}") { name += "-\(platform == "watchos" ? "watchOS" : "iOS")\(runtime)" }

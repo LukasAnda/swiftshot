@@ -154,8 +154,8 @@ final class Runner {
         Job(mode: mode, outputDir: outputDir, language: language, runtime: runtime.version, devices: devices,
             appearances: options.appearances, previewFilter: options.previews, format: options.format,
             settleFrames: options.settleFrames, settleDelay: options.delay, controlDir: controlDir,
-            fileNamePattern: "{device}-{preview}{appearance}", includeRuntimeInName: target?.includeRuntimeInName ?? false,
-            screenRules: options.screens, targetPlatform: (target?.platform ?? .ios).rawValue)
+            fileNamePattern: "{device}-{preview}{appearance}{textSize}", includeRuntimeInName: target?.includeRuntimeInName ?? false,
+            screenRules: options.screens, targetPlatform: (target?.platform ?? .ios).rawValue, textSizes: options.textSizes)
     }
 
     func writeJob(_ job: Job, tag: String) throws -> String {
@@ -176,7 +176,7 @@ final class Runner {
         let agent = try Runner.locateAgent(platform)
         // iOS: pin Dynamic Type to the system default (L) so every run is identical. watchOS models
         // have different default sizes, so leave them alone unless explicitly requested.
-        let contentSize = options.contentSize.map(contentSizeCategory) ?? (platform == .ios ? "UICTContentSizeCategoryL" : nil)
+        let contentSize = options.contentSize.flatMap(contentSizeCategory) ?? (platform == .ios ? "UICTContentSizeCategoryL" : nil)
         // Freshly (first-)booted simulators sometimes refuse the first launch ("did not return a
         // process handle"); that is transient, so retry a couple of times before failing.
         var output = ""
@@ -311,7 +311,9 @@ final class Runner {
                          total: Date().timeIntervalSince(total))
         for s in skipped { Log.warn("Skipped: " + s) }
         for e in errors { Log.warn(e) }
-        Log.success("\(shots.count) screenshots in \(ms(since: total)) → \(outputDir)")
+        if shots.isEmpty && errors.isEmpty { Log.warn("No screenshots: no preview matched the filters (previews, screens, devices)") }
+        let summary = "\(shots.count) screenshots in \(ms(since: total)) → \(outputDir)"
+        if errors.isEmpty { Log.success(summary) } else { Log.failure(summary + " (\(errors.count) failed, see above)") }
         if !errors.isEmpty { throw CLIError("\(errors.count) error(s) while rendering") }
     }
 

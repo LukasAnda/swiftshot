@@ -127,8 +127,11 @@ final class AgentRunner {
         return Geometry(size: size, safeArea: UIEdgeInsets(top: s.top, left: s.left, bottom: s.bottom, right: s.right), landscape: landscape)
     }
 
-    func applyTraits(_ window: UIWindow, device: DeviceProfile, appearance: String, size: CGSize) {
+    func applyTraits(_ window: UIWindow, device: DeviceProfile, appearance: String, textSize: String = "default", size: CGSize) {
         window.overrideUserInterfaceStyle = appearance == "dark" ? .dark : .light
+        if let category = contentSizeCategory(textSize) {
+            window.traitOverrides.preferredContentSizeCategory = UIContentSizeCategory(rawValue: category)
+        }
         window.traitOverrides.displayScale = device.scale
         if NoBoot.enabled {
             // No display to inherit these from. The corner radius trait (private) decides e.g. how far
@@ -164,8 +167,8 @@ final class AgentRunner {
         if delay > 0 { RunLoop.main.run(until: Date(timeIntervalSinceNow: delay)) }
     }
 
-    func fileName(preview: String, device: String, appearance: String) -> String {
-        job.fileName(preview: preview, device: device, appearance: appearance)
+    func fileName(preview: String, device: String, appearance: String, textSize: String = "default") -> String {
+        job.fileName(preview: preview, device: device, appearance: appearance, textSize: textSize)
     }
 
     func outputURL(_ file: String) -> URL {
@@ -201,6 +204,7 @@ final class AgentRunner {
         for preview in previews where job.wants(preview.name) {
             for device in job.devices where job.wants(preview.name, device: device.name) {
                 for appearance in job.appearances(for: preview.name) {
+                  for textSize in job.textSizes(for: preview.name) {
                     let t0 = now()
                     DeviceIdiom.current = device.idiom == "pad" ? .pad : .phone
                     NoBoot.screen = device
@@ -210,7 +214,7 @@ final class AgentRunner {
                     }
                     var geo = geometry(for: preview, on: device)
                     let window = makeWindow()
-                    applyTraits(window, device: device, appearance: appearance, size: geo.size)
+                    applyTraits(window, device: device, appearance: appearance, textSize: textSize, size: geo.size)
 
                     switch preview.layout.kind {
                     case .device:
@@ -218,6 +222,10 @@ final class AgentRunner {
                     case .fixed(let w, let h):
                         geo.size = CGSize(width: w, height: h)
                     case .sizeThatFits:
+                        // Measured inside the window, so it sees the window's traits (text size).
+                        window.rootViewController = vc
+                        window.isHidden = false
+                        settle(frames: 1, delay: 0)
                         let proposal = CGSize(width: geo.size.width, height: .greatestFiniteMagnitude)
                         let fitting: CGSize
                         if let hosting = vc as? UIHostingController<AnyView> {
@@ -265,12 +273,14 @@ final class AgentRunner {
                         }
                     } } ?? image
 
-                    let file = fileName(preview: preview.name, device: device.name, appearance: appearance)
+                    let file = fileName(preview: preview.name, device: device.name, appearance: appearance, textSize: textSize)
                     store(image: output, record: ShotRecord(
-                        preview: preview.name, device: device.name, appearance: appearance, language: job.language,
+                        preview: preview.name, device: device.name, appearance: appearance,
+                        textSize: contentSizeCategory(textSize) == nil ? nil : textSize, language: job.language,
                         runtime: job.runtime, file: "\(job.language)/\(file)",
                         width: Int(output.size.width * output.scale), height: Int(output.size.height * output.scale),
                         renderMs: (now() - t0) * 1000))
+                  }
                 }
             }
         }

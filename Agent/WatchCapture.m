@@ -153,6 +153,10 @@ void swiftshot_watch_set_safe_area(id controller, double top, double left, doubl
     [controller setAdditionalSafeAreaInsets:(SSInsets){top, left, bottom, right}];
 }
 
+void swiftshot_watch_resize(id window, double width, double height) {
+    [window setFrame:CGRectMake(0, 0, width, height)];
+}
+
 void swiftshot_watch_show(id window, id controller) {
     [window setRootViewController:controller];
     [window setHidden:NO];

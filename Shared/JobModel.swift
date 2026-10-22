@@ -74,11 +74,12 @@ struct ScreenRule: Codable {
     var languages: [String]?
     var devices: [String]?
     var iosVersions: [String]?
+    var textSizes: [String]?
     var delay: Double?
     var skip: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case preview, appearances, languages, devices, iosVersions = "ios_versions", delay, skip
+        case preview, appearances, languages, devices, iosVersions = "ios_versions", textSizes = "text_sizes", delay, skip
     }
 
     func matches(_ name: String) -> Bool { globMatch(preview, name) }
@@ -115,6 +116,11 @@ struct Job: Codable {
     /// Where the agent writes its JobResult (stdout is only a fallback: a watch app's console
     /// output can be lost when the simulator was just first-booted).
     var resultPath: String? = nil
+    /// Dynamic Type sizes to render each preview at ("L", "AX3"…; "default" = the device's own).
+    var textSizes: [String]? = nil
+    /// Set when the whole process runs at one text size (watchOS: list cells follow the app-wide
+    /// setting, not window traits); then only that size is rendered here.
+    var processTextSize: String? = nil
 
     var rules: [ScreenRule] { screenRules ?? [] }
     var platform: String { targetPlatform ?? "ios" }
@@ -134,6 +140,12 @@ struct Job: Codable {
         rule(for: preview)?.appearances ?? appearances
     }
 
+    func textSizes(for preview: String) -> [String] {
+        let sizes = rule(for: preview)?.textSizes ?? textSizes ?? ["default"]
+        guard let only = processTextSize else { return sizes }
+        return sizes.filter { $0.caseInsensitiveCompare(only) == .orderedSame }
+    }
+
     func wants(_ preview: String, device: String) -> Bool {
         guard let devices = rule(for: preview)?.devices else { return true }
         return devices.contains { globMatch($0, device) }
@@ -146,6 +158,7 @@ struct ShotRecord: Codable {
     var preview: String
     var device: String
     var appearance: String
+    var textSize: String? = nil
     var language: String
     var runtime: String
     var file: String
@@ -161,3 +174,14 @@ struct JobResult: Codable {
     var calibration: DeviceProfile?
     var totalMs: Double
 }
+
+/// "XL" -> "UICTContentSizeCategoryXL", "AX2" -> "UICTContentSizeCategoryAccessibilityL"…
+/// "default" (or empty) -> nil: whatever the device uses.
+func contentSizeCategory(_ short: String) -> String? {
+    if short.isEmpty || short.lowercased() == "default" { return nil }
+    if short.hasPrefix("UICTContentSizeCategory") { return short }
+    let ax = ["AX1": "AccessibilityM", "AX2": "AccessibilityL", "AX3": "AccessibilityXL", "AX4": "AccessibilityXXL", "AX5": "AccessibilityXXXL"]
+    return "UICTContentSizeCategory" + (ax[short.uppercased()] ?? short.uppercased())
+}
+
+let textSizeNames = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "AX1", "AX2", "AX3", "AX4", "AX5"]

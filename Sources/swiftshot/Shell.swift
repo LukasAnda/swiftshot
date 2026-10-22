@@ -15,6 +15,7 @@ enum Log {
     static func info(_ message: String) { emit("\u{001B}[36m▸\u{001B}[0m \(message)") }
     static func success(_ message: String) { emit("\u{001B}[32m✔\u{001B}[0m \(message)") }
     static func warn(_ message: String) { emit("\u{001B}[33m!\u{001B}[0m \(message)") }
+    static func failure(_ message: String) { emit("\u{001B}[31m✘\u{001B}[0m \(message)") }
     static func debug(_ message: String) { if verbose { emit("  \u{001B}[2m\(message)\u{001B}[0m") } }
 
     private static func emit(_ line: String) {
