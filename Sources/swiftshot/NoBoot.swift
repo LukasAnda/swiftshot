@@ -23,6 +23,8 @@ extension Runner {
         let shim = try Runner.locateHelper("SwiftshotNoBoot.dylib")
         let agent = try Runner.locateAgent(.ios)
         let executable = try appExecutable(target.app.path)
+        var dyldCaches: [String: String] = [:]
+        for runtime in target.runtimes { dyldCaches[runtime.identifier] = try await dyldCache(for: runtime) }
         // Each language is one short-lived process; run a few side by side.
         let limiter = AsyncLimiter(limit: max(2, ProcessInfo.processInfo.activeProcessorCount / 2))
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -38,7 +40,7 @@ extension Runner {
                             let job = self.makeJob(mode: .virtual, language: language, runtime: runtime, devices: profiles, target: target)
                             do {
                                 let result = try await self.launchNoBoot(job, tag: "noboot-\(runtime.version)-\(language)", simhost: simhost,
-                                                                         insert: "\(shim):\(agent)", root: root, runtime: runtime,
+                                                                         insert: "\(shim):\(agent)", root: root, dyldCache: dyldCaches[runtime.identifier] ?? nil, runtime: runtime,
                                                                          type: host.type, profile: profiles[0], executable: executable)
                                 self.collect(result)
                                 self.record("render \(runtime.name) \(language) (no boot)", t)
@@ -62,7 +64,25 @@ extension Runner {
         return (app as NSString).appendingPathComponent(name)
     }
 
-    func launchNoBoot(_ job: Job, tag: String, simhost: String, insert: String, root: String, runtime: SimRuntime,
+    /// Runtimes that don't ship a dyld shared cache run from one CoreSimulator builds on the host
+    /// (per host OS build). Without it the runtime's libraries load one by one and e.g. its shader
+    /// compiler crashes. Builds the cache once if it is missing (as a first boot would).
+    func dyldCache(for runtime: SimRuntime) async throws -> String? {
+        guard let bundle = runtime.bundlePath else { return nil }
+        let ownCache = (bundle as NSString).appendingPathComponent("Contents/Resources/RuntimeRoot/System/Library/Caches/com.apple.dyld")
+        if FileManager.default.fileExists(atPath: ownCache) { return nil }
+        let hostBuild = try await sh(["sw_vers", "-buildVersion"], stdoutOnly: true).trimmingCharacters(in: .whitespacesAndNewlines)
+        let dir = "/Library/Developer/CoreSimulator/Caches/dyld/\(hostBuild)/\(runtime.identifier).\(runtime.buildversion ?? runtime.version)/"
+        if !FileManager.default.fileExists(atPath: dir) {
+            let t = Date()
+            Log.info("Building the dyld shared cache for \(runtime.name) (one-time per runtime and macOS build)…")
+            try await sh(Simctl.cmd(["runtime", "dyld_shared_cache", "update", runtime.identifier]))
+            Log.info("dyld shared cache ready in \(ms(since: t))")
+        }
+        return FileManager.default.fileExists(atPath: dir) ? dir : nil
+    }
+
+    func launchNoBoot(_ job: Job, tag: String, simhost: String, insert: String, root: String, dyldCache: String?, runtime: SimRuntime,
                       type: SimDeviceType, profile: DeviceProfile, executable: String) async throws -> JobResult {
         var job = job
         let base = (workDir as NSString).appendingPathComponent("noboot/\(tag)")
@@ -74,7 +94,7 @@ extension Runner {
 
         // What launchd_sim would put into the environment of a process on a booted device
         // (DYLD_* are set by swiftshot-simhost: SIP strips them on the way through /usr/bin/env).
-        let env: [String: String] = [
+        var env: [String: String] = [
             "SIMULATOR_ROOT": root, "IPHONE_SIMULATOR_ROOT": root,
             "HOME": home, "CFFIXED_USER_HOME": home, "TMPDIR": home + "/tmp/",
             "SIMULATOR_SHARED_RESOURCES_DIRECTORY": home, "IPHONE_SHARED_RESOURCES_DIRECTORY": home,
@@ -88,6 +108,7 @@ extension Runner {
             "SWIFTSHOT_NOBOOT": "1", "SWIFTSHOT_JOB": jobPath,
             "SWIFTSHOT_NOBOOT_SHIM": (insert as NSString).components(separatedBy: ":")[0], "SWIFTSHOT_NOBOOT_INSERT": insert,
         ]
+        if let dyldCache { env["SWIFTSHOT_NOBOOT_DYLD_CACHE"] = dyldCache }
         let contentSize = options.contentSize.map(contentSizeCategory) ?? "UICTContentSizeCategoryL"
         let args = [simhost, root, executable, "-AppleLanguages", "(\(job.language))", "-AppleLocale", localeIdentifier(for: job.language),
                     "-UIPreferredContentSizeCategoryName", contentSize]

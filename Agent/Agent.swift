@@ -470,6 +470,14 @@ enum NoBoot {
         for (name, block) in getters {
             if let m = class_getInstanceMethod(UIScreen.self, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(block)) }
         }
+        // UIKit defers some bookkeeping to "after the next CA commit" (scene mirroring evaluation,
+        // transition-coordinator completions). Without a booted device those only run when
+        // CARenderer's local context commits, and iOS 26 asserts in them (no UIApplication). They
+        // don't affect what is drawn, so skip them.
+        if let cls = NSClassFromString("_UIAppCACommitFuture"), let m = class_getInstanceMethod(cls, NSSelectorFromString("_invoke")) {
+            let skip: @convention(block) (AnyObject) -> Void = { _ in }
+            method_setImplementation(m, imp_implementationWithBlock(skip))
+        }
         // A booted host scene is portrait (landscape previews are just landscape-sized windows);
         // a screen-based scene would report "unknown", which changes e.g. the tab bar's layout.
         let portrait: @convention(block) (AnyObject) -> Int = { _ in UIInterfaceOrientation.portrait.rawValue }

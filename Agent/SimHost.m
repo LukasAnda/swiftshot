@@ -7,7 +7,8 @@
 // needs and starts the executable directly on the Mac with DYLD_ROOT_PATH=<runtime root>:
 //   * Metal: macOS' MTLSimImplementation (what CoreSimulator's SimMetalHost loads) on a listener
 //   * IOSurface: macOS' IOSurfaceRemoteServer on a second listener
-//   * the runtime's MTLCompilerService (shader compiler), started here instead of by launchd
+//   * the runtime's MTLCompilerService (shader compiler), started here instead of by launchd —
+//     one instance per connection (the service is _MultipleInstances; sharing one crashes iOS 26)
 // Their ports reach the child as registered Mach ports; Agent/NoBoot.c (injected into the child
 // via $SWIFTSHOT_NOBOOT_SHIM, or $SWIFTSHOT_NOBOOT_INSERT for the app) routes the child's XPC connections to them. Exits with the child.
 
@@ -28,7 +29,10 @@ extern mach_port_t xpc_endpoint_copy_listener_port_4sim(xpc_endpoint_t);
 extern void xpc_connection_enable_sim2host_4sim(xpc_connection_t);
 typedef void (*MetalInit)(xpc_connection_t listener, uint64_t registryID);
 
-static pid_t compilerPid;
+// Shader compiler instances (one per client connection, like launchd's _MultipleInstances).
+static pid_t compilerPids[256];
+static int compilerCount;
+static const char *gRoot, *gShim;
 
 /// An anonymous listener that speaks the simulator's XPC wire format; returns a send right to it.
 static mach_port_t simListener(xpc_connection_t *out) {
@@ -39,7 +43,13 @@ static mach_port_t simListener(xpc_connection_t *out) {
 }
 
 static pid_t spawn(char *const argv[], const char *root, const char *insert) {
+    // The same dyld setup CoreSimulator gives processes on a booted device. Runtimes without a
+    // shared cache of their own use one CoreSimulator builds on the host ($SWIFTSHOT_NOBOOT_DYLD_CACHE).
     setenv("DYLD_ROOT_PATH", root, 1);
+    char path[PATH_MAX];
+    snprintf(path, sizeof path, "%s/System/Library/Frameworks", root); setenv("DYLD_FALLBACK_FRAMEWORK_PATH", path, 1);
+    snprintf(path, sizeof path, "%s/usr/lib", root); setenv("DYLD_FALLBACK_LIBRARY_PATH", path, 1);
+    if (getenv("SWIFTSHOT_NOBOOT_DYLD_CACHE")) setenv("DYLD_SHARED_CACHE_DIR", getenv("SWIFTSHOT_NOBOOT_DYLD_CACHE"), 1);
     if (insert) setenv("DYLD_INSERT_LIBRARIES", insert, 1);
     pid_t pid;
     if (posix_spawn(&pid, argv[0], NULL, NULL, argv, environ) != 0) { perror(argv[0]); exit(71); }
@@ -57,12 +67,40 @@ static mach_port_t startCompiler(const char *root, const char *shim) {
     snprintf(path, sizeof path, "%s/System/Library/Frameworks/Metal.framework/XPCServices/MTLCompilerService.xpc/MTLCompilerService", root);
     char *argv[] = { path, NULL };
     setenv("SWIFTSHOT_SIMHOST_SERVICE", "1", 1);
-    compilerPid = spawn(argv, root, shim);
+    pid_t pid = spawn(argv, root, shim);
+    if (compilerCount < 256) compilerPids[compilerCount++] = pid;
     unsetenv("SWIFTSHOT_SIMHOST_SERVICE");
     struct { mach_msg_header_t h; mach_msg_body_t b; mach_msg_port_descriptor_t p; mach_msg_trailer_t t; } m;
     kern_return_t kr = mach_msg(&m.h, MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0, sizeof m, rendezvous, 15000, 0);
+    mach_port_mod_refs(mach_task_self(), rendezvous, MACH_PORT_RIGHT_RECEIVE, -1);
     if (kr != KERN_SUCCESS) { fprintf(stderr, "swiftshot-simhost: shader compiler did not start (%x)\n", kr); return MACH_PORT_NULL; }
     return m.p.name;
+}
+
+/// Answers the app's "new MTLCompilerService connection" requests with a fresh instance.
+static mach_port_t startCompilerBroker(void) {
+    mach_port_t broker;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &broker);
+    mach_port_insert_right(mach_task_self(), broker, broker, MACH_MSG_TYPE_MAKE_SEND);
+    dispatch_queue_t queue = dispatch_queue_create("swiftshot.compiler-broker", DISPATCH_QUEUE_SERIAL);
+    static dispatch_source_t source;   // kept alive for the life of the process (ARC)
+    source = dispatch_source_create(DISPATCH_SOURCE_TYPE_MACH_RECV, broker, 0, queue);
+    dispatch_source_set_event_handler(source, ^{
+        struct { mach_msg_header_t h; mach_msg_trailer_t t; } request;
+        if (mach_msg(&request.h, MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0, sizeof request, broker, 0, 0) != KERN_SUCCESS) return;
+        mach_port_t instance = startCompiler(gRoot, gShim);
+        struct { mach_msg_header_t h; mach_msg_body_t b; mach_msg_port_descriptor_t p; } reply = {0};
+        reply.h.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_MOVE_SEND_ONCE, 0) | MACH_MSGH_BITS_COMPLEX;
+        reply.h.msgh_size = sizeof reply;
+        reply.h.msgh_remote_port = request.h.msgh_remote_port;
+        reply.b.msgh_descriptor_count = 1;
+        reply.p.name = instance;
+        reply.p.disposition = MACH_MSG_TYPE_MOVE_SEND;
+        reply.p.type = MACH_MSG_PORT_DESCRIPTOR;
+        mach_msg(&reply.h, MACH_SEND_MSG, sizeof reply, 0, 0, 0, 0);
+    });
+    dispatch_resume(source);
+    return broker;
 }
 
 int main(int argc, char *argv[]) {
@@ -85,8 +123,9 @@ int main(int argc, char *argv[]) {
         surfaces = [[NSClassFromString(@"IOSurfaceRemoteServer") alloc] initWithListener:surfaceListener options:@{}];
         if (!surfaces) { fprintf(stderr, "swiftshot-simhost: no IOSurfaceRemoteServer\n"); return 69; }
 
-        mach_port_t compilerPort = startCompiler(root, shim);
-        mach_port_t ports[3] = { metalPort, surfacePort, compilerPort };
+        gRoot = root; gShim = shim;
+        mach_port_t compilerBroker = startCompilerBroker();
+        mach_port_t ports[3] = { metalPort, surfacePort, compilerBroker };
         mach_ports_register(mach_task_self(), ports, 3);
         // The app gets the shim plus whatever else should be injected (the swiftshot agent).
         const char *insert = getenv("SWIFTSHOT_NOBOOT_INSERT");
@@ -96,7 +135,7 @@ int main(int argc, char *argv[]) {
         dispatch_source_set_event_handler(exitSource, ^{
             int status = 0;
             waitpid(child, &status, 0);
-            if (compilerPid) kill(compilerPid, SIGKILL);
+            for (int i = 0; i < compilerCount; i++) kill(compilerPids[i], SIGKILL);
             exit(WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status));
         });
         dispatch_resume(exitSource);

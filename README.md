@@ -211,7 +211,12 @@ SwiftUI work. What a booted device adds for rendering is provided by `swiftshot-
 * **Metal** — macOS' `MTLSimImplementation` (what CoreSimulator's `SimMetalHost` loads) on an XPC
   listener in the simulator wire format;
 * **IOSurface** — macOS' `IOSurfaceRemoteServer` on a second listener;
-* **shader compiler** — the runtime's `MTLCompilerService`, started by simhost instead of launchd.
+* **shader compiler** — the runtime's `MTLCompilerService`, started by simhost instead of launchd,
+  one instance per connection like launchd's `_MultipleInstances` (a shared instance crashes in
+  iOS 26.5's LLVM);
+* **dyld shared cache** — runtimes without their own (iOS 26.x) run from the one CoreSimulator
+  builds on the host (`/Library/Developer/CoreSimulator/Caches/dyld/<macOS build>/…`), built once
+  with `simctl runtime dyld_shared_cache update` if missing.
 
 Their Mach ports reach the app as registered task ports, and `SwiftshotNoBoot.dylib` routes the
 app's `com.apple.metal.simulator` / `com.apple.IOSurface.Remote` / `com.apple.MTLCompilerService`
@@ -221,12 +226,14 @@ reports each rendered device's screen (scale, bounds, corner radius, embedded pa
 Because every device gets its own scale, one process renders all devices of a runtime: one app
 launch (~1 s) per language, no device set, no boot, no template.
 
-Measured on `Example/DemoApp` (iOS 27.0, 3 devices × 3 languages + per-screen rules = 55 shots,
-warm DerivedData): **8–9 s** vs 46–52 s warm / 136 s cold booted. Against the booted
-`drawHierarchy` output: **52/55 identical** (0 pixels off by > 8/255); `CARenderer` itself matches
-`drawHierarchy` 55/55 in a booted simulator. Known difference: the floating tab bar on Face ID
-iPhones sits 13 pt higher (UIKit takes its bottom padding from display/scene data that only a
-booted device provides). Not supported yet: Apple Watch (still booted), `--mode device`.
+Measured on `Example/DemoApp` (3 devices × 3 languages + per-screen rules = 55 shots, warm
+DerivedData): **8–9 s** on iOS 27.0 and on iOS 26.5, vs 46–52 s warm / 136 s cold booted.
+Against the booted `drawHierarchy` output: iOS 27.0 **52/55 identical** (0 pixels off by
+> 8/255), iOS 26.5 47/55 (the other five differ in ≤ 0.001 % of pixels, glass tab highlight);
+`CARenderer` itself matches `drawHierarchy` 55/55 in a booted simulator. Known difference: the
+floating tab bar on Face ID iPhones sits 13 pt higher (UIKit takes its bottom padding from
+display/scene data only a booted device provides) — 1.4–2 % of that one screen. Not supported
+yet: Apple Watch (still booted), `--mode device`.
 
 ### `--mode device` (pixel-exact, with status bar)
 

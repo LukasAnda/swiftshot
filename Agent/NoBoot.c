@@ -3,7 +3,8 @@
 // with up to three registered Mach ports (mach_ports_register):
 //   0: Metal host (com.apple.metal.simulator)        — served by macOS' MTLSimImplementation
 //   1: IOSurface server (com.apple.IOSurface.Remote) — served by macOS' IOSurfaceRemoteServer
-//   2: MTLCompilerService listener (in the app)      / rendezvous port (in the compiler itself)
+//   2: shader compiler broker (in the app: returns a new MTLCompilerService instance per
+//      connection) / rendezvous port (in the compiler itself, to report its listener)
 // and this shim routes the corresponding XPC connections to them. Without registered ports (a
 // normal booted simulator) every call passes straight through.
 
@@ -48,9 +49,28 @@ static xpc_connection_t noboot_create_mach_service(const char *name, dispatch_qu
     return real_create_mach_service(name, queue, flags);
 }
 
+/// Asks swiftshot-simhost for a fresh shader compiler instance and returns its listener port.
+static mach_port_t new_compiler_instance(void) {
+    mach_port_t reply;
+    if (mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reply) != KERN_SUCCESS) return MACH_PORT_NULL;
+    union {
+        mach_msg_header_t request;
+        struct { mach_msg_header_t h; mach_msg_body_t b; mach_msg_port_descriptor_t p; mach_msg_trailer_t t; } response;
+    } m = {0};
+    m.request.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+    m.request.msgh_size = sizeof m.request;
+    m.request.msgh_remote_port = registered(2);
+    m.request.msgh_local_port = reply;
+    kern_return_t kr = mach_msg(&m.request, MACH_SEND_MSG | MACH_RCV_MSG, sizeof m.request, sizeof m.response, reply, 0, 0);
+    mach_port_mod_refs(mach_task_self(), reply, MACH_PORT_RIGHT_RECEIVE, -1);
+    return kr == KERN_SUCCESS ? m.response.p.name : MACH_PORT_NULL;
+}
+
 static xpc_connection_t noboot_create(const char *name, dispatch_queue_t queue) {
-    if (name && strcmp(name, "com.apple.MTLCompilerService") == 0 && registered(2) && getenv("SWIFTSHOT_NOBOOT"))
-        return connect_to(registered(2), queue);
+    if (name && strcmp(name, "com.apple.MTLCompilerService") == 0 && registered(2) && getenv("SWIFTSHOT_NOBOOT")) {
+        mach_port_t instance = new_compiler_instance();
+        if (instance) return connect_to(instance, queue);
+    }
     return xpc_connection_create(name, queue);
 }
 
