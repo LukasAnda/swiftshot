@@ -43,7 +43,9 @@ struct Options: Codable {
     var allowUnsupportedDevices = false
     var deviceSet: String?
     var templates = true
-    var noBoot = false
+    var noBoot = true     // iOS virtual rendering without a simulator (--boot: the booted path)
+    var emitTable: String?
+    var inputFiles: [String] = []   // emit-table: calibration.json files to merge
     var templateCache: String?
     var verbose = false
 
@@ -147,9 +149,10 @@ struct Options: Codable {
                                               swiftshot/templates.noindex). Cache it between CI jobs and even the
                                               first boot is skipped.
       --no-templates                          Boot every new simulator from scratch (~35 s each, slow in parallel)
-      --no-boot                               Experimental: render iOS previews without any simulator — the app
-                                              runs directly on the Mac against the runtime (swiftshot-simhost
-                                              provides Metal/IOSurface). Virtual mode, iOS only.
+      --boot                                  Render previews in booted simulators. The default renders iOS and
+                                              watchOS previews without any simulator: the app runs directly on the
+                                              Mac against the runtime (swiftshot-simhost provides Metal/IOSurface).
+                                              --mode device always uses booted simulators.
 
       --config <file>                         JSON config (default ./swiftshot.json if present)
       --verbose
@@ -172,7 +175,7 @@ struct Options: Codable {
         }
 
         if let first = args.first, !first.hasPrefix("-") {
-            guard ["run", "list", "devices", "calibrate"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
+            guard ["run", "list", "devices", "calibrate", "emit-table"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
             options.command = first
             args.removeFirst()
         }
@@ -212,6 +215,8 @@ struct Options: Codable {
             case "--template-cache": options.templateCache = try value()
             case "--no-templates": options.templates = false
             case "--no-boot": options.noBoot = true
+            case "--boot": options.noBoot = false
+            case "--emit-table": options.emitTable = try value()
             case "--watch-scheme": options.watchScheme = try value()
             case "--watch-app": options.watchAppPath = try value()
             case "--watchos": options.watchosVersions = list(try value())
@@ -223,7 +228,10 @@ struct Options: Codable {
             case "--no-html": options.html = false
             case "--verbose", "-v": options.verbose = true
             case "--help", "-h": print(usage); exit(0)
-            default: throw CLIError("Unknown option \(args[i])\n\n\(usage)")
+            default:
+                // emit-table takes calibration files as plain arguments.
+                guard options.command == "emit-table", !args[i].hasPrefix("-") else { throw CLIError("Unknown option \(args[i])\n\n\(usage)") }
+                options.inputFiles.append(args[i])
             }
             i += 1
         }

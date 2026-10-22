@@ -88,3 +88,7 @@ struct WeekView: View {
 #Preview("Watch list") { WatchHabitList() }
 #Preview("Watch progress") { ProgressDetailView() }
 #Preview("Watch week") { WeekView() }
+#Preview("Watch badge", traits: .sizeThatFitsLayout) {
+    Label("12 day streak", systemImage: "flame.fill").padding(8).background(.orange.opacity(0.3), in: Capsule())
+}
+#Preview("Watch ring", traits: .fixedLayout(width: 120, height: 120)) { ProgressDetailView() }

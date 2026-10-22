@@ -11,8 +11,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <TargetConditionals.h>
 #include <mach/mach.h>
 #include <xpc/xpc.h>
+
+#if TARGET_OS_WATCH
+// The watchOS SDK marks these unavailable; the simulator runtime has them like iOS.
+extern kern_return_t ss_mach_ports_lookup(task_t, mach_port_array_t *, mach_msg_type_number_t *) __asm__("_mach_ports_lookup");
+extern mach_msg_return_t ss_mach_msg(mach_msg_header_t *, mach_msg_option_t, mach_msg_size_t, mach_msg_size_t, mach_port_name_t, mach_msg_timeout_t, mach_port_name_t) __asm__("_mach_msg");
+#define mach_ports_lookup ss_mach_ports_lookup
+#define mach_msg ss_mach_msg
+#endif
 
 extern xpc_endpoint_t xpc_endpoint_create_mach_port_4sim(mach_port_t);
 extern mach_port_t xpc_endpoint_copy_listener_port_4sim(xpc_endpoint_t);

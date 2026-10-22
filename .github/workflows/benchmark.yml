@@ -7,9 +7,13 @@ on:
     inputs:
       runner:
         description: macOS runner image
-        default: macos-26
+        default: xcode-27
       fastlane:
-        description: Also benchmark fastlane snapshot (~80 min)
+        description: Benchmark fastlane snapshot (~80 min)
+        type: boolean
+        default: true
+      booted:
+        description: Also benchmark booted simulators (--boot)
         type: boolean
         default: false
   push:
@@ -18,15 +22,15 @@ on:
 
 jobs:
   swiftshot:
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        # default: booted simulators (cold, cached templates, warm); noboot: --no-boot (iOS without
-        # any simulator). The scheduling experiments (SWIFTSHOT_BOOT_AFTER_BUILD / SWIFTSHOT_STAGED)
-        # can be added back as variants.
-        variant: [default, noboot]
+        # noboot: the default (iOS without any simulator); booted: --boot (cold, cached templates,
+        # warm). The scheduling experiments (SWIFTSHOT_BOOT_AFTER_BUILD / SWIFTSHOT_STAGED) apply
+        # to booted runs and can be added back as variants.
+        variant: ${{ fromJSON(inputs.booted && '["noboot","booted"]' || '["noboot"]') }}
     env:
       SWIFTSHOT_BOOT_AFTER_BUILD: ${{ matrix.variant == 'boot-after-build' && '1' || '' }}
       SWIFTSHOT_STAGED: ${{ matrix.variant == 'staged' && '1' || '' }}
@@ -54,9 +58,9 @@ jobs:
             ${{ runner.temp }}/bench.noindex/*/screenshots
 
   fastlane:
-    # ~80 min on a hosted runner; run it on demand (workflow_dispatch) only.
-    if: ${{ inputs.fastlane }}
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    # ~80 min on a hosted runner; the reference the default (no-boot) is measured against.
+    if: ${{ github.event_name == 'push' || inputs.fastlane }}
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4

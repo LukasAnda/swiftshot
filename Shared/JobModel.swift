@@ -44,6 +44,9 @@ struct DeviceProfile: Codable {
     var panelHeight: Double? = nil
     /// Display data for rendering without a booted device (see DisplayInfo).
     var display: DisplayInfo? = nil
+    /// The system's default Dynamic Type size on this model (watches differ by case size, e.g.
+    /// 46 mm: XL), as UIContentSizeCategory raw value. Rendering without a booted device uses it.
+    var contentSizeCategory: String? = nil
 
     /// Devices rendered on the same host must share the native scale, otherwise text, symbols and
     /// glass are rasterized at the host's scale. iPhones and iPads of one scale share a host

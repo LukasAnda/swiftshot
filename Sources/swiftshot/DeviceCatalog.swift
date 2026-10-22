@@ -13,7 +13,8 @@ import Foundation
 
 enum DeviceCatalog {
     static var cacheURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        if let path = ProcessInfo.processInfo.environment["SWIFTSHOT_CALIBRATION_CACHE"] { return URL(fileURLWithPath: path) }
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Caches/swiftshot/calibration.json")
     }
 
@@ -30,7 +31,7 @@ enum DeviceCatalog {
 
     static func cacheKey(device: String, runtime: String) -> String { "\(device)@\(runtime)" }
 
-    struct Screen { let width: Double; let height: Double; let scale: Double; let corner: Double; let faceID: Bool }
+    struct Screen { let width: Double; let height: Double; let scale: Double; let corner: Double; let faceID: Bool; var pitch: Double = 0 }
 
     static func screen(of type: SimDeviceType) -> Screen? {
         let url = URL(fileURLWithPath: type.bundlePath).appendingPathComponent("Contents/Resources/capabilities.plist")
@@ -53,7 +54,9 @@ enum DeviceCatalog {
            let primary = displays.first(where: { ($0["deviceName"] as? String) == "primary" })
                 ?? displays.first(where: { ($0["displayType"] as? String) == "integrated" }),
            let w = number(primary, "width"), let h = number(primary, "height"), let s = number(primary, "scale") {
-            return make(w, h, s, number(primary, "cornerRadiusUL") ?? corner)
+            var screen = make(w, h, s, number(primary, "cornerRadiusUL") ?? corner)
+            screen.pitch = number(primary, "hdpi") ?? 0
+            return screen
         }
         // Older device types: MobileGestalt-style screen dimensions, or mainScreen* in profile.plist.
         let dims = caps["ScreenDimensionsCapability"] as? [String: Any]
@@ -94,7 +97,11 @@ enum DeviceCatalog {
 
     /// Resolves a profile without booting anything.
     static func profile(for type: SimDeviceType, runtime: String, cache: [String: DeviceProfile]) -> (DeviceProfile, source: String)? {
-        if let cached = cache[cacheKey(device: type.name, runtime: runtime)] { return (cached, "calibrated") }
+        if var cached = cache[cacheKey(device: type.name, runtime: runtime)] {
+            if cached.display == nil { cached.display = builtInDisplay(type.name, runtime: runtime) }
+            if cached.contentSizeCategory == nil { cached.contentSizeCategory = BuiltInDisplays.contentSizeCategory[type.name] }
+            return (cached, "calibrated")
+        }
         let family = (type.productFamily ?? "").lowercased()
         let idiom = family.contains("ipad") ? "pad" : family.contains("watch") ? "watch" : "phone"
         guard var screen = screen(of: type) else { return nil }
@@ -104,15 +111,87 @@ enum DeviceCatalog {
             screen = Screen(width: logical.width, height: logical.height, scale: 3, corner: screen.corner, faceID: screen.faceID)
         }
         func withPanel(_ p: DeviceProfile) -> DeviceProfile {
-            var p = p; p.panelWidth = panel?.0; p.panelHeight = panel?.1; return p
+            var p = p; p.panelWidth = panel?.0; p.panelHeight = panel?.1
+            p.display = builtInDisplay(type.name, runtime: runtime)
+            p.contentSizeCategory = BuiltInDisplays.contentSizeCategory[type.name]
+            return p
         }
         let major = runtime.split(separator: ".").first.map(String.init) ?? runtime
         if let known = BuiltInDevices.table["\(type.name)@\(major)"] ?? BuiltInDevices.table[type.name] {
             return (withPanel(DeviceProfile(name: type.name, idiom: idiom, width: screen.width, height: screen.height, scale: screen.scale,
                                   safeArea: known.0, landscapeSafeArea: known.1, cornerRadius: screen.corner)), "built-in")
         }
-        let (portrait, landscape) = idiom == "watch" ? (Insets.zero, Insets.zero) : heuristicSafeArea(idiom: idiom, screen: screen)
+        let (portrait, landscape) = idiom == "watch" ? (BuiltInDisplays.watchSafeArea[type.name] ?? .zero, Insets.zero) : heuristicSafeArea(idiom: idiom, screen: screen)
         return (withPanel(DeviceProfile(name: type.name, idiom: idiom, width: screen.width, height: screen.height, scale: screen.scale,
                               safeArea: portrait, landscapeSafeArea: landscape, cornerRadius: screen.corner)), "heuristic")
+    }
+
+    /// Display data for no-boot rendering: "<name>@<major>" overrides "<name>".
+    static func builtInDisplay(_ name: String, runtime: String) -> DisplayInfo? {
+        let major = runtime.split(separator: ".").first.map(String.init) ?? runtime
+        return BuiltInDisplays.table["\(name)@\(major)"] ?? BuiltInDisplays.table[name]
+    }
+
+    /// Swift source for BuiltInDisplays.swift from calibrated profiles (`calibrate --emit-table`).
+    /// A device whose display data is the same on every measured runtime gets one entry. Devices
+    /// this run didn't measure (e.g. not bootable on this machine's runtimes) keep their entries.
+    static func displayTableSource(_ cache: [String: DeviceProfile], existing: [String: DisplayInfo], existingSizes: [String: String],
+                                   existingSafeAreas: [String: Insets], header: String) -> String {
+        var byDevice: [String: [(String, DisplayInfo)]] = [:]
+        for (key, profile) in cache {
+            guard let display = profile.display, let at = key.lastIndex(of: "@") else { continue }
+            byDevice[String(key[..<at]), default: []].append((String(key[key.index(after: at)...]), display))
+        }
+        func lit(_ i: Insets) -> String { "Insets(top: \(i.top), left: \(i.left), bottom: \(i.bottom), right: \(i.right))" }
+        func lit(_ d: DisplayInfo) -> String {
+            "DisplayInfo(safeAreaPortrait: \(lit(d.safeAreaPortrait)), safeAreaPortraitUpsideDown: \(lit(d.safeAreaPortraitUpsideDown)), " +
+            "safeAreaLandscapeLeft: \(lit(d.safeAreaLandscapeLeft)), safeAreaLandscapeRight: \(lit(d.safeAreaLandscapeRight)), " +
+            "periphery: \(lit(d.periphery)), homeAffordanceOverlayAllowance: \(d.homeAffordanceOverlayAllowance), " +
+            "systemMinimumMargin: \(d.systemMinimumMargin), artworkSubtype: \(d.artworkSubtype), " +
+            "screenPeriphery: \(lit(d.screenPeriphery)), screenDisplayPeriphery: \(lit(d.screenDisplayPeriphery)))"
+        }
+        var lines: [String] = []
+        for (key, display) in existing where byDevice[key.split(separator: "@").first.map(String.init) ?? key] == nil {
+            lines.append("        \"\(key)\": \(lit(display)),")
+        }
+        for (name, entries) in byDevice.sorted(by: { $0.key < $1.key }) {
+            let sorted = entries.sorted { $0.0.compare($1.0, options: .numeric) == .orderedAscending }
+            let newest = sorted.last!.1
+            lines.append("        \"\(name)\": \(lit(newest)),")
+            var seenMajors = Set<String>()
+            for (runtime, display) in sorted where display != newest {
+                let major = runtime.split(separator: ".").first.map(String.init) ?? runtime
+                if seenMajors.insert(major).inserted { lines.append("        \"\(name)@\(major)\": \(lit(display)),") }
+            }
+        }
+        lines.sort()
+        var safeAreas = existingSafeAreas
+        for (key, profile) in cache where profile.idiom == "watch" {
+            guard let at = key.lastIndex(of: "@") else { continue }
+            safeAreas[String(key[..<at])] = profile.safeArea
+        }
+        let safeAreaLines = safeAreas.sorted { $0.key < $1.key }.map { "        \"\($0.key)\": \(lit($0.value)),"}
+        var sizes = existingSizes
+        for (key, profile) in cache {
+            guard let category = profile.contentSizeCategory, let at = key.lastIndex(of: "@") else { continue }
+            sizes[String(key[..<at])] = category
+        }
+        let sizeLines = sizes.sorted { $0.key < $1.key }.map { "        \"\($0.key)\": \"\($0.value)\"," }
+        return header + """
+        enum BuiltInDisplays {
+            static let table: [String: DisplayInfo] = [
+        \(lines.joined(separator: "\n"))
+            ]
+            /// Default Dynamic Type size per model, where the system's default differs from L (watches).
+            static let contentSizeCategory: [String: String] = [
+        \(sizeLines.isEmpty ? "        :" : sizeLines.joined(separator: "\n"))
+            ]
+            /// Portrait safe area of watches (their status bar / clock row).
+            static let watchSafeArea: [String: Insets] = [
+        \(safeAreaLines.isEmpty ? "        :" : safeAreaLines.joined(separator: "\n"))
+            ]
+        }
+
+        """
     }
 }

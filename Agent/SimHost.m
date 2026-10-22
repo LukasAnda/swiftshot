@@ -51,8 +51,15 @@ static pid_t spawn(char *const argv[], const char *root, const char *insert) {
     snprintf(path, sizeof path, "%s/usr/lib", root); setenv("DYLD_FALLBACK_LIBRARY_PATH", path, 1);
     if (getenv("SWIFTSHOT_NOBOOT_DYLD_CACHE")) setenv("DYLD_SHARED_CACHE_DIR", getenv("SWIFTSHOT_NOBOOT_DYLD_CACHE"), 1);
     if (insert) setenv("DYLD_INSERT_LIBRARIES", insert, 1);
+    // No crash reporter for the processes we start: a crashing app would otherwise pop up a
+    // "quit unexpectedly" dialog on the Mac; swiftshot reports the failure itself.
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    posix_spawnattr_setexceptionports_np(&attr, EXC_MASK_CRASH | EXC_MASK_CORPSE_NOTIFY, MACH_PORT_NULL, EXCEPTION_DEFAULT, 0);
     pid_t pid;
-    if (posix_spawn(&pid, argv[0], NULL, NULL, argv, environ) != 0) { perror(argv[0]); exit(71); }
+    int err = posix_spawn(&pid, argv[0], NULL, &attr, argv, environ);
+    posix_spawnattr_destroy(&attr);
+    if (err != 0) { perror(argv[0]); exit(71); }
     return pid;
 }
 

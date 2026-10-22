@@ -1,8 +1,8 @@
 #!/bin/bash
 # Swiftshot benchmark on the demo app: cold / cached-template / warm runs, optionally fastlane.
 #
-#   bench/run.sh swiftshot      # cold, then new simulators with cached templates, then warm
-#   bench/run.sh noboot         # --no-boot: iOS rendered without any simulator (experimental)
+#   bench/run.sh swiftshot      # booted (--boot): cold, then new simulators with cached templates, then warm
+#   bench/run.sh noboot         # the default: iOS rendered without any simulator
 #   bench/run.sh fastlane       # fastlane snapshot on the same iOS devices and languages, new simulators
 #
 # The cold run starts from an empty DerivedData (fastlane's build is cold on a fresh runner too).
@@ -77,20 +77,21 @@ swiftshot)
     # deleted set's path can confuse it.
     RUN=$(date +%s)
     rm -rf "$BENCH_DIR/DerivedData"   # cold means cold: the first run also compiles from scratch
-    swiftshot_run cold   "$BENCH_DIR/set-$RUN-cold.noindex"   "$T" --shutdown
-    swiftshot_run cached "$BENCH_DIR/set-$RUN-cached.noindex" "$T"
-    swiftshot_run warm   "$BENCH_DIR/set-$RUN-cached.noindex" "$T" --shutdown
+    swiftshot_run cold   "$BENCH_DIR/set-$RUN-cold.noindex"   "$T" --boot --shutdown
+    swiftshot_run cached "$BENCH_DIR/set-$RUN-cached.noindex" "$T" --boot
+    swiftshot_run warm   "$BENCH_DIR/set-$RUN-cached.noindex" "$T" --boot --shutdown
     ;;
 noboot)
-    # iOS without any simulator (--no-boot); the watch still boots (no-boot is iOS-only).
+    # The default: iOS without any simulator. noboot-ios-* match fastlane's matrix (same devices
+    # and languages, no watch); noboot-all adds the Apple Watch (which still boots).
     T=$BENCH_DIR/templates.noindex
     rm -rf "${T:?}" "$BENCH_DIR/DerivedData"
     RUN=$(date +%s)
-    swiftshot_run noboot-cold "$BENCH_DIR/set-$RUN-nb.noindex" "$T" --no-boot --shutdown
     python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); c["devices"]=[d for d in c["devices"] if "Watch" not in d]; c.pop("watch_scheme",None); json.dump(c,open(sys.argv[2],"w"))' "$CONFIG" "$BENCH_DIR/ios.json"
-    CONFIG=$BENCH_DIR/ios.json swiftshot_run noboot-ios-warm "$BENCH_DIR/set-$RUN-nb.noindex" "$T" --no-boot
+    CONFIG=$BENCH_DIR/ios.json swiftshot_run noboot-ios-cold "$BENCH_DIR/set-$RUN-nb.noindex" "$T"
+    CONFIG=$BENCH_DIR/ios.json swiftshot_run noboot-ios-warm "$BENCH_DIR/set-$RUN-nb.noindex" "$T"
+    swiftshot_run noboot-all "$BENCH_DIR/set-$RUN-nb.noindex" "$T" --shutdown
     ;;
-
 fastlane)
     DEVICES=$(python3 -c 'import json,sys; print("\n".join(d for d in json.load(open(sys.argv[1]))["devices"] if "Watch" not in d))' "$CONFIG")
     LANGS=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["languages"]))' "$CONFIG")

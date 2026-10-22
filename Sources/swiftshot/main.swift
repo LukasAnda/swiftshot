@@ -12,6 +12,7 @@ Task {
         case "list": try await runner.list()
         case "devices": try await runner.devices()
         case "calibrate": try await runner.calibrate()
+        case "emit-table": try await runner.emitTable()
         default: try await runner.run()
         }
     } catch {
