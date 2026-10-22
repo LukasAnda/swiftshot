@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-26, macos-15, macos-latest]
+        runner: [xcode-27, xcode-27-xlarge, macos-26, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
@@ -31,6 +31,7 @@ jobs:
           r=$(xcrun simctl list runtimes | grep -E '^(iOS|watchOS)' | sed 's/ - com.*//' | tr '\n' ';')
           echo "::notice title=${{ matrix.runner }} runtimes::$r"
           df -h / | tail -1
+          echo "::notice title=${{ matrix.runner }} machine::$(sysctl -n machdep.cpu.brand_string), $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, macOS $(sw_vers -productVersion)"
       - name: Download a runtime
         if: inputs.download != ''
         run: |
