@@ -751,6 +751,8 @@ enum ServerCapture {
     static var display: NSObject?
     static var started = false
     static var warmedUp = false
+    /// How long the last capture pass waited for its first frame (long: shaders compiled).
+    static var lastFirstFrame: TimeInterval = 0
     static var timings: [String] = []
 
     static func constant(_ name: String) -> NSString? {
@@ -853,6 +855,12 @@ enum ServerCapture {
             _ = fit(width: w, height: h - 2, scale: scale); _ = fit(width: w, height: h, scale: scale)
         }
         guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
+        // A material seen for the first time compiles its shaders during the capture; glass that
+        // first appeared that slowly settles a hair differently. Capture it again, fresh.
+        if lastFirstFrame > 0.2 {
+            _ = fit(width: w, height: h - 2, scale: scale); _ = fit(width: w, height: h, scale: scale)
+            if let again = settled(window, w, h, scale, background: nil) { bytes = again }
+        }
         if h > w, NoBoot.screen?.idiom == "phone", let area = NoBoot.screen?.display?.exclusionArea, area.count == 4, area[1] > 0 { addCornerMark(&bytes, width: w) }
         guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
               let raw = ctx.makeImage() else { return nil }
@@ -942,6 +950,7 @@ enum ServerCapture {
         // The first frame can take seconds on a CI VM's paravirtual GPU (shaders compiling).
         guard var surface = frame(after: &seen, width: w, height: h, timeout: 20) else { log("server capture: no frame"); return nil }
         let first = Date()
+        lastFirstFrame = first.timeIntervalSince(shown)
         var frames = 1
         // Idle = no new frame for three gaps of half the time this machine took to present the
         // first one (a CI VM's GPU can take far longer than a display frame).
@@ -1278,6 +1287,18 @@ enum NoBoot {
         installStatusBar()
         swiftshot_install_corner_insets()
         swiftshot_install_exclusion_area()
+        // UIKit's wide content margins (20 pt list and table insets on large phones): its own
+        // rule, but with the rendered device's width instead of the host screen's cached one.
+        if let m = class_getInstanceMethod(UIScreen.self, NSSelectorFromString("_wantsWideContentMargins")) {
+            typealias MG = @convention(c) (CFString) -> Bool
+            let mg = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "MGGetBoolAnswer").map { unsafeBitCast($0, to: MG.self) }
+            let original = unsafeBitCast(method_getImplementation(m), to: (@convention(c) (AnyObject, Selector) -> Bool).self), sel = method_getName(m)
+            let block: @convention(block) (AnyObject) -> Bool = { screenObject in
+                guard let device = screen, device.idiom == "phone", let mg else { return original(screenObject, sel) }
+                return mg("HasThinBezel" as CFString) && mg("IsLargeFormatPhone" as CFString) && min(device.width, device.height) > 375
+            }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
         makeApplication()
         // A booted host scene is portrait (landscape previews are just landscape-sized windows);
         // a screen-based scene would report "unknown", which changes e.g. the tab bar's layout.

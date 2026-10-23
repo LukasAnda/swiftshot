@@ -52,10 +52,10 @@ extension Runner {
                 } else {
                     let byCategory = Dictionary(grouping: runtimeHosts.flatMap(\.profiles)) { options.contentSize == nil ? $0.contentSizeCategory ?? "" : "" }
                     for (category, profiles) in byCategory.sorted(by: { $0.key < $1.key }) {
-                        // SpringBoard's status bar keeps the first screen's metrics for the
-                        // process, so with it each model renders in its own (parallel) process.
-                        if options.statusBar { for p in profiles { groups.append((category, host.type, [p], nil)) } }
-                        else { groups.append((category, host.type, profiles, nil)) }
+                        // Each model in its own (parallel) process, launched as that model: UIKit
+                        // asks MobileGestalt (wide content margins on large phones…), and
+                        // SpringBoard's status bar keeps the first screen's metrics per process.
+                        for p in profiles { groups.append((category, target.types.first { $0.name == p.name } ?? host.type, [p], nil)) }
                     }
                 }
                 for (category, type, profiles, textSize) in groups {

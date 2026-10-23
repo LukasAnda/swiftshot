@@ -101,7 +101,7 @@ final class ParityAndPerformanceTests: XCTestCase {
     func testNoBootMatchesBootedFramebuffer() throws {
         // The whole frame, status bar included. swiftshot draws the home indicator too, but a
         // booted simulator hides its own after a moment idle, so the pill's band is left out.
-        try assertParity(devices: Self.devices, ios: Self.ios, previews: Self.parityPreviews + ["Root"], skipTop: 0, pillHalfWidth: 80, tag: "")
+        try assertParity(devices: Self.devices, ios: Self.ios, previews: Self.parityPreviews + ["Root", "UIKit habit list"], skipTop: 0, pillHalfWidth: 80, tag: "")
     }
 
     /// iPhone Duo (status bar in a rail on the right, floating sheets, per-corner radii): every
