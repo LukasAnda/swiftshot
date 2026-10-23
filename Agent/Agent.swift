@@ -214,8 +214,8 @@ final class AgentRunner {
                     let t0 = now()
                     DeviceIdiom.current = device.idiom == "pad" ? .pad : .phone
                     NoBoot.screen = device
-                    let ex = device.display?.exclusionArea
-                    swiftshot_set_exclusion_rect(ex.flatMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil } ?? .null)
+                    func rect(_ r: [Double]?) -> CGRect { r.flatMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil } ?? .null }
+                    swiftshot_set_exclusion_rect(rect(device.display?.exclusionArea), rect(device.display?.cameraRegion ?? device.display?.exclusionArea))
                     if let corners = device.display?.cornerInsets, corners.count == 8 { corners.withUnsafeBufferPointer { swiftshot_set_corner_insets($0.baseAddress) } } else { swiftshot_set_corner_insets(nil) }
                     defer { DeviceIdiom.current = nil }
                     guard let vc = controller(fromBody: preview.body()) else {
@@ -538,7 +538,7 @@ final class GPUCapture {
 
 /// System UI a device composites over the app (SpringBoard's status bar), drawn in-process with
 /// UIKit's own views so materials behind it (Liquid Glass) see the same pixels.
-@_silgen_name("swiftshot_set_exclusion_rect") func swiftshot_set_exclusion_rect(_ rect: CGRect)
+@_silgen_name("swiftshot_set_exclusion_rect") func swiftshot_set_exclusion_rect(_ rect: CGRect, _ avoidance: CGRect)
 @_silgen_name("swiftshot_install_exclusion_area") func swiftshot_install_exclusion_area()
 
 @MainActor
@@ -604,6 +604,10 @@ enum SystemChrome {
         let chrome = window.windowScene.map { DeviceWindow(windowScene: $0) } ?? DeviceWindow(frame: window.frame)
         chrome.frame = window.frame
         chrome.overrideUserInterfaceStyle = window.traitCollection.userInterfaceStyle
+        // SpringBoard's language, not the app's: an Arabic app's status bar still reads left to
+        // right (its ring, dots and label) on a simulator in a left-to-right language.
+        let springBoardRTL = Locale(identifier: job?.statusBarLocale ?? "en_US").language.characterDirection == .rightToLeft
+        chrome.traitOverrides.layoutDirection = springBoardRTL ? .rightToLeft : .leftToRight
         chrome.forcedSafeArea = window.safeAreaInsets
         chrome.isHidden = false
         chrome.isUserInteractionEnabled = false
@@ -619,23 +623,34 @@ enum SystemChrome {
     static func statusBar(over window: UIWindow, root: UIViewController, size: CGSize, in chrome: UIWindow) -> UIView? {
         // A rail (iPhone Duo: no top inset) lays its items out in the bar's full height.
         let height = window.safeAreaInsets.top > 0 ? window.safeAreaInsets.top : size.height
-        guard size.width < size.height || NoBoot.screen?.idiom == "pad", let first = makeBar(over: chrome, width: size.width, height: height) else { return nil }
-        let container = UIView(frame: first.frame)
+        guard size.width < size.height || NoBoot.screen?.idiom == "pad", let probe = makeBar(over: chrome, width: size.width, height: height, style: 0) else { return nil }
+        let container = UIView(frame: probe.frame)
         container.isUserInteractionEnabled = false
         chrome.addSubview(container)
-        container.addSubview(first)
+        container.addSubview(probe)
         // 0: the default (dark glyphs in light mode, light in dark mode). Where the regions differ
         // (iOS 26), SpringBoard's automatic style is in charge and its default side is the
         // automatic dark one (3).
-        let decided = self.styles(for: first, over: window, root: root)
+        let decided = self.styles(for: probe, over: window, root: root)
         let split = Set(decided.map { $0 ?? 0 }).count > 1
         let styles = decided.map { $0 ?? (split ? (window.traitCollection.userInterfaceStyle == .dark ? 1 : 3) : 0) }
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar styles \(decided) -> \(styles)") }
-        first.setValue(styles.first ?? 0, forKey: "style"); first.layoutIfNeeded()
-        if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: height) {
+        // A bar shows its style from its items' creation on, like SpringBoard's long-lived bars
+        // once a style change has settled: restyling built items leaves SwiftUI glyphs (iPhone
+        // Duo's Wi-Fi) drawn by RenderBox, with other edge coverage than the device's CG drawing.
+        var first = probe
+        if let leading = styles.first, leading != 0 {
+            if let restyled = makeBar(over: chrome, width: size.width, height: height, style: leading) {
+                probe.removeFromSuperview()
+                container.addSubview(restyled)
+                first = restyled
+            } else {
+                probe.setValue(leading, forKey: "style"); probe.layoutIfNeeded()
+            }
+        }
+        if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: height, style: trailing) {
             // iOS 26 styles the regions either side of the island on their own: a bar per style,
             // each shown on its side.
-            second.setValue(trailing, forKey: "style"); second.layoutIfNeeded()
             container.addSubview(second)
             // Each bar shows only its side's regions. Not masked or clipped: either renders the bar
             // offscreen, where the battery's punched-out bolt (destOut) no longer cuts through to
@@ -657,8 +672,8 @@ enum SystemChrome {
         return container
     }
 
-    /// One SpringBoard status bar with its data applied, hidden, in the window.
-    static func makeBar(over window: UIWindow, width: CGFloat, height: CGFloat) -> UIView? {
+    /// One SpringBoard status bar in a style, with its data applied, hidden, in the window.
+    static func makeBar(over window: UIWindow, width: CGFloat, height: CGFloat, style: Int) -> UIView? {
         guard let makeSpec, let bar = makeSpec(specForScreen(), CGRect(origin: .zero, size: CGSize(width: width, height: height)), UIScreen.main) else { return nil }
         bar.isHidden = true
         window.addSubview(bar)
@@ -676,6 +691,8 @@ enum SystemChrome {
            let group = provider.value(forKey: "lumaTrackingGroup") as AnyObject?, group.responds(to: pause) {
             unsafeBitCast(class_getMethodImplementation(type(of: group), pause), to: Pause.self)(group, pause, true)
         }
+        // The style before the data, which builds the items in it.
+        if style != 0 { bar.setValue(style, forKey: "style"); bar.layoutIfNeeded() }
         apply?(bar)
         // Its data update is applied (aggregated) on the next run-loop passes.
         let until = Date().addingTimeInterval(0.25)
@@ -736,7 +753,7 @@ enum SystemChrome {
             var pair = (0.0, 0.0); bounds.getValue(&pair, size: MemoryLayout<(Double, Double)>.size); (lower, upper) = pair
         }
         let lumas = views.map { luminance(of: window, in: $0.convert($0.bounds, to: window)) }
-        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar luma \(lumas) bounds \(lower)…\(upper)") }
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar luma \(lumas) in \(views.map { $0.convert($0.bounds, to: window) }) bounds \(lower)…\(upper)") }
         func style(_ luma: Double) -> Int? { luma < lower ? 1 : luma > upper ? 3 : nil }
         // iOS 27 decides for the whole bar by the regions' mean; iOS 26 per region (measured
         // against booted simulators on both).
@@ -1070,6 +1087,15 @@ enum NoBoot {
                   shape.responds(to: NSSelectorFromString("rect")), let r = (shape.value(forKey: "rect") as? NSValue)?.cgRectValue, !r.isEmpty else { return nil }
             return [r.minX, r.minY, r.width, r.height]
         }
+        func cameraRegion() -> [Double]? {
+            let sel = NSSelectorFromString("sceneRegions")
+            guard let settings = (scene?.value(forKey: "_FBSScene") as AnyObject?)?.value(forKey: "settings") as AnyObject?,
+                  settings.responds(to: sel), let regions = settings.perform(sel)?.takeUnretainedValue() as? [AnyObject] else { return nil }
+            // _UISceneRegionType 1: exclusion.
+            guard let camera = regions.first(where: { ($0.value(forKey: "identifier") as? String)?.hasSuffix("Camera") == true && ($0.value(forKey: "type") as? Int) == 1 }),
+                  let r = (camera.value(forKey: "referenceFrame") as? NSValue)?.cgRectValue, !r.isEmpty else { return nil }
+            return [r.minX, r.minY, r.width, r.height]
+        }
         func barPosition() -> [Double]? {
             // (iOS 26 has no scene bar position.)
             guard let traits = scene?.traitCollection, traits.responds(to: NSSelectorFromString("_sceneBarPosition")),
@@ -1104,7 +1130,8 @@ enum NoBoot {
             verticalBarEdge: sceneTrait("_UITraitSystemVerticalBarHorizontalEdge"),
             cornerInsets: cornerInsets(),
             barPosition: barPosition(),
-            exclusionArea: exclusionArea())
+            exclusionArea: exclusionArea(),
+            cameraRegion: cameraRegion())
     }
 
     /// Reports the rendered device's display data from UIKit's display info provider and screen.
@@ -1430,7 +1457,16 @@ enum NoBoot {
 /// The layer tree with the properties that decide how it composites (SWIFTSHOT_TREE).
 func layerLines(_ l: CALayer, _ depth: Int) -> [String] {
     var line = "\(depth) \(type(of: l)) f=\(l.frame) o=\(l.opacity)"
-    if let filters = l.filters, !filters.isEmpty { line += " filters=\(filters)" }
+    if let name = l.name { line += " name=\(name)" }
+    for f in l.filters ?? [] {
+        // The filter's name and inputs, as SpringBoard's layer dumps print them.
+        guard let f = f as? NSObject else { continue }
+        line += " filter[\(f.value(forKey: "name") ?? "-")"
+        for k in ["inputRadius", "inputAmount", "inputNormalizeEdges", "inputQuality"] { if let v = f.value(forKey: k) { line += " \(k)=\(v)" } }
+        line += "]"
+    }
+    if l.contentsFormat != .RGBA8Uint { line += " fmt=\(l.contentsFormat.rawValue)" }
+    if l.responds(to: NSSelectorFromString("allowsGroupBlending")), (l.value(forKey: "allowsGroupBlending") as? Bool) == false { line += " noGroupBlending" }
     if let f = l.compositingFilter { line += " comp=\(f)" }
     if let bg = l.backgroundColor { line += " bg=\(UIColor(cgColor: bg))" }
     if l.contents != nil { line += " contents" }

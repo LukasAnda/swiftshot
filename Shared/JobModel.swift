@@ -42,6 +42,11 @@ struct DisplayInfo: Codable, Equatable {
     var barPosition: [Double]? = nil
     /// UIScreen._exclusionArea rect (x, y, width, height in points): the Dynamic Island.
     var exclusionArea: [Double]? = nil
+    /// The camera region SpringBoard gives the scene (an exclusion _UISceneRegion named
+    /// "…Camera", x, y, width, height in points) on a device with one (iPhone Duo's cover camera).
+    /// SpringBoard's status bar avoids it rather than the screen's exclusion area, which sits a
+    /// fraction of a point off (Duo: {399.67, 29.33, 37, 37} vs {399, 30, 37, 37}).
+    var cameraRegion: [Double]? = nil
 }
 
 /// Geometry of a device, in points.

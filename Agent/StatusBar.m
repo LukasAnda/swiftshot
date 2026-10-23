@@ -11,6 +11,9 @@ void swiftshot_apply_status_bar_data(UIView *bar);
 /// UIScreen._exclusionArea (the Dynamic Island's rect, which the status bar lays out around), as
 /// the rendered device's booted screen reports it. CGRectNull: none.
 static CGRect swiftshot_exclusion = {{INFINITY, INFINITY}, {0, 0}};
+/// What SpringBoard's status bar avoids (its avoidance frame): the scene's camera region where the
+/// device has one (iPhone Duo), else the exclusion area. CGRectNull: none.
+static CGRect swiftshot_avoidance = {{INFINITY, INFINITY}, {0, 0}};
 
 /// Applies the bar's data; its items are built for the window it is in.
 void swiftshot_apply_status_bar_data(UIView *bar) {
@@ -49,14 +52,14 @@ UIView *swiftshot_make_status_bar_spec(NSDictionary *spec, CGRect frame, UIScree
     for (NSString *k in spec[@"barProperties"]) [bar setValue:spec[@"barProperties"][k] forKey:k];
     // The island (not a notch, which starts at the top edge), which SpringBoard's bar lays its
     // items out around.
-    if ([spec[@"avoidExclusionArea"] boolValue] && !CGRectIsNull(swiftshot_exclusion) && swiftshot_exclusion.origin.y > 0 && [bar respondsToSelector:NSSelectorFromString(@"setAvoidanceFrame:")])
-        ((void (*)(id, SEL, CGRect))objc_msgSend)(bar, NSSelectorFromString(@"setAvoidanceFrame:"), swiftshot_exclusion);
+    if ([spec[@"avoidExclusionArea"] boolValue] && !CGRectIsNull(swiftshot_avoidance) && swiftshot_avoidance.origin.y > 0 && [bar respondsToSelector:NSSelectorFromString(@"setAvoidanceFrame:")])
+        ((void (*)(id, SEL, CGRect))objc_msgSend)(bar, NSSelectorFromString(@"setAvoidanceFrame:"), swiftshot_avoidance);
     objc_setAssociatedObject(bar, @selector(swiftshot_apply_status_bar_data), data, OBJC_ASSOCIATION_RETAIN);
     return bar;
 }
 
 
-void swiftshot_set_exclusion_rect(CGRect rect) { swiftshot_exclusion = rect; }
+void swiftshot_set_exclusion_rect(CGRect rect, CGRect avoidance) { swiftshot_exclusion = rect; swiftshot_avoidance = avoidance; }
 
 void swiftshot_install_exclusion_area(void) {
     SEL sel = NSSelectorFromString(@"_exclusionArea");
