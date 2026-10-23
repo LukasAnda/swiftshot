@@ -13,7 +13,8 @@ final class ParityAndPerformanceTests: XCTestCase {
     static let env = ProcessInfo.processInfo.environment
     static let devices = env["SWIFTSHOT_IT_DEVICES"] ?? "iPhone 18 Pro,iPhone 17"
     static let ios = env["SWIFTSHOT_IT_IOS"] ?? "27.0"
-    static var work = FileManager.default.temporaryDirectory.appendingPathComponent("swiftshot-it-\(ProcessInfo.processInfo.processIdentifier)")
+    static var work = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SWIFTSHOT_IT_OUT"] ?? FileManager.default.temporaryDirectory.path)
+        .appendingPathComponent("swiftshot-it-\(ProcessInfo.processInfo.processIdentifier)")
 
     /// Previews whose every pixel below the status bar must equal the booted simulator's
     /// framebuffer. Root is left out: its Liquid Glass tab bar and button blur the system status

@@ -27,6 +27,7 @@ jobs:
       - name: Integration tests (parity, determinism, performance, no boot)
         env:
           SWIFTSHOT_INTEGRATION: "1"
+          SWIFTSHOT_IT_OUT: ${{ runner.temp }}
         run: |
           set -o pipefail
           swift test --skip-build --filter IntegrationTests 2>&1 | tee "$RUNNER_TEMP/integration.log"
@@ -34,3 +35,9 @@ jobs:
         if: always()
         run: |
           { echo '### Integration'; echo '```'; grep -E "max [0-9]+/255|perf:|passed \(|failed \(" "$RUNNER_TEMP/integration.log" || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: integration-screenshots
+          path: ${{ runner.temp }}/swiftshot-it-*
+          if-no-files-found: ignore
