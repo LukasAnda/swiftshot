@@ -89,6 +89,9 @@ final class ParityAndPerformanceTests: XCTestCase {
     /// Apple Watch: no-boot against a booted watch's framebuffer, below the clock (80 px).
     func testWatchMatchesBootedFramebuffer() throws {
         let watch = Self.env["SWIFTSHOT_IT_WATCH"] ?? "Apple Watch Series 11 (46mm)"
+        let runtimes = Process(); runtimes.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun"); runtimes.arguments = ["simctl", "list", "runtimes"]
+        let pipe = Pipe(); runtimes.standardOutput = pipe; try runtimes.run(); runtimes.waitUntilExit()
+        try XCTSkipUnless(String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).contains("watchOS"), "no watchOS runtime installed")
         let previews = "Watch list,Watch progress,Watch week"
         let virtual = Self.work.appendingPathComponent("watch-virtual"), device = Self.work.appendingPathComponent("watch-device")
         try swiftshot(["--watch-scheme", "DemoWatch", "--devices", watch, "--previews", previews, "--output", virtual.path])

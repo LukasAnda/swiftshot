@@ -654,10 +654,13 @@ enum ServerCapture {
         guard var surface = frame(after: &seen, width: w, height: h, timeout: 2) else { log("server capture: no frame"); return nil }
         let first = Date()
         var frames = 1
+        // Idle = no new frame for three gaps of half the time this machine took to present the
+        // first one (a CI VM's GPU can take far longer than a display frame).
+        let gap = max(0.016, first.timeIntervalSince(shown) * 0.5)
         var quiet = 0
-        let idle = Date().addingTimeInterval(1)
+        let idle = Date().addingTimeInterval(max(1, gap * 10))
         while quiet < 3 && Date() < idle {
-            if let next = frame(after: &seen, width: w, height: h, timeout: 0.016) { surface = next; quiet = 0; frames += 1 } else { quiet += 1 }
+            if let next = frame(after: &seen, width: w, height: h, timeout: gap) { surface = next; quiet = 0; frames += 1 } else { quiet += 1 }
         }
         timings.append("pass: first frame \(Int(first.timeIntervalSince(shown) * 1000)) ms, idle after \(Int(Date().timeIntervalSince(first) * 1000)) ms, \(frames) frames")
         IOSurfaceLock(surface, .readOnly, nil)

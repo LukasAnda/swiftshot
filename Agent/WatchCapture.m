@@ -231,11 +231,14 @@ CGImageRef swiftshot_watch_server_capture(id window, double width, double height
         if (cur) CFRelease(cur);
         [server_context setValue:root forKey:@"layer"];
         [NSClassFromString(@"CATransaction") flush];
+        NSDate *shown = [NSDate date];
         SSSurface s = next_frame(&seen, w, h, 2);
+        // Idle: no new frame for three gaps of half the first frame's latency (slow CI GPUs).
+        double gap = MAX(0.016, -[shown timeIntervalSinceNow] * 0.5);
         int quiet = 0;
-        NSDate *idle = [NSDate dateWithTimeIntervalSinceNow:1];
+        NSDate *idle = [NSDate dateWithTimeIntervalSinceNow:MAX(1, gap * 10)];
         while (s && quiet < 3 && [idle timeIntervalSinceNow] > 0) {
-            SSSurface n = next_frame(&seen, w, h, 0.016);
+            SSSurface n = next_frame(&seen, w, h, gap);
             if (n) { CFRelease(s); s = n; quiet = 0; } else quiet++;
         }
         if (pass == 1) surface = s; else if (s) CFRelease(s);
