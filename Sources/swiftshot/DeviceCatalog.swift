@@ -3,7 +3,7 @@
 // Screen size and scale come straight from the CoreSimulator device-type bundle
 // (capabilities.plist), so every device Xcode knows about works. Safe-area insets are not
 // stored there; they come from (in priority order):
-//   1. the calibration cache (~/Library/Caches/swiftshot/calibration.json), filled by
+//   1. the calibration cache (~/Library/Caches/swiftshot/calibration-2.json), filled by
 //      `swiftshot calibrate`, which measures a real booted simulator,
 //   2. the built-in table (measured by the same calibration, shipped with the tool),
 //   3. a heuristic based on the device's Face ID capability.
@@ -15,7 +15,7 @@ enum DeviceCatalog {
     static var cacheURL: URL {
         if let path = ProcessInfo.processInfo.environment["SWIFTSHOT_CALIBRATION_CACHE"] { return URL(fileURLWithPath: path) }
         return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Caches/swiftshot/calibration.json")
+            .appendingPathComponent("Library/Caches/swiftshot/calibration-2.json")   // -2: iPads measured full screen
     }
 
     static func loadCache() -> [String: DeviceProfile] {
@@ -96,7 +96,7 @@ enum DeviceCatalog {
         case ("phone", false):
             return (Insets(top: 20, left: 0, bottom: 0, right: 0), .zero)
         case (_, true):
-            return (Insets(top: 32, left: 0, bottom: 20, right: 0), Insets(top: 32, left: 0, bottom: 20, right: 0))
+            return (Insets(top: 32, left: 0, bottom: 25, right: 0), Insets(top: 32, left: 0, bottom: 25, right: 0))
         default:
             return (Insets(top: 24, left: 0, bottom: 0, right: 0), Insets(top: 24, left: 0, bottom: 0, right: 0))
         }

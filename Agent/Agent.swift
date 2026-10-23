@@ -482,7 +482,7 @@ final class GPUCapture {
     let device = MTLCreateSystemDefaultDevice()
     lazy var queue = device?.makeCommandQueue()
 
-    func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
+    func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool, flipRoot: Bool = true) -> UIImage? {
         guard let device, let queue else { log("carenderer: no Metal device"); return nil }
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
         let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
@@ -494,7 +494,7 @@ final class GPUCapture {
         let saved = (layer.superlayer, layer.anchorPoint, layer.position, layer.affineTransform())
         let root = CALayer()
         root.frame = CGRect(x: 0, y: 0, width: w, height: h)
-        root.isGeometryFlipped = true
+        root.isGeometryFlipped = flipRoot
         root.addSublayer(layer)
         layer.anchorPoint = .zero; layer.position = .zero
         layer.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
@@ -520,11 +520,13 @@ final class GPUCapture {
         var bytes = [UInt8](repeating: 0, count: w * h * 4)
         texture.getBytes(&bytes, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
         // The flipped root renders bottom-up: reverse the rows (lossless).
-        bytes.withUnsafeMutableBytes { buf in
-            let row = w * 4; var tmp = [UInt8](repeating: 0, count: row)
-            for y in 0..<(h / 2) {
-                let a = buf.baseAddress! + y * row, b = buf.baseAddress! + (h - 1 - y) * row
-                memcpy(&tmp, a, row); memcpy(a, b, row); memcpy(b, tmp, row)
+        if flipRoot {
+            bytes.withUnsafeMutableBytes { buf in
+                let row = w * 4; var tmp = [UInt8](repeating: 0, count: row)
+                for y in 0..<(h / 2) {
+                    let a = buf.baseAddress! + y * row, b = buf.baseAddress! + (h - 1 - y) * row
+                    memcpy(&tmp, a, row); memcpy(a, b, row); memcpy(b, tmp, row)
+                }
             }
         }
         let info = (opaque ? CGImageAlphaInfo.noneSkipFirst : .premultipliedFirst).rawValue | CGBitmapInfo.byteOrder32Little.rawValue
@@ -601,6 +603,7 @@ enum SystemChrome {
     /// indicator; nil where a device shows neither.
     static func chrome(over window: UIWindow, root: UIViewController, size: CGSize) -> UIWindow? {
         guard NoBoot.enabled else { return nil }
+        ServerCapture.chromeStyles = []
         let chrome = window.windowScene.map { DeviceWindow(windowScene: $0) } ?? DeviceWindow(frame: window.frame)
         chrome.frame = window.frame
         chrome.overrideUserInterfaceStyle = window.traitCollection.userInterfaceStyle
@@ -608,9 +611,11 @@ enum SystemChrome {
         chrome.isHidden = false
         chrome.isUserInteractionEnabled = false
         let bar = statusBar(over: window, root: root, size: size, in: chrome)
-        // iPhones: none. The simulator hides it a moment after a launch, and iOS leaves it out of
-        // screenshots; an iPad running apps full screen keeps showing it.
-        let pill = NoBoot.screen?.idiom == "pad" ? homeIndicator(over: window, size: size, in: chrome) : nil
+        // iPhones: none; iOS leaves it out of screenshots. iPads with the new design (iOS 26+)
+        // neither: SpringBoard's home grabber always auto-hides there
+        // (+[SBHomeGrabberView wantsAutoHideAlwaysEnabled] is `!defaultBehavior`, which is
+        // `_UISolariumEnabled()`), a couple of seconds after the app comes up. Older iPads keep it.
+        let pill = NoBoot.screen?.idiom == "pad" && !solariumEnabled ? homeIndicator(over: window, size: size, in: chrome) : nil
         guard bar != nil || pill != nil else { chrome.isHidden = true; return nil }
         chrome.layoutIfNeeded()
         return chrome
@@ -628,6 +633,7 @@ enum SystemChrome {
         let decided = self.styles(for: first, over: window, root: root)
         let split = Set(decided.map { $0 ?? 0 }).count > 1
         let styles = decided.map { $0 ?? (split ? (window.traitCollection.userInterfaceStyle == .dark ? 1 : 3) : 0) }
+        ServerCapture.chromeStyles = styles
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar styles \(decided) -> \(styles)") }
         first.setValue(styles.first ?? 0, forKey: "style"); first.layoutIfNeeded()
         if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) {
@@ -651,6 +657,11 @@ enum SystemChrome {
         for bar in container.subviews { bar.isHidden = false }
         // Style changes are applied on the next run-loop pass.
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+        // SpringBoard lays its status bar out in the system language's direction, not the app's:
+        // an Arabic app on an English simulator keeps the time on the left, and the labels'
+        // natural alignment stays left (each view resolves its own direction).
+        func leftToRight(_ v: UIView) { v.semanticContentAttribute = .forceLeftToRight; v.setNeedsLayout(); v.subviews.forEach(leftToRight) }
+        container.subviews.forEach(leftToRight)
         for bar in container.subviews { bar.layoutIfNeeded() }
         return container
     }
@@ -682,6 +693,14 @@ enum SystemChrome {
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar provider \(bar.value(forKey: "visualProviderClassName") ?? "-")") }
         return bar
     }
+
+    /// Whether the runtime runs the new design (Liquid Glass) system wide, as SpringBoard sees it:
+    /// UIKit's feature flag, not `_UISolariumEnabled()`, which also folds in this process's idiom
+    /// (the app's may be overridden here).
+    static let solariumEnabled: Bool = {
+        guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "_UISolariumFeatureFlagEnabled") else { return false }
+        return unsafeBitCast(sym, to: (@convention(c) () -> Bool).self)()
+    }()
 
     /// SpringBoard's home indicator (MaterialKit's luma-dodge pill) on screens that have one.
     static func homeIndicator(over window: UIWindow, size: CGSize, in chrome: UIWindow) -> UIView? {
@@ -733,7 +752,7 @@ enum SystemChrome {
         if let bounds = views[0].value(forKey: "transitionBoundaries") as? NSValue {
             var pair = (0.0, 0.0); bounds.getValue(&pair, size: MemoryLayout<(Double, Double)>.size); (lower, upper) = pair
         }
-        let lumas = views.map { luminance(of: window, in: $0.convert($0.bounds, to: window)) }
+        let lumas = luminance(of: window, in: views.map { $0.convert($0.bounds, to: window) })
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar luma \(lumas) bounds \(lower)…\(upper)") }
         func style(_ luma: Double) -> Int? { luma < lower ? 1 : luma > upper ? 3 : nil }
         // iOS 27 decides for the whole bar by the regions' mean; iOS 26 per region (measured
@@ -743,18 +762,37 @@ enum SystemChrome {
         return lumas.map(style)
     }
 
-    /// Average Rec. 709 luma (0…1) of what the window shows in `rect`.
-    static func luminance(of window: UIWindow, in rect: CGRect) -> Double {
-        let w = max(1, Int(rect.width)), h = max(1, Int(rect.height))
+    /// Average Rec. 709 luma (0…1) of what the window shows in each rect, the way the render
+    /// server reports a luma-tracking backdrop's: over the composited pixels (Core Animation's
+    /// GPU renderer; CG's software gradients come out a little different), in steps of 1/64
+    /// (SpringBoard's `_UILumaTrackingGroup` only ever receives multiples of 1/64; logged on a
+    /// booted iPad, where they match the framebuffer's mean rounded to 1/64).
+    static func luminance(of window: UIWindow, in rects: [CGRect]) -> [Double] {
+        let scale = window.traitCollection.displayScale > 0 ? window.traitCollection.displayScale : 1
+        let size = window.bounds.size
+        let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return 1 }
-        ctx.translateBy(x: 0, y: CGFloat(h)); ctx.scaleBy(x: 1, y: -1)
-        ctx.translateBy(x: -rect.minX, y: -rect.minY)
-        window.layer.render(in: ctx)
-        var sum = 0.0
-        for i in stride(from: 0, to: pixels.count, by: 4) { sum += 0.2126 * Double(pixels[i]) + 0.7152 * Double(pixels[i + 1]) + 0.0722 * Double(pixels[i + 2]) }
-        return sum / Double(w * h) / 255
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return rects.map { _ in 1 } }
+        if NoBoot.enabled, let image = GPUCapture.shared.image(of: window, size: size, scale: scale, opaque: true, flipRoot: false)?.cgImage {
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        } else {
+            ctx.translateBy(x: 0, y: CGFloat(h)); ctx.scaleBy(x: scale, y: -scale)
+            window.layer.render(in: ctx)
+        }
+        return rects.map { rect in
+            let x0 = max(0, Int((rect.minX * scale).rounded())), y0 = max(0, Int((rect.minY * scale).rounded()))
+            let x1 = min(w, Int((rect.maxX * scale).rounded())), y1 = min(h, Int((rect.maxY * scale).rounded()))
+            guard x1 > x0, y1 > y0 else { return 1 }
+            var sum = 0.0
+            for y in y0..<y1 { for x in x0..<x1 {
+                let i = (y * w + x) * 4
+                sum += 0.2126 * Double(pixels[i]) + 0.7152 * Double(pixels[i + 1]) + 0.0722 * Double(pixels[i + 2])
+            } }
+            let luma = sum / Double((x1 - x0) * (y1 - y0)) / 255
+            if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("luma \(rect) \(luma)") }
+            return (luma * 64).rounded() / 64
+        }
     }
 }
 
@@ -774,6 +812,9 @@ enum ServerCapture {
     static var windowContext: NSObject?
     /// Shown over the window being captured, from its own context (SpringBoard's status bar).
     static var chrome: UIWindow?
+    /// The chrome's status bar styles (leading to trailing), and those already composited.
+    static var chromeStyles: [Int] = []
+    static var chromeStylesShown: Set<[Int]> = []
     static var chromeContext: NSObject?
     static var display: NSObject?
     static var started = false
@@ -877,7 +918,12 @@ enum ServerCapture {
         // fewer, some glass controls land a 1/255 step off at random, depending on what earlier
         // previews left in the window server). iOS 27 iPhones are deterministic after one.
         let needsExtra = runtimeMajor < 27 || (NoBoot.screen?.display?.verticalBarAllowed ?? 0) != 0
-        let showings = needsExtra ? 2 : (warmedUp ? 0 : 1)
+        // The status bar in a style this process hasn't composited yet: its rounded signal bars'
+        // edge pixels come out a step or two off the first time the server draws them in that
+        // colour (the device's render server has long drawn both). Show it once first.
+        let newChrome = chrome != nil && !chromeStylesShown.contains(chromeStyles)
+        if newChrome { chromeStylesShown.insert(chromeStyles) }
+        let showings = needsExtra ? 2 : (warmedUp && !newChrome ? 0 : 1)
         if showings > 0 {
             warmedUp = true
             for _ in 0..<showings { _ = settled(window, w, h, scale, background: nil) }
