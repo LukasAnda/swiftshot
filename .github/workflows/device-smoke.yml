@@ -1,0 +1,33 @@
+# One --mode device capture with full logs: a quick check that the booted-simulator handshake
+# works on a hosted runner (the integration suite takes over an hour).
+name: device-smoke
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: macOS runner image
+        default: xcode-27
+      devices:
+        description: devices
+        default: iPhone 17
+
+jobs:
+  smoke:
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: make
+      - name: Device mode
+        working-directory: Example/DemoApp
+        env:
+          SWIFTSHOT_DEBUG: "1"
+        run: |
+          ../../bin/swiftshot run --project DemoApp.xcodeproj --scheme DemoApp --devices "${{ inputs.devices || 'iPhone 17' }}" --ios 27.0 \
+            --previews "Welcome,Settings" --mode device --verbose --timeout 900 --output "$RUNNER_TEMP/device"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: device-smoke
+          path: ${{ runner.temp }}/device
