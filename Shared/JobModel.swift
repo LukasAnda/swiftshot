@@ -40,6 +40,8 @@ struct DisplayInfo: Codable, Equatable {
     /// The scene's resolved bar position trait (_UITraitSceneBarPosition): alignment insets
     /// (top, left, bottom, right), then top, bottom, leading and trailing bar size classes.
     var barPosition: [Double]? = nil
+    /// UIScreen._exclusionArea rect (x, y, width, height in points): the Dynamic Island.
+    var exclusionArea: [Double]? = nil
 }
 
 /// Geometry of a device, in points.

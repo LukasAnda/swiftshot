@@ -161,7 +161,8 @@ enum DeviceCatalog {
             "screenPeriphery: \(lit(d.screenPeriphery)), screenDisplayPeriphery: \(lit(d.screenDisplayPeriphery))" +
             (d.statusBarAxis.map { ", statusBarAxis: \($0)" } ?? "") + (d.statusBarFrameHeight.map { ", statusBarFrameHeight: \($0)" } ?? "") + (d.statusBarHeight.map { ", statusBarHeight: \($0)" } ?? "") +
             (d.verticalBarAllowed.map { ", verticalBarAllowed: \($0)" } ?? "") + (d.verticalBarEdge.map { ", verticalBarEdge: \($0)" } ?? "") +
-            (d.cornerInsets.map { ", cornerInsets: \($0)" } ?? "") + (d.barPosition.map { ", barPosition: \($0)" } ?? "") + ")"
+            (d.cornerInsets.map { ", cornerInsets: \($0)" } ?? "") + (d.barPosition.map { ", barPosition: \($0)" } ?? "") +
+            (d.exclusionArea.map { ", exclusionArea: \($0)" } ?? "") + ")"
         }
         var lines: [String] = []
         for (key, display) in existing where byDevice[key.split(separator: "@").first.map(String.init) ?? key] == nil {

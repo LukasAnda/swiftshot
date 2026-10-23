@@ -212,6 +212,8 @@ final class AgentRunner {
                     let t0 = now()
                     DeviceIdiom.current = device.idiom == "pad" ? .pad : .phone
                     NoBoot.screen = device
+                    let ex = device.display?.exclusionArea ?? ProcessInfo.processInfo.environment["SWIFTSHOT_EXCLUSION"].map { $0.split(separator: ",").compactMap { Double($0) } }
+                    swiftshot_set_exclusion_rect(ex.flatMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil } ?? .null)
                     if let corners = device.display?.cornerInsets, corners.count == 8 { corners.withUnsafeBufferPointer { swiftshot_set_corner_insets($0.baseAddress) } } else { swiftshot_set_corner_insets(nil) }
                     defer { DeviceIdiom.current = nil }
                     guard let vc = controller(fromBody: preview.body()) else {
@@ -496,6 +498,9 @@ final class GPUCapture {
 
 /// System UI a device composites over the app (SpringBoard's status bar), drawn in-process with
 /// UIKit's own views so materials behind it (Liquid Glass) see the same pixels.
+@_silgen_name("swiftshot_set_exclusion_rect") func swiftshot_set_exclusion_rect(_ rect: CGRect)
+@_silgen_name("swiftshot_install_exclusion_area") func swiftshot_install_exclusion_area()
+
 @MainActor
 enum SystemChrome {
     typealias Apply = @convention(c) (UIView) -> Void
@@ -707,6 +712,11 @@ enum NoBoot {
             value.getValue(&d, size: 64)
             return d.allSatisfy { $0 == 0 } ? nil : d
         }
+        func exclusionArea() -> [Double]? {
+            guard screen.responds(to: NSSelectorFromString("_exclusionArea")), let shape = screen.value(forKey: "_exclusionArea") as AnyObject?,
+                  shape.responds(to: NSSelectorFromString("rect")), let r = (shape.value(forKey: "rect") as? NSValue)?.cgRectValue, !r.isEmpty else { return nil }
+            return [r.minX, r.minY, r.width, r.height]
+        }
         func barPosition() -> [Double]? {
             guard let position = scene?.traitCollection.value(forKey: "_sceneBarPosition") as AnyObject?,
                   let insets = (position.value(forKey: "barAlignmentInsets") as? NSValue)?.uiEdgeInsetsValue, insets.top.isFinite else { return nil }
@@ -738,7 +748,8 @@ enum NoBoot {
             verticalBarAllowed: sceneTrait("_UITraitSystemVerticalBarAllowed"),
             verticalBarEdge: sceneTrait("_UITraitSystemVerticalBarHorizontalEdge"),
             cornerInsets: cornerInsets(),
-            barPosition: barPosition())
+            barPosition: barPosition(),
+            exclusionArea: exclusionArea())
     }
 
     /// Reports the rendered device's display data from UIKit's display info provider and screen.
@@ -935,6 +946,7 @@ enum NoBoot {
         installDisplayInfo()
         installStatusBar()
         swiftshot_install_corner_insets()
+        swiftshot_install_exclusion_area()
         makeApplication()
         // A booted host scene is portrait (landscape previews are just landscape-sized windows);
         // a screen-based scene would report "unknown", which changes e.g. the tab bar's layout.

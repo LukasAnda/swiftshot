@@ -40,3 +40,21 @@ UIView *swiftshot_make_status_bar_spec(NSDictionary *spec, CGRect frame, UIScree
     objc_setAssociatedObject(bar, @selector(swiftshot_apply_status_bar_data), data, OBJC_ASSOCIATION_RETAIN);
     return bar;
 }
+
+/// UIScreen._exclusionArea (the Dynamic Island's rect, which the status bar lays out around), as
+/// the rendered device's booted screen reports it. CGRectNull: none.
+static CGRect swiftshot_exclusion = {{INFINITY, INFINITY}, {0, 0}};
+
+void swiftshot_set_exclusion_rect(CGRect rect) { swiftshot_exclusion = rect; }
+
+void swiftshot_install_exclusion_area(void) {
+    SEL sel = NSSelectorFromString(@"_exclusionArea");
+    Method m = class_getInstanceMethod(UIScreen.class, sel);
+    Class shape = NSClassFromString(@"UISDisplaySingleRectShape");
+    if (!m || !shape) return;
+    id (*original)(id, SEL) = (id (*)(id, SEL))method_getImplementation(m);
+    method_setImplementation(m, imp_implementationWithBlock(^id(id screen) {
+        if (CGRectIsNull(swiftshot_exclusion)) return original(screen, sel);
+        return ((id (*)(id, SEL, CGRect))objc_msgSend)([shape alloc], NSSelectorFromString(@"initWithRect:"), swiftshot_exclusion);
+    }));
+}
