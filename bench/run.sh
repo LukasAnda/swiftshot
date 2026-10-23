@@ -110,8 +110,13 @@ print(ok[-1]["identifier"], ok[-1]["version"])' "$DEVICES")
     done <<< "$DEVICES"
     out=$BENCH_DIR/fastlane; rm -rf "$out"; mkdir -p "$out"
     start=$(date +%s)
-    (cd Example/DemoApp && FL_OUT="$out/screenshots" FL_DEVICES="$(IFS=,; echo "${FL_NAMES[*]}")" FL_IOS="$VERSION" fastlane snapshot \
+    # fastlane's own speed-up: build for testing once (counted), then every language runs
+    # `test-without-building` instead of an incremental build (snapshot's test_without_building).
+    (cd Example/DemoApp && xcodebuild build-for-testing -project DemoApp.xcodeproj -scheme DemoApp \
+        -destination "generic/platform=iOS Simulator" -derivedDataPath "$out/DerivedData" CODE_SIGNING_ALLOWED=NO -quiet \
+     && FL_OUT="$out/screenshots" FL_DEVICES="$(IFS=,; echo "${FL_NAMES[*]}")" FL_IOS="$VERSION" fastlane snapshot \
         --devices "$(IFS=,; echo "${FL_NAMES[*]}")" --languages "$LANGS" --ios_version "$VERSION" \
+        --test_without_building true --derived_data_path "$out/DerivedData" \
         --output_directory "$out/screenshots") 2>&1 | tee "$out/log.txt"
     code=${PIPESTATUS[0]}
     record fastlane $(( $(date +%s) - start )) "$out/screenshots" "$code"
