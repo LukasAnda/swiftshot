@@ -266,10 +266,11 @@ final class AgentRunner {
                         log("animations before capture: \(animated(window.layer).prefix(12))")
                     }
                     // The system status bar over the app, as a device shows it.
-                    let statusBar = preview.layout.kind.isDevice && job.statusBar != false ? SystemChrome.statusBar(over: window, root: vc, size: geo.size) : nil
-                    let homeIndicator = preview.layout.kind.isDevice && job.statusBar != false ? SystemChrome.homeIndicator(over: window, size: geo.size) : nil
-                    defer { homeIndicator?.removeFromSuperview() }
-                    defer { statusBar?.removeFromSuperview() }
+                    // SpringBoard's status bar and home indicator, in their own window composited over
+                    // the app's (as on a device, the app's materials don't see them).
+                    let chrome = preview.layout.kind.isDevice && job.statusBar != false ? SystemChrome.chrome(over: window, root: vc, size: geo.size) : nil
+                    ServerCapture.chrome = chrome
+                    defer { ServerCapture.chrome = nil; chrome?.isHidden = true }
                     let format = UIGraphicsImageRendererFormat()
                     format.scale = device.scale
                     format.opaque = preview.layout.kind.isDevice
@@ -576,26 +577,88 @@ enum SystemChrome {
 
     /// The status bar a device shows over this window, laid out and styled; nil where none shows
     /// (landscape iPhones) or the runtime has no SpringBoard status bar.
-    static func statusBar(over window: UIWindow, root: UIViewController, size: CGSize) -> UIView? {
+    /// A window like the app's (frame, traits, safe area) holding the status bar and home
+    /// indicator; nil where a device shows neither.
+    static func chrome(over window: UIWindow, root: UIViewController, size: CGSize) -> UIWindow? {
+        guard NoBoot.enabled, NoBoot.screen?.idiom == "phone" else { return nil }
+        let chrome = window.windowScene.map { DeviceWindow(windowScene: $0) } ?? DeviceWindow(frame: window.frame)
+        chrome.frame = window.frame
+        chrome.overrideUserInterfaceStyle = window.traitCollection.userInterfaceStyle
+        chrome.forcedSafeArea = window.safeAreaInsets
+        chrome.isHidden = false
+        chrome.isUserInteractionEnabled = false
+        let bar = statusBar(over: window, root: root, size: size, in: chrome)
+        let pill = homeIndicator(over: window, size: size, in: chrome)
+        guard bar != nil || pill != nil else { chrome.isHidden = true; return nil }
+        chrome.layoutIfNeeded()
+        return chrome
+    }
+
+    static func statusBar(over window: UIWindow, root: UIViewController, size: CGSize, in chrome: UIWindow) -> UIView? {
         // iPhones only for now: an iPad's bar also shows the date and the app's menu bar.
-        guard NoBoot.enabled, let makeSpec, NoBoot.screen?.idiom == "phone", size.width < size.height,
-              let bar = makeSpec(specForScreen(), CGRect(origin: .zero, size: CGSize(width: size.width, height: window.safeAreaInsets.top)), UIScreen.main) else { return nil }
+        guard size.width < size.height, let first = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) else { return nil }
+        let container = UIView(frame: first.frame)
+        container.isUserInteractionEnabled = false
+        chrome.addSubview(container)
+        container.addSubview(first)
+        // 0: the default (dark glyphs in light mode, light in dark mode). Where the regions differ
+        // (iOS 26), SpringBoard's automatic style is in charge and its default side is the
+        // automatic dark one (3).
+        let decided = self.styles(for: first, over: window, root: root)
+        let split = Set(decided.map { $0 ?? 0 }).count > 1
+        let styles = decided.map { $0 ?? (split ? (window.traitCollection.userInterfaceStyle == .dark ? 1 : 3) : 0) }
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar styles \(decided) -> \(styles)") }
+        first.setValue(styles.first ?? 0, forKey: "style"); first.layoutIfNeeded()
+        if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) {
+            // iOS 26 styles the regions either side of the island on their own: a bar per style,
+            // each shown on its side.
+            container.addSubview(second)
+            second.setValue(trailing, forKey: "style"); second.layoutIfNeeded()
+            let mid = (NoBoot.screen?.display?.exclusionArea).flatMap { $0.count == 4 ? $0[0] + $0[2] / 2 : nil } ?? size.width / 2
+            for (bar, rect) in [(first, CGRect(x: 0, y: 0, width: mid, height: container.bounds.height)),
+                                (second, CGRect(x: mid, y: 0, width: size.width - mid, height: container.bounds.height))] {
+                let mask = CALayer(); mask.frame = rect; mask.backgroundColor = UIColor.black.cgColor
+                bar.layer.mask = mask
+            }
+        }
+        for bar in container.subviews { bar.isHidden = false }
+        // Style changes are applied on the next run-loop pass.
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+        for bar in container.subviews { bar.layoutIfNeeded() }
+        return container
+    }
+
+    /// One SpringBoard status bar with its data applied, hidden, in the window.
+    static func makeBar(over window: UIWindow, width: CGFloat, height: CGFloat) -> UIView? {
+        guard let makeSpec, let bar = makeSpec(specForScreen(), CGRect(origin: .zero, size: CGSize(width: width, height: height)), UIScreen.main) else { return nil }
         bar.isHidden = true
         window.addSubview(bar)
+        bar.layoutIfNeeded()
+        // The style is decided here (styles(for:)); the bar's own luma tracking would decide late
+        // and from a partly drawn screen.
+        let pause = NSSelectorFromString("setPaused:")
+        typealias Pause = @convention(c) (AnyObject, Selector, Bool) -> Void
+        func pauseLuma(_ v: UIView) {
+            if NSStringFromClass(type(of: v)).contains("LumaTracking"), v.responds(to: pause) { unsafeBitCast(class_getMethodImplementation(type(of: v), pause), to: Pause.self)(v, pause, true) }
+            v.subviews.forEach(pauseLuma)
+        }
+        pauseLuma(bar)
+        if let provider = bar.value(forKey: "visualProvider") as AnyObject?, provider.responds(to: NSSelectorFromString("lumaTrackingGroup")),
+           let group = provider.value(forKey: "lumaTrackingGroup") as AnyObject?, group.responds(to: pause) {
+            unsafeBitCast(class_getMethodImplementation(type(of: group), pause), to: Pause.self)(group, pause, true)
+        }
         apply?(bar)
         // Its data update is applied (aggregated) on the next run-loop passes.
         let until = Date().addingTimeInterval(0.25)
         while Date() < until && bar.subviews.first?.subviews.allSatisfy({ $0.subviews.isEmpty }) ?? true { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
         bar.layoutIfNeeded()
-        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar provider \(bar.value(forKey: "visualProviderClassName") ?? "-") \(type(of: bar.value(forKey: "visualProvider") as AnyObject))") }
-        if let style = style(for: bar, over: window, root: root) { bar.setValue(style, forKey: "style"); bar.layoutIfNeeded() }
-        bar.isHidden = false
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar provider \(bar.value(forKey: "visualProviderClassName") ?? "-")") }
         return bar
     }
 
     /// SpringBoard's home indicator (MaterialKit's luma-dodge pill) on screens that have one.
-    static func homeIndicator(over window: UIWindow, size: CGSize) -> UIView? {
-        guard NoBoot.enabled, NoBoot.screen?.idiom == "phone", window.safeAreaInsets.bottom > 0 else { return nil }
+    static func homeIndicator(over window: UIWindow, size: CGSize, in chrome: UIWindow) -> UIView? {
+        guard window.safeAreaInsets.bottom > 0 else { return nil }
         dlopen("/System/Library/PrivateFrameworks/MaterialKit.framework/MaterialKit", RTLD_NOW)
         guard let cls = NSClassFromString("MTLumaDodgePillView") as? UIView.Type else { return nil }
         let pill = cls.init(frame: .zero)
@@ -616,42 +679,41 @@ enum SystemChrome {
         let scale = UIScreen.main.scale   // centred on a whole pixel, like SpringBoard's
         pill.frame = CGRect(x: ((size.width - pillSize.width) / 2 * scale).rounded() / scale, y: size.height - spacing - pillSize.height, width: pillSize.width, height: pillSize.height)
         pill.setValue(3, forKey: "style")   // adaptive: the luma-dodge filter lightens or darkens what's under it
-        window.addSubview(pill)
+        chrome.addSubview(pill)
         return pill
     }
 
     /// The app's explicit status bar style, else SpringBoard's automatic one: light glyphs over
-    /// dark content and dark over light, judged by the average luma under the bar's luma regions
-    /// with the bar's own transition boundaries (between them the style stays the default).
-    static func style(for bar: UIView, over window: UIWindow, root: UIViewController) -> Int? {
+    /// dark content and dark over light, judged by the luma under the bar's luma regions with the
+    /// bar's own transition boundaries (between them the default stays: nil). One style for the
+    /// bar, or one per region (leading to trailing) where they differ (iOS 26).
+    static func styles(for bar: UIView, over window: UIWindow, root: UIViewController) -> [Int?] {
         var vc = root
         while let next = vc.presentedViewController.flatMap({ $0.modalPresentationCapturesStatusBarAppearance ? $0 : nil }) ?? vc.childForStatusBarStyle { vc = next }
         switch vc.preferredStatusBarStyle {
-        case .lightContent: return 1
-        case .darkContent: return 3
+        case .lightContent: return [1]
+        case .darkContent: return [3]
         default: break
         }
-        // Automatic (luma-driven) style is the bar's own decision (iOS 27); iOS 26 keeps the default.
         let auto = NSSelectorFromString("_useAutomaticStyle")
         typealias Flag = @convention(c) (AnyObject, Selector) -> Bool
         guard bar.responds(to: auto), unsafeBitCast(class_getMethodImplementation(type(of: bar), auto), to: Flag.self)(bar, auto),
-              let provider = bar.value(forKey: "visualProvider") as AnyObject? else { return nil }
+              let provider = bar.value(forKey: "visualProvider") as AnyObject? else { return [nil] }
         let views = ["leadingBackgroundLumaView", "centerBackgroundLumaView", "trailingBackgroundLumaView"]
             .compactMap { provider.responds(to: NSSelectorFromString($0)) ? provider.value(forKey: $0) as? UIView : nil }
-        guard !views.isEmpty else { return nil }
+        guard !views.isEmpty else { return [nil] }
         var lower = 0.4, upper = 0.7
         if let bounds = views[0].value(forKey: "transitionBoundaries") as? NSValue {
             var pair = (0.0, 0.0); bounds.getValue(&pair, size: MemoryLayout<(Double, Double)>.size); (lower, upper) = pair
         }
         let lumas = views.map { luminance(of: window, in: $0.convert($0.bounds, to: window)) }
-        let luma = lumas.reduce(0, +) / Double(views.count)
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar luma \(lumas) bounds \(lower)…\(upper)") }
-        // iOS 27's group goes by the mean of its regions; iOS 26 switches only when all of them
-        // are past a boundary (measured against booted simulators on both).
+        func style(_ luma: Double) -> Int? { luma < lower ? 1 : luma > upper ? 3 : nil }
+        // iOS 27 decides for the whole bar by the regions' mean; iOS 26 per region (measured
+        // against booted simulators on both).
         let major = Int(job?.runtime.split(separator: ".").first ?? "27") ?? 27
-        if major >= 27 ? luma < lower : lumas.allSatisfy({ $0 < lower }) { return 1 }
-        if major >= 27 ? luma > upper : lumas.allSatisfy({ $0 > upper }) { return 3 }
-        return nil
+        if major >= 27 { return [style(lumas.reduce(0, +) / Double(lumas.count))] }
+        return lumas.map(style)
     }
 
     /// Average Rec. 709 luma (0…1) of what the window shows in `rect`.
@@ -683,6 +745,9 @@ enum ServerCapture {
     static let resize: Resize? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_resize").map { unsafeBitCast($0, to: Resize.self) }
     static var context: NSObject?
     static var windowContext: NSObject?
+    /// Shown over the window being captured, from its own context (SpringBoard's status bar).
+    static var chrome: UIWindow?
+    static var chromeContext: NSObject?
     static var display: NSObject?
     static var started = false
     static var warmedUp = false
@@ -707,6 +772,7 @@ enum ServerCapture {
         // it scaled (CALayerHost), like SpringBoard hosts an app's windows. A scale transform on
         // the window's layer itself would reach UIKit's coordinate conversions.
         windowContext = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: NSDictionary())?.takeUnretainedValue() as? NSObject
+        chromeContext = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: NSDictionary())?.takeUnretainedValue() as? NSObject
         if context == nil || windowContext == nil { log("server capture: no context") }
         self.display = display
         return context
@@ -836,9 +902,31 @@ enum ServerCapture {
         host.bounds = windowRoot.frame
         host.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
         root.addSublayer(host)
+        // The chrome window the same way, above.
+        let chromeLayer = chrome?.layer
+        let chromeSaved = (chromeLayer?.superlayer, chromeLayer?.anchorPoint ?? .zero, chromeLayer?.position ?? .zero)
+        if let chromeLayer, let chromeContext {
+            let chromeRoot = CALayer()
+            chromeRoot.frame = windowRoot.frame
+            chromeRoot.addSublayer(chromeLayer)
+            chromeLayer.anchorPoint = .zero; chromeLayer.position = .zero
+            chromeContext.setValue(chromeRoot, forKey: "layer")
+            let chromeHost = hostClass.init()
+            chromeHost.setValue(chromeContext.value(forKey: "contextId"), forKey: "contextId")
+            chromeHost.anchorPoint = .zero; chromeHost.position = .zero
+            chromeHost.bounds = windowRoot.frame
+            chromeHost.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
+            root.addSublayer(chromeHost)
+        }
         defer {
             context.setValue(nil, forKey: "layer")
             windowContext.setValue(nil, forKey: "layer")
+            if let chromeLayer {
+                chromeContext?.setValue(nil, forKey: "layer")
+                chromeLayer.removeFromSuperlayer()
+                chromeLayer.anchorPoint = chromeSaved.1; chromeLayer.position = chromeSaved.2
+                chromeSaved.0?.addSublayer(chromeLayer)
+            }
             CATransaction.flush()
             layer.removeFromSuperlayer()
             layer.anchorPoint = saved.1; layer.position = saved.2

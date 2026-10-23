@@ -131,19 +131,9 @@ enum Simctl {
         try await sh(Simctl.cmd(["install", udid, app]))
     }
 
-    /// Apple's 9:41 on Tuesday 9 January 2007, in this Mac's time zone (a simulator shows the
-    /// date too on iPad); swiftshot's own status bar shows the same instant.
-    static var statusBarTime: String {
-        let f = ISO8601DateFormatter(); f.timeZone = .current
-        f.formatOptions = [.withInternetDateTime]
-        var c = DateComponents(); c.year = 2007; c.month = 1; c.day = 9; c.hour = 9; c.minute = 41
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = .current
-        return f.string(from: cal.date(from: c)!)
-    }
-
     static func overrideStatusBar(_ udid: String) async throws {
         try await sh(Simctl.cmd(["status_bar", udid, "override",
-                      "--time", statusBarTime, "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
+                      "--time", "9:41", "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
                       "--cellularMode", "active", "--cellularBars", "4", "--batteryState", "charged", "--batteryLevel", "100"]),
                      allowFailure: true)
     }
