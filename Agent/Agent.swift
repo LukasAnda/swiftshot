@@ -900,22 +900,6 @@ enum ServerCapture {
         return false
     }
 
-    /// The next presented frame of the capture's size, or nil after `timeout`.
-    static func frame(after: inout UInt64, width: Int, height: Int, timeout: Double) -> IOSurfaceRef? {
-        guard let wait else { return nil }
-        var frame: UInt64 = 0
-        let deadline = Date().addingTimeInterval(timeout)
-        repeat {
-            if let s = wait(0, after, 0.004, &frame) {
-                after = frame
-                let surface = s.takeRetainedValue()
-                if IOSurfaceGetWidth(surface) == width && IOSurfaceGetHeight(surface) == height { return surface }
-            }
-            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.001))
-        } while Date() < deadline
-        return nil
-    }
-
     static func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
         let t0 = Date()
@@ -957,13 +941,14 @@ enum ServerCapture {
         let needsExtra = runtimeMajor < 27 || (NoBoot.screen?.display?.verticalBarAllowed ?? 0) != 0
         // Every capture starts from the render server's cold state (see purgeServer), like the
         // process's first one, so each gets the first one's showing too.
-        purgeServer()
-        for _ in 0..<(needsExtra ? 2 : 1) { _ = settled(window, w, h, scale, background: nil) }
+        if getenv("SWIFTSHOT_FB_NOPURGE") == nil { purgeServer() }
+        let showings = getenv("SWIFTSHOT_FB_SHOWINGS").flatMap { Int(String(cString: $0)) } ?? (needsExtra ? 2 : 1)
+        for _ in 0..<showings { _ = settled(window, w, h, scale, background: nil) }
         guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
         // A material seen for the first time compiles its shaders during the capture; glass that
         // first appeared that slowly settles a hair differently. Capture it again, fresh.
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("capture first frame \(Int(lastFirstFrame * 1000)) ms") }
-        if lastFirstFrame > 0.2 {
+        if lastFirstFrame > 0.2 && getenv("SWIFTSHOT_FB_NORECAP") == nil {
             if let again = settled(window, w, h, scale, background: nil) { bytes = again }
         }
         if h > w, NoBoot.screen?.idiom == "phone", let area = NoBoot.screen?.display?.exclusionArea, area.count == 4, area[1] > 0 { addCornerMark(&bytes, width: w) }
@@ -997,13 +982,7 @@ enum ServerCapture {
         do {
             keepAttached = true
             defer { keepAttached = false; detach?(); detach = nil }
-            guard var last = pixels(of: window, w, h, scale, background: background) else { return nil }
-            for _ in 0..<4 {
-                guard let next = latest(w, h) else { return nil }
-                if next == last { return next }
-                last = next
-            }
-            return last
+            return pixels(of: window, w, h, scale, background: background)
         }
     }
 
@@ -1021,24 +1000,7 @@ enum ServerCapture {
     static var keepAttached = false
     /// The rendered runtime's major version (set per job).
     static var runtimeMajor = 27
-    static var lastSurface: IOSurfaceRef?
-    static var lastSeen: UInt64 = 0
     static var detach: (() -> Void)?
-
-    /// The newest frame once the server has gone idle again (no new commit).
-    static func latest(_ w: Int, _ h: Int) -> [UInt8]? {
-        guard var surface = lastSurface else { return nil }
-        var seen = lastSeen
-        var quiet = 0
-        while quiet < 3 { if let next = frame(after: &seen, width: w, height: h, timeout: 0.03) { surface = next; quiet = 0 } else { quiet += 1 } }
-        lastSurface = surface; lastSeen = seen
-        IOSurfaceLock(surface, .readOnly, nil)
-        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
-        let stride = IOSurfaceGetBytesPerRow(surface), base = IOSurfaceGetBaseAddress(surface)
-        var bytes = [UInt8](repeating: 0, count: w * h * 4)
-        bytes.withUnsafeMutableBytes { buf in for y in 0..<h { memcpy(buf.baseAddress! + y * w * 4, base + y * stride, w * 4) } }
-        return bytes
-    }
 
     /// One composited frame of the window (BGRA rows, w × h).
     static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
@@ -1092,28 +1054,96 @@ enum ServerCapture {
             saved.0?.addSublayer(layer)
         }
         defer { if keepAttached { detach = teardown } else { teardown() } }
-        var seen: UInt64 = 0
-        _ = wait(0, UInt64.max - 1, 0, &seen)
+        let t0 = Date()
+        // The window's and the chrome's trees reach the server first, while nothing shows them
+        // (a hidden context's synchronize returns once the server has applied the commit)…
+        CATransaction.flush()
+        for hidden in [windowContext, chromeContext].compactMap({ $0 }) { _ = synchronize(hidden, timeout: 20) }
+        // …then the display's root that hosts them: once the server has rendered that commit,
+        // the frame it presented for it (or a later one) is the newest frame on the display.
+        // The server presents a frame (SimDisplay::finish_update → swap submit) before it marks
+        // the commit rendered (~Update) and answers. A frame still in flight from the previous
+        // tree can't pass for this one. The first frame can take seconds on a CI VM's
+        // paravirtual GPU (shaders compiling).
+        let before = frameCount()
         context.setValue(root, forKey: "layer")
         CATransaction.flush()
-        // The first frame with the commit, then the last one before the server goes idle
-        // (implicit animations, materials settling), as a device would show it.
-        let shown = Date()
-        // The first frame can take seconds on a CI VM's paravirtual GPU (shaders compiling).
-        guard var surface = frame(after: &seen, width: w, height: h, timeout: 20) else { log("server capture: no frame"); return nil }
-        let first = Date()
-        lastFirstFrame = first.timeIntervalSince(shown)
-        var frames = 1
-        // Idle = no new frame for three gaps of half the time this machine took to present the
-        // first one (a CI VM's GPU can take far longer than a display frame).
-        let gap = max(0.016, first.timeIntervalSince(shown) * 0.5)
-        var quiet = 0
-        let idle = Date().addingTimeInterval(max(1, gap * 10))
-        while quiet < 3 && Date() < idle {
-            if let next = frame(after: &seen, width: w, height: h, timeout: gap) { surface = next; quiet = 0; frames += 1 } else { quiet += 1 }
+        guard synchronize(context, timeout: 20) else { log("server capture: commit \(commitId(context)) not rendered"); return nil }
+        let rendered = Date()
+        lastFirstFrame = rendered.timeIntervalSince(t0)
+        var frame: UInt64 = 0
+        guard let presented = wait(0, before, 0, &frame)?.takeRetainedValue() else { log("server capture: no frame for commit \(commitId(context))"); return nil }
+        guard IOSurfaceGetWidth(presented) == w && IOSurfaceGetHeight(presented) == h else {
+            log("server capture: frame is \(IOSurfaceGetWidth(presented))x\(IOSurfaceGetHeight(presented)), not \(w)x\(h)"); return nil
         }
-        lastSurface = surface; lastSeen = seen
-        timings.append("pass: first frame \(Int(first.timeIntervalSince(shown) * 1000)) ms, idle after \(Int(Date().timeIntervalSince(first) * 1000)) ms, \(frames) frames")
+        var surface = presented
+        // Settled: the server draws again only for a new commit or for content it evaluates over
+        // time. Every commit so far is rendered, and no client code runs until the copy below
+        // (nothing commits). What's left is the trees' time-dependent animations: wait for the end
+        // they were committed with, let the client drop them (a commit), and take that frame.
+        var waits = 0
+        while waits < 4, let end = animationEnd([windowContext, chromeContext, context]) {
+            guard end.isFinite else { log("warning: an animation that never ends; captured as committed"); break }
+            let now = CACurrentMediaTime()
+            if end <= now && waits > 0 { break }   // over, and its removal (if any) is rendered
+            waits += 1
+            if end > now { Thread.sleep(forTimeInterval: end - now) }
+            CATransaction.flush()
+            for c in [windowContext, chromeContext, context].compactMap({ $0 }) { _ = synchronize(c, timeout: 20) }
+            guard let next = wait(0, 0, 0, &frame)?.takeRetainedValue() else { break }
+            surface = next
+        }
+        timings.append("pass: commit rendered after \(Int(rendered.timeIntervalSince(t0) * 1000)) ms, frame \(frame)\(waits > 0 ? ", \(waits) animation waits" : "")")
+        return copy(surface, w, h)
+    }
+
+    static func commitId(_ c: NSObject) -> UInt32 { (c.value(forKey: "commitId") as? NSNumber)?.uint32Value ?? 0 }
+
+    typealias WaitForCommit = @convention(c) (NSObject, Selector, UInt32, Double) -> Bool
+    /// Blocks until the server has applied the context's latest commit and, if the context is
+    /// shown on a display (or hosted by one that is), rendered it; true once rendered.
+    /// -[CAContext waitForCommitId:timeout:] → CA::Context::synchronize: the server answers the
+    /// request (Render::Context::request_synchronize) once its commit seed has reached the id and,
+    /// for a visible context, once an update that included the context has finished
+    /// (Render::Update::~Update raises the rendered seed, after the display's finish_update).
+    static func synchronize(_ c: NSObject, timeout: Double) -> Bool {
+        let sel = NSSelectorFromString("waitForCommitId:timeout:")
+        guard let m = class_getInstanceMethod(type(of: c), sel) else { return false }
+        return unsafeBitCast(method_getImplementation(m), to: WaitForCommit.self)(c, sel, commitId(c), timeout)
+    }
+
+    /// Frames presented on the display so far.
+    static func frameCount() -> UInt64 {
+        var n: UInt64 = 0
+        _ = wait?(0, UInt64.max - 1, 0, &n)
+        return n
+    }
+
+    /// When the latest time-dependent animation in the contexts' trees ends (seconds, media
+    /// time; infinity for one that never does), nil if there is none. The server only keeps
+    /// drawing for those: CA::Render::Animation::is_time_dependent() is true except for the
+    /// match animations (CAMatchPropertyAnimation / CAMatchMoveAnimation, which follow another
+    /// layer and change only with a commit).
+    static func animationEnd(_ contexts: [NSObject?]) -> CFTimeInterval? {
+        var end: CFTimeInterval?
+        func visit(_ layer: CALayer) {
+            for key in layer.animationKeys() ?? [] {
+                guard let a = layer.animation(forKey: key), !NSStringFromClass(type(of: a)).hasPrefix("CAMatch") else { continue }
+                let reps = a.repeatDuration > 0 ? a.repeatDuration : a.duration * Double(max(a.repeatCount, 1))
+                let active = (a.autoreverses ? 2 : 1) * reps / Double(a.speed == 0 ? 1 : a.speed)
+                let local = a.beginTime + active - a.timeOffset
+                let t = active.isFinite && a.speed != 0 ? layer.convertTime(local, to: nil) : .infinity
+                end = max(end ?? t, t)
+            }
+            layer.sublayers?.forEach(visit)
+            if let mask = layer.mask { visit(mask) }
+        }
+        for c in contexts.compactMap({ $0 }) { if let l = c.value(forKey: "layer") as? CALayer { visit(l) } }
+        return end
+    }
+
+    /// The surface's pixels as BGRA rows, w × h.
+    static func copy(_ surface: IOSurfaceRef, _ w: Int, _ h: Int) -> [UInt8] {
         IOSurfaceLock(surface, .readOnly, nil)
         defer { IOSurfaceUnlock(surface, .readOnly, nil) }
         let stride = IOSurfaceGetBytesPerRow(surface), base = IOSurfaceGetBaseAddress(surface)
