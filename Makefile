@@ -11,16 +11,18 @@ bin/swiftshot: Package.swift $(wildcard Sources/swiftshot/*.swift) Shared/JobMod
 	swift build -c release --product swiftshot
 	mkdir -p bin && rm -f bin/swiftshot && cp .build/release/swiftshot bin/swiftshot
 
-bin/SwiftshotAgent.dylib: $(AGENT_SRC) Agent/Loader.m Agent/LayerDrawing.m
+bin/SwiftshotAgent.dylib: $(AGENT_SRC) Agent/Loader.m Agent/LayerDrawing.m Agent/StatusBar.m
 	mkdir -p $(BUILD) bin
 	xcrun -sdk iphonesimulator clang -target arm64-apple-ios17.0-simulator -O2 -c Agent/Loader.m -o $(BUILD)/Loader-arm64.o
 	xcrun -sdk iphonesimulator clang -target x86_64-apple-ios17.0-simulator -O2 -c Agent/Loader.m -o $(BUILD)/Loader-x86_64.o
 	xcrun -sdk iphonesimulator clang -target arm64-apple-ios17.0-simulator -O2 -fobjc-arc -c Agent/LayerDrawing.m -o $(BUILD)/LayerDrawing-arm64.o
+	xcrun -sdk iphonesimulator clang -target arm64-apple-ios17.0-simulator -O2 -fobjc-arc -c Agent/StatusBar.m -o $(BUILD)/StatusBar-arm64.o
+	xcrun -sdk iphonesimulator clang -target x86_64-apple-ios17.0-simulator -O2 -fobjc-arc -c Agent/StatusBar.m -o $(BUILD)/StatusBar-x86_64.o
 	xcrun -sdk iphonesimulator clang -target x86_64-apple-ios17.0-simulator -O2 -fobjc-arc -c Agent/LayerDrawing.m -o $(BUILD)/LayerDrawing-x86_64.o
 	xcrun -sdk iphonesimulator swiftc -target arm64-apple-ios17.0-simulator -sdk $(SIM_SDK) -O -emit-library \
-		-module-name SwiftshotAgent $(AGENT_SRC) $(BUILD)/Loader-arm64.o $(BUILD)/LayerDrawing-arm64.o -o $(BUILD)/agent-arm64.dylib
+		-module-name SwiftshotAgent $(AGENT_SRC) $(BUILD)/Loader-arm64.o $(BUILD)/LayerDrawing-arm64.o $(BUILD)/StatusBar-arm64.o -o $(BUILD)/agent-arm64.dylib
 	xcrun -sdk iphonesimulator swiftc -target x86_64-apple-ios17.0-simulator -sdk $(SIM_SDK) -O -emit-library \
-		-module-name SwiftshotAgent $(AGENT_SRC) $(BUILD)/Loader-x86_64.o $(BUILD)/LayerDrawing-x86_64.o -o $(BUILD)/agent-x86_64.dylib
+		-module-name SwiftshotAgent $(AGENT_SRC) $(BUILD)/Loader-x86_64.o $(BUILD)/LayerDrawing-x86_64.o $(BUILD)/StatusBar-x86_64.o -o $(BUILD)/agent-x86_64.dylib
 	rm -f $@ && lipo -create $(BUILD)/agent-arm64.dylib $(BUILD)/agent-x86_64.dylib -output $@
 
 bin/SwiftshotAgent-watchOS.dylib: $(AGENT_SRC) Agent/Loader.m Agent/SwiftCall.s Agent/WatchCapture.m Agent/LayerDrawing.m

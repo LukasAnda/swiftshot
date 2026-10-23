@@ -92,3 +92,4 @@ void swiftshot_install_corner_insets(void) {
     if (m2) { typedef SwiftshotCornerInsets (*G)(id, SEL, NSInteger, BOOL); G o = (G)method_getImplementation(m2); method_setImplementation(m2, imp_implementationWithBlock(^SwiftshotCornerInsets(id x, NSInteger r, BOOL h) { return swiftshot_corners_set && r <= 2 ? swiftshot_corners : o(x, s2, r, h); })); }
     if (m3) { Get3 o = (Get3)method_getImplementation(m3); method_setImplementation(m3, imp_implementationWithBlock(^SwiftshotCornerInsets(id x, NSInteger r, BOOL h, NSInteger a) { return swiftshot_corners_set && r <= 2 ? swiftshot_corners : o(x, s3, r, h, a); })); }
 }
+

@@ -258,6 +258,17 @@ final class AgentRunner {
                     if preview.layout.kind.isDevice && job.fullLength(for: preview.name) {
                         geo.size = growToContent(of: vc, in: window, size: geo.size, scale: device.scale, name: preview.name)
                     }
+                    // The system status bar over the app, as a device shows it.
+                    let statusBar = preview.layout.kind.isDevice && geo.size.width < geo.size.height ? SystemChrome.statusBar(width: geo.size.width, height: window.safeAreaInsets.top) : nil
+                    if let statusBar {
+                        window.addSubview(statusBar)
+                        SystemChrome.apply?(statusBar)
+                        // Its data update is applied (aggregated) on the next run-loop passes.
+                        let until = Date().addingTimeInterval(0.25)
+                        while Date() < until && statusBar.subviews.first?.subviews.allSatisfy({ $0.subviews.isEmpty }) ?? true { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
+                        statusBar.layoutIfNeeded()
+                    }
+                    defer { statusBar?.removeFromSuperview() }
                     let format = UIGraphicsImageRendererFormat()
                     format.scale = device.scale
                     format.opaque = preview.layout.kind.isDevice
@@ -483,6 +494,24 @@ final class GPUCapture {
     }
 }
 
+/// System UI a device composites over the app (SpringBoard's status bar), drawn in-process with
+/// UIKit's own views so materials behind it (Liquid Glass) see the same pixels.
+@MainActor
+enum SystemChrome {
+    typealias Apply = @convention(c) (UIView) -> Void
+    static let apply: Apply? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_apply_status_bar_data").map { unsafeBitCast($0, to: Apply.self) }
+
+    typealias MakeSpec = @convention(c) (NSDictionary, CGRect, UIScreen) -> UIView?
+    static let makeSpec: MakeSpec? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_make_status_bar_spec").map { unsafeBitCast($0, to: MakeSpec.self) }
+    static let spec: NSDictionary? = ProcessInfo.processInfo.environment["SWIFTSHOT_STATUSBAR"].flatMap { try? JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: $0))) as? NSDictionary }
+
+    static func statusBar(width: CGFloat, height: CGFloat) -> UIView? {
+        guard NoBoot.enabled, let spec, let makeSpec else { return nil }
+        let h = (spec["height"] as? CGFloat) ?? height
+        return makeSpec(spec, CGRect(x: 0, y: 0, width: width, height: h), UIScreen.main)
+    }
+}
+
 /// Captures like a device: Core Animation's window server (the code backboardd composites the
 /// screen with) runs inside this process on a display Agent/FakeDisplay.c provides, the window's
 /// layer tree reaches it through a remote context like an app's windows do, and the frame it
@@ -554,6 +583,7 @@ enum ServerCapture {
         guard opaque else {
             // The framebuffer has no alpha: composite over black and over white, and take
             // coverage from the difference (out = colour + (1 - alpha) * background).
+            _ = pixels(of: window, w, h, scale, background: .black, prime: true)
             guard var black = pixels(of: window, w, h, scale, background: .black), let white = pixels(of: window, w, h, scale, background: .white) else { return nil }
             for i in stride(from: 0, to: black.count, by: 4) {
                 let alpha = 255 - min(255, max(0, Int(white[i + 1]) - Int(black[i + 1])))
@@ -567,6 +597,9 @@ enum ServerCapture {
                   let raw = ctx.makeImage() else { return nil }
             return UIImage(cgImage: raw, scale: scale, orientation: .up)
         }
+        // Shown once first: materials (Liquid Glass) adapt to what the server composited under
+        // them, as on a device where the screen has been visible for a moment.
+        _ = pixels(of: window, w, h, scale, background: nil, prime: true)
         guard var bytes = pixels(of: window, w, h, scale, background: nil),
               let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
               let raw = ctx.makeImage() else { return nil }
@@ -575,7 +608,7 @@ enum ServerCapture {
     }
 
     /// One composited frame of the window (BGRA rows, w × h).
-    static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
+    static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?, prime: Bool = false) -> [UInt8]? {
         guard let context, let wait else { return nil }
         // The window's layer under a pixel-sized root, at the device's scale, for the capture.
         let layer = window.layer
@@ -605,6 +638,7 @@ enum ServerCapture {
         while quiet < 3 && Date() < idle {
             if let next = frame(after: &seen, width: w, height: h, timeout: 0.016) { surface = next; quiet = 0 } else { quiet += 1 }
         }
+        if prime { return [] }
         IOSurfaceLock(surface, .readOnly, nil)
         defer { IOSurfaceUnlock(surface, .readOnly, nil) }
         let stride = IOSurfaceGetBytesPerRow(surface), base = IOSurfaceGetBaseAddress(surface)
