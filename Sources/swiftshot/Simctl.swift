@@ -149,6 +149,38 @@ enum Simctl {
         try await sh(Simctl.cmd(["install", udid, app]))
     }
 
+    /// What a simulator's status bar goes by, from its region and language settings (which
+    /// mirror this Mac's): like any process's current locale, the region's (AppleLocale, with its
+    /// calendar and numbering keywords) in the language of the process's localization for the
+    /// preferred languages (CFLocale's resolution, which `Locale.current` of this bundle-less tool
+    /// skips).
+    /// - clock: the 9:41 (and an iPad's date) is formatted in English whatever the languages:
+    ///   "en_KR" on a Korean simulator ("9:41\u{202F}", not " 9:41"), "en_SA" on an Arabic one
+    ///   (Latin digits), "en_NL", "en_US";
+    /// - language: SpringBoard's own localization ("ar_SA" there), which sets the bar's direction.
+    /// SWIFTSHOT_HOST_LOCALE / SWIFTSHOT_HOST_LANGUAGES (tests: "ko_KR", "ko-KR,en-US") stand for
+    /// this Mac's settings: a simulator set up on a Mac in another region.
+    static func statusBarLocales(_ runtime: SimRuntime) -> (clock: String, language: String) {
+        let env = ProcessInfo.processInfo.environment, defaults = UserDefaults.standard
+        let argumentDomain = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        var host = argumentDomain
+        if let locale = env["SWIFTSHOT_HOST_LOCALE"] { host["AppleLocale"] = locale }
+        if let languages = env["SWIFTSHOT_HOST_LANGUAGES"] { host["AppleLanguages"] = languages.split(separator: ",").map(String.init) }
+        defaults.setVolatileDomain(host, forName: UserDefaults.argumentDomain)
+        defer { defaults.setVolatileDomain(argumentDomain, forName: UserDefaults.argumentDomain) }
+        typealias LikeCurrent = @convention(c) (CFArray, Bool) -> Unmanaged<CFLocale>?
+        guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "_CFLocaleCreateLikeCurrentWithBundleLocalizations") else {
+            return (Locale.current.identifier, Locale.current.identifier)
+        }
+        func current(localizations: [String]) -> String? {
+            (unsafeBitCast(sym, to: LikeCurrent.self)(localizations as CFArray, false)?.takeRetainedValue() as Locale?)?.identifier
+        }
+        let springBoard = runtime.bundlePath.map { ($0 as NSString).appendingPathComponent("Contents/Resources/RuntimeRoot/System/Library/CoreServices/SpringBoard.app") }
+        let localizations = springBoard.flatMap(Bundle.init(path:))?.localizations ?? []
+        let clock = current(localizations: ["en"]) ?? Locale.current.identifier
+        return (clock, (localizations.isEmpty ? nil : current(localizations: localizations)) ?? clock)
+    }
+
     /// Apple's 9:41 on Tuesday 9 January 2007, in this Mac's time zone (an iPad's status bar
     /// shows the date too); swiftshot's own status bar shows the same instant.
     static var statusBarTime: String {
