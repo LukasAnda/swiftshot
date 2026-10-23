@@ -131,11 +131,25 @@ enum Simctl {
         try await sh(Simctl.cmd(["install", udid, app]))
     }
 
+    /// Apple's 9:41 on Tuesday 9 January 2007, in this Mac's time zone (an iPad's status bar
+    /// shows the date too); swiftshot's own status bar shows the same instant.
+    static var statusBarTime: String {
+        // simctl only takes it with fractional seconds ("2007-01-09T08:41:00.000Z").
+        let f = ISO8601DateFormatter(); f.timeZone = TimeZone(identifier: "UTC")
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var c = DateComponents(); c.year = 2007; c.month = 1; c.day = 9; c.hour = 9; c.minute = 41
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = .current
+        return f.string(from: cal.date(from: c)!)
+    }
+
     static func overrideStatusBar(_ udid: String) async throws {
+        // The time goes in its own, last call: any other override re-sends the date with a wrong
+        // weekday ("Sun 9 Jan" instead of "Tue 9 Jan" on iPad).
         try await sh(Simctl.cmd(["status_bar", udid, "override",
-                      "--time", "9:41", "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
+                      "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
                       "--cellularMode", "active", "--cellularBars", "4", "--batteryState", "charged", "--batteryLevel", "100"]),
                      allowFailure: true)
+        try await sh(Simctl.cmd(["status_bar", udid, "override", "--time", statusBarTime]), allowFailure: true)
     }
 
     /// Launches the app with the agent injected and blocks until the app exits.

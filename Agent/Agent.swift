@@ -549,6 +549,7 @@ enum SystemChrome {
             "cellularEntry": ["class": "STStatusBarDataCellularEntry", "status": 5, "rawValue": 4, "displayValue": 4, "type": 5],
             "wifiEntry": ["class": "STStatusBarDataWifiEntry", "status": 5, "rawValue": 3, "displayValue": 3, "type": 0],
             "mainBatteryEntry": ["class": "STStatusBarDataBatteryEntry", "capacity": 100, "state": 2],
+            "menuBarEntry": ["class": "STStatusBarDataEntry"],
         ] as NSDictionary,
     ] }
 
@@ -587,7 +588,7 @@ enum SystemChrome {
     /// A window like the app's (frame, traits, safe area) holding the status bar and home
     /// indicator; nil where a device shows neither.
     static func chrome(over window: UIWindow, root: UIViewController, size: CGSize) -> UIWindow? {
-        guard NoBoot.enabled, NoBoot.screen?.idiom == "phone" else { return nil }
+        guard NoBoot.enabled else { return nil }
         let chrome = window.windowScene.map { DeviceWindow(windowScene: $0) } ?? DeviceWindow(frame: window.frame)
         chrome.frame = window.frame
         chrome.overrideUserInterfaceStyle = window.traitCollection.userInterfaceStyle
@@ -595,7 +596,9 @@ enum SystemChrome {
         chrome.isHidden = false
         chrome.isUserInteractionEnabled = false
         let bar = statusBar(over: window, root: root, size: size, in: chrome)
-        let pill = homeIndicator(over: window, size: size, in: chrome)
+        // An iPad's apps are windows by default (a new simulator's multitasking mode): no home
+        // indicator, SpringBoard's resize grabber in the bottom trailing corner instead.
+        let pill = NoBoot.screen?.idiom == "pad" ? resizeGrabber(size: size, in: chrome) : homeIndicator(over: window, size: size, in: chrome)
         guard bar != nil || pill != nil else { chrome.isHidden = true; return nil }
         chrome.layoutIfNeeded()
         return chrome
@@ -603,7 +606,7 @@ enum SystemChrome {
 
     static func statusBar(over window: UIWindow, root: UIViewController, size: CGSize, in chrome: UIWindow) -> UIView? {
         // iPhones only for now: an iPad's bar also shows the date and the app's menu bar.
-        guard size.width < size.height, let first = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) else { return nil }
+        guard size.width < size.height || NoBoot.screen?.idiom == "pad", let first = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) else { return nil }
         let container = UIView(frame: first.frame)
         container.isUserInteractionEnabled = false
         chrome.addSubview(container)
@@ -654,6 +657,7 @@ enum SystemChrome {
            let group = provider.value(forKey: "lumaTrackingGroup") as AnyObject?, group.responds(to: pause) {
             unsafeBitCast(class_getMethodImplementation(type(of: group), pause), to: Pause.self)(group, pause, true)
         }
+        if bar.responds(to: NSSelectorFromString("setMenuBarProvider:")) { bar.setValue(MenuBarProvider.shared, forKey: "menuBarProvider") }
         apply?(bar)
         // Its data update is applied (aggregated) on the next run-loop passes.
         let until = Date().addingTimeInterval(0.25)
@@ -686,6 +690,43 @@ enum SystemChrome {
         let scale = UIScreen.main.scale   // centred on a whole pixel, like SpringBoard's
         pill.frame = CGRect(x: ((size.width - pillSize.width) / 2 * scale).rounded() / scale, y: size.height - spacing - pillSize.height, width: pillSize.width, height: pillSize.height)
         pill.setValue(3, forKey: "style")   // adaptive: the luma-dodge filter lightens or darkens what's under it
+        chrome.addSubview(pill)
+        return pill
+    }
+
+    /// SpringBoard's resize grabber (SBAppResizeGrabberView, which only loads in SpringBoard):
+    /// a luma-dodge pill along an arc 6 pt inside the display's bottom trailing corner, 30 pt
+    /// long at most a quarter turn, centred on the corner's diagonal.
+    static func resizeGrabber(size: CGSize, in chrome: UIWindow) -> UIView? {
+        dlopen("/System/Library/PrivateFrameworks/MaterialKit.framework/MaterialKit", RTLD_NOW)
+        let initSel = NSSelectorFromString("initWithFrame:settings:graphicsQuality:"), pathSel = NSSelectorFromString("setCustomPillShapePath:animated:")
+        guard let cls = NSClassFromString("MTLumaDodgePillView") as? UIView.Type, let settings = NSClassFromString("MTLumaDodgePillSettings") as? NSObject.Type,
+              cls.instancesRespond(to: initSel), cls.instancesRespond(to: pathSel) else { return nil }
+        let radius = max(NoBoot.screen?.cornerRadius ?? 0, 18)
+        let curve = max(radius - 6, 6), offset = (radius * (1 - 0.5.squareRoot())).rounded()
+        let circumference = (2 * .pi * curve).rounded()
+        let sweep = min(30, circumference / 4) / circumference * 2 * .pi
+        let path = UIBezierPath()
+        let centre = CGPoint(x: offset + 14 - curve, y: offset + 14 - curve)   // the display corner's centre, in the pill
+        let start = CGFloat.pi / 4 + sweep / 2, end = CGFloat.pi / 4 - sweep / 2
+        let first = CGPoint(x: centre.x + curve * cos(start), y: centre.y + curve * sin(start))
+        path.move(to: first); path.addLine(to: first)
+        path.addArc(withCenter: centre, radius: curve, startAngle: start, endAngle: end, clockwise: false)
+        path.addLine(to: CGPoint(x: centre.x + curve * cos(end), y: centre.y + curve * sin(end)))
+        typealias Init = @convention(c) (AnyObject, Selector, CGRect, AnyObject, Int) -> UIView
+        typealias SetPath = @convention(c) (AnyObject, Selector, UIBezierPath, Bool) -> Void
+        let shared = settings.perform(NSSelectorFromString("sharedInstance")).takeUnretainedValue()
+        let pill = unsafeBitCast(class_getMethodImplementation(cls, initSel), to: Init.self)(cls.perform(NSSelectorFromString("alloc")).takeUnretainedValue(), initSel, .zero, shared, -100)
+        pill.setValue(1, forKey: "style")
+        pill.clipsToBounds = false
+        if let backdrop = pill.layer as? NSObject, backdrop.responds(to: NSSelectorFromString("setScale:")) { backdrop.setValue(1.0, forKey: "scale") }
+        unsafeBitCast(class_getMethodImplementation(cls, pathSel), to: SetPath.self)(pill, pathSel, path, false)
+        let rtl = chrome.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        // Flush with the screen's bottom trailing corner (mirrored into the leading one).
+        let side = offset + 20
+        pill.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+        pill.center = CGPoint(x: rtl ? side / 2 : size.width - side / 2, y: size.height - side / 2)
+        if rtl { pill.transform = CGAffineTransform(scaleX: -1, y: 1) }
         chrome.addSubview(pill)
         return pill
     }
@@ -1049,9 +1090,11 @@ enum NoBoot {
             return [r.minX, r.minY, r.width, r.height]
         }
         func barPosition() -> [Double]? {
-            guard let position = scene?.traitCollection.value(forKey: "_sceneBarPosition") as AnyObject?,
+            // (iOS 26 has no scene bar position.)
+            guard let traits = scene?.traitCollection, traits.responds(to: NSSelectorFromString("_sceneBarPosition")),
+                  let position = traits.value(forKey: "_sceneBarPosition") as AnyObject?, position.responds(to: NSSelectorFromString("barAlignmentInsets")),
                   let insets = (position.value(forKey: "barAlignmentInsets") as? NSValue)?.uiEdgeInsetsValue, insets.top.isFinite else { return nil }
-            let classes = ["topBarSizeClass", "bottomBarSizeClass", "leadingBarSizeClass", "trailingBarSizeClass"].map { (position.value(forKey: $0) as? Double) ?? 0 }
+            let classes = ["topBarSizeClass", "bottomBarSizeClass", "leadingBarSizeClass", "trailingBarSizeClass"].map { position.responds(to: NSSelectorFromString($0)) ? (position.value(forKey: $0) as? Double) ?? 0 : 0 }
             return [insets.top, insets.left, insets.bottom, insets.right] + classes
         }
         func sceneTrait(_ name: String) -> Int? {
@@ -1400,6 +1443,26 @@ enum NoBoot {
               global.pointee == nil, let app = class_createInstance(UIApplication.self, 0) as? NSObject else { return }
         global.pointee = Unmanaged.passRetained(app).toOpaque()
         _ = app.perform(NSSelectorFromString("init"))
+    }
+}
+
+/// What SpringBoard hands an iPad's status bar for the app's menu bar: the app menu's title,
+/// which the bar styles like its other items (SBStatusBarMenuBarView).
+final class MenuBarProvider: NSObject {
+    static let shared = MenuBarProvider()
+    @objc func menuBarViewForStatusBar(_ bar: AnyObject) -> UIView {
+        let label = MenuBarTitle()
+        let info = Bundle.main.infoDictionary
+        label.text = (info?["CFBundleDisplayName"] ?? info?["CFBundleName"]) as? String
+        return label
+    }
+}
+
+final class MenuBarTitle: UILabel {
+    @objc func applyStyleAttributes(_ attributes: NSObject) {
+        if let font = attributes.value(forKey: "emphasizedFont") as? UIFont { self.font = font }
+        if let color = attributes.value(forKey: "textColor") as? UIColor { textColor = color }
+        invalidateIntrinsicContentSize()
     }
 }
 

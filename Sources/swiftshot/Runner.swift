@@ -437,6 +437,12 @@ final class Runner {
         let i = Date()
         try await Simctl.install(device.udid, app: app.path)
         record("install \(device.name)", i)
+        if statusBar {
+            // SpringBoard lays out its status bar a pixel differently (Wi-Fi next to the signal
+            // bars) until the first app launch after boot; launch once so every capture is settled.
+            try await sh(Simctl.cmd(["launch", "--terminate-running-process", device.udid, app.bundleID]), allowFailure: true)
+            try await sh(Simctl.cmd(["terminate", device.udid, app.bundleID]), allowFailure: true)
+        }
         Log.info("Ready: \(device.name) (boot+install \(ms(since: t)))")
         return device
     }
@@ -503,7 +509,15 @@ final class Runner {
                           let path = info["path"] as? String else {
                         try? await Task.sleep(nanoseconds: 5_000_000); continue
                     }
-                    try? await Simctl.screenshot(device.udid, to: path)
+                    // Until two grabs agree: SpringBoard is still animating its own chrome right
+                    // after a launch (an iPad's home indicator fades out, a cold boot's Wi-Fi).
+                    var previous: Data?
+                    for _ in 0..<8 {
+                        try? await Simctl.screenshot(device.udid, to: path)
+                        let grab = FileManager.default.contents(atPath: path)
+                        if grab != nil && grab == previous { break }
+                        previous = grab
+                    }
                     if (info["landscape"] as? Bool) == true, let dims = try? await sh(["sips", "-g", "pixelWidth", "-g", "pixelHeight", path]) {
                         // Older simctl versions return the portrait framebuffer; rotate only in that case.
                         let numbers = dims.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.suffix(2)
