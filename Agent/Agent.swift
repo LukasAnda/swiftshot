@@ -622,33 +622,23 @@ enum SystemChrome {
         container.isUserInteractionEnabled = false
         chrome.addSubview(container)
         container.addSubview(first)
-        // 0: the default (dark glyphs in light mode, light in dark mode). Where the regions differ
-        // (iOS 26), SpringBoard's automatic style is in charge and its default side is the
-        // automatic dark one (3).
-        let decided = self.styles(for: first, over: window, root: root)
-        let split = Set(decided.map { $0 ?? 0 }).count > 1
-        let styles = decided.map { $0 ?? (split ? (window.traitCollection.userInterfaceStyle == .dark ? 1 : 3) : 0) }
-        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar styles \(decided) -> \(styles)") }
-        first.setValue(styles.first ?? 0, forKey: "style"); first.layoutIfNeeded()
-        if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) {
-            // iOS 26 styles the regions either side of the island on their own: a bar per style,
-            // each shown on its side.
-            second.setValue(trailing, forKey: "style"); second.layoutIfNeeded()
-            container.addSubview(second)
-            // Each bar shows only its side's regions. Not masked or clipped: either renders the bar
-            // offscreen, where the battery's punched-out bolt (destOut) no longer cuts through to
-            // the app as it does on a device.
-            let mid = (NoBoot.screen?.display?.exclusionArea).flatMap { $0.count == 4 ? $0[0] + $0[2] / 2 : nil } ?? size.width / 2
-            for (bar, leading) in [(first, true), (second, false)] {
-                // The items (time, signal, Wi-Fi, battery…): the innermost status bar views.
-                func items(_ v: UIView) -> [UIView] {
-                    let inner = v.subviews.flatMap(items)
-                    return inner.isEmpty && NSStringFromClass(type(of: v)).hasPrefix("STUIStatusBar") && v !== bar ? [v] : inner
-                }
-                for item in items(bar) where (item.convert(item.bounds, to: bar).midX < mid) != leading { item.isHidden = true }
-            }
+        // 0: the default (dark glyphs in light mode, light in dark mode).
+        let (style, regions) = self.styles(for: first, over: window, root: root)
+        let setAutomatic = NSSelectorFromString("_setAutomaticStyle:additionalStylesForRegionIdentifiers:")
+        if let regions, first.responds(to: setAutomatic) {
+            // iOS 26: regions whose luma stands out get their own style, set the way SpringBoard's
+            // luma tracking does: one bar in its automatic style, its views' traits following the
+            // bar's style (the charging bolt's alpha follows them).
+            if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar automatic style \(regions.style), regions \(regions.outliers)") }
+            typealias SetAutomatic = @convention(c) (AnyObject, Selector, Int, NSDictionary) -> Void
+            first.setValue(automaticStyle, forKey: "style")
+            unsafeBitCast(class_getMethodImplementation(type(of: first), setAutomatic), to: SetAutomatic.self)(first, setAutomatic, regions.style, regions.outliers as NSDictionary)
+        } else {
+            if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar style \(style.map(String.init) ?? "default")") }
+            first.setValue(style ?? 0, forKey: "style")
         }
-        for bar in container.subviews { bar.isHidden = false }
+        first.layoutIfNeeded()
+        first.isHidden = false
         // Style changes are applied on the next run-loop pass.
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
         for bar in container.subviews { bar.layoutIfNeeded() }
@@ -713,22 +703,23 @@ enum SystemChrome {
     /// The app's explicit status bar style, else SpringBoard's automatic one: light glyphs over
     /// dark content and dark over light, judged by the luma under the bar's luma regions with the
     /// bar's own transition boundaries (between them the default stays: nil). One style for the
-    /// bar, or one per region (leading to trailing) where they differ (iOS 26).
-    static func styles(for bar: UIView, over window: UIWindow, root: UIViewController) -> [Int?] {
+    /// bar; on iOS 26 also the regions that stand out (`regions`: the bar's automatic style and a
+    /// style per region identifier).
+    static func styles(for bar: UIView, over window: UIWindow, root: UIViewController) -> (style: Int?, regions: (style: Int, outliers: [String: Int])?) {
         var vc = root
         while let next = vc.presentedViewController.flatMap({ $0.modalPresentationCapturesStatusBarAppearance ? $0 : nil }) ?? vc.childForStatusBarStyle { vc = next }
         switch vc.preferredStatusBarStyle {
-        case .lightContent: return [1]
-        case .darkContent: return [3]
+        case .lightContent: return (1, nil)
+        case .darkContent: return (3, nil)
         default: break
         }
         let auto = NSSelectorFromString("_useAutomaticStyle")
         typealias Flag = @convention(c) (AnyObject, Selector) -> Bool
         guard bar.responds(to: auto), unsafeBitCast(class_getMethodImplementation(type(of: bar), auto), to: Flag.self)(bar, auto),
-              let provider = bar.value(forKey: "visualProvider") as AnyObject? else { return [nil] }
+              let provider = bar.value(forKey: "visualProvider") as AnyObject? else { return (nil, nil) }
         let views = ["leadingBackgroundLumaView", "centerBackgroundLumaView", "trailingBackgroundLumaView"]
             .compactMap { provider.responds(to: NSSelectorFromString($0)) ? provider.value(forKey: $0) as? UIView : nil }
-        guard !views.isEmpty else { return [nil] }
+        guard !views.isEmpty else { return (nil, nil) }
         var lower = 0.4, upper = 0.7
         if let bounds = views[0].value(forKey: "transitionBoundaries") as? NSValue {
             var pair = (0.0, 0.0); bounds.getValue(&pair, size: MemoryLayout<(Double, Double)>.size); (lower, upper) = pair
@@ -736,12 +727,42 @@ enum SystemChrome {
         let lumas = views.map { luminance(of: window, in: $0.convert($0.bounds, to: window)) }
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar luma \(lumas) bounds \(lower)…\(upper)") }
         func style(_ luma: Double) -> Int? { luma < lower ? 1 : luma > upper ? 3 : nil }
-        // iOS 27 decides for the whole bar by the regions' mean; iOS 26 per region (measured
-        // against booted simulators on both).
+        let mean = lumas.reduce(0, +) / Double(lumas.count)
+        // iOS 27 decides for the whole bar by the regions' mean (measured against booted simulators).
         let major = Int(job?.runtime.split(separator: ".").first ?? "27") ?? 27
-        if major >= 27 { return [style(lumas.reduce(0, +) / Double(lumas.count))] }
-        return lumas.map(style)
+        if major >= 27 { return (style(mean), nil) }
+        // iOS 26 runs UIKit's _UILumaTrackingGroup: the bar's level from the regions' mean, each
+        // region's from its own luma (1: a light background, 2: a dark one); between the
+        // boundaries a level stays as seeded (dark glyphs; light ones in dark mode, as the
+        // two-bar split assumed before). A region whose
+        // level differs from the bar's, by more than the group's minimum difference from the other
+        // regions' mean, is an outlier: SpringBoard styles its region identifiers on their own.
+        let seed = window.traitCollection.userInterfaceStyle == .dark ? 2 : 1
+        func level(_ luma: Double) -> Int { luma >= upper ? 1 : luma <= lower ? 2 : seed }
+        // A level's style (STUIStatusBarVisualProvider_iOS): lightContent over dark, darkContent over light.
+        func levelStyle(_ level: Int) -> Int { level == 2 ? 1 : 2 }
+        let group = provider.responds(to: NSSelectorFromString("lumaTrackingGroup")) ? provider.value(forKey: "lumaTrackingGroup") as AnyObject? : nil
+        let minimumDifference = group?.responds(to: NSSelectorFromString("minimumDifference")) == true ? group?.value(forKey: "minimumDifference") as? Double ?? 0 : 0
+        let barLevel = level(mean)
+        var outliers: [String: Int] = [:]
+        let regionsSel = NSSelectorFromString("regionIdentifiersForBackgroundLumaView:")
+        for (view, luma) in zip(views, lumas) where views.count > 1 && level(luma) != barLevel && provider.responds(to: regionsSel) {
+            let others = (mean * Double(lumas.count) - luma) / Double(lumas.count - 1)
+            guard (level(luma) == 1 ? luma - others : others - luma) > minimumDifference,
+                  let ids = provider.perform(regionsSel, with: view)?.takeUnretainedValue() as? Set<String> else { continue }
+            for id in ids { outliers[id] = levelStyle(level(luma)) }
+        }
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar level \(barLevel), minimum difference \(minimumDifference), outliers \(outliers)") }
+        if !outliers.isEmpty { return (nil, (levelStyle(barLevel), outliers)) }
+        // One style: the regions' where they agree (undecided ones taking the seeded side).
+        let decided = Set(lumas.map(style))
+        if decided.count == 1 { return (decided.first!, nil) }
+        let seeded = Set(lumas.map { style($0) ?? (seed == 2 ? 1 : 3) })
+        return (seeded.count == 1 ? seeded.first! : (barLevel == 2 ? 1 : 3), nil)
     }
+
+    /// STUIStatusBar's automatic style, the one SpringBoard's bar runs in.
+    static let automaticStyle = 128
 
     /// Average Rec. 709 luma (0…1) of what the window shows in `rect`.
     static func luminance(of window: UIWindow, in rect: CGRect) -> Double {
