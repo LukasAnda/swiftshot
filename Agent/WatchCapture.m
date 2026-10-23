@@ -203,7 +203,7 @@ CGImageRef swiftshot_watch_server_capture(id window, double width, double height
     if (!swiftshot_watch_start_server(w, h)) return NULL;
     bool (*resize)(int, unsigned, unsigned) = dlsym(RTLD_DEFAULT, "swiftshot_fb_resize");
     if (!resize || !resize(0, (unsigned)w, (unsigned)h)) { fprintf(stderr, "[swiftshot] watch capture: cannot resize the display\n"); return NULL; }
-    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:10];
     while ([deadline timeIntervalSinceNow] > 0) {
         CGRect b = CGRectZero;
         [(NSValue *)[server_display valueForKey:@"bounds"] getValue:&b size:sizeof b];
@@ -232,7 +232,7 @@ CGImageRef swiftshot_watch_server_capture(id window, double width, double height
         [server_context setValue:root forKey:@"layer"];
         [NSClassFromString(@"CATransaction") flush];
         NSDate *shown = [NSDate date];
-        SSSurface s = next_frame(&seen, w, h, 2);
+        SSSurface s = next_frame(&seen, w, h, 20);   // seconds on a CI VM's GPU (shaders compiling)
         // Idle: no new frame for three gaps of half the first frame's latency (slow CI GPUs).
         double gap = MAX(0.016, -[shown timeIntervalSinceNow] * 0.5);
         int quiet = 0;

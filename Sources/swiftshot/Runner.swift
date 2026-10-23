@@ -182,6 +182,11 @@ final class Runner {
         // process handle"); that is transient, so retry a couple of times before failing.
         var output = ""
         for attempt in 1...3 {
+            // A retry starts the screenshot handshake over: requests and acks a failed attempt
+            // left behind would let the relaunched app skip its screenshots.
+            if let control = job.controlDir, let stale = try? FileManager.default.contentsOfDirectory(atPath: control) {
+                for file in stale { try? FileManager.default.removeItem(atPath: (control as NSString).appendingPathComponent(file)) }
+            }
             do {
                 output = try await Simctl.launchWithAgent(udid, bundleID: app.bundleID, agent: agent, job: jobPath,
                                                           language: job.language, locale: localeIdentifier(for: job.language), contentSize: contentSize,
@@ -485,12 +490,14 @@ final class Runner {
             try FileManager.default.createDirectory(atPath: control, withIntermediateDirectories: true)
             let job = makeJob(mode: .device, language: language, runtime: runtime, devices: [profile], controlDir: control, target: target)
 
-            // Screenshot pump: whenever the agent signals N.ready, grab the framebuffer and ack.
+            // Screenshot pump: whenever the agent signals N.ready, grab the framebuffer and ack. It
+            // serves the lowest unanswered request, so a relaunched app (retry) starts over cleanly.
             let pump = Task {
-                var next = 0
                 while !Task.isCancelled {
-                    let ready = (control as NSString).appendingPathComponent("\(next).ready")
-                    guard let data = FileManager.default.contents(atPath: ready),
+                    let files = Set((try? FileManager.default.contentsOfDirectory(atPath: control)) ?? [])
+                    let pending = files.compactMap { $0.hasSuffix(".ready") ? Int($0.dropLast(6)) : nil }.filter { !files.contains("\($0).done") }
+                    guard let next = pending.min(),
+                          let data = FileManager.default.contents(atPath: (control as NSString).appendingPathComponent("\(next).ready")),
                           let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                           let path = info["path"] as? String else {
                         try? await Task.sleep(nanoseconds: 5_000_000); continue
@@ -504,7 +511,6 @@ final class Runner {
                         }
                     }
                     FileManager.default.createFile(atPath: (control as NSString).appendingPathComponent("\(next).done"), contents: nil)
-                    next += 1
                 }
             }
             let result: JobResult

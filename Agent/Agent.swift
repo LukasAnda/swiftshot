@@ -441,8 +441,10 @@ final class AgentRunner {
         let info: [String: Any] = ["path": out.path, "landscape": false]
         try? JSONSerialization.data(withJSONObject: info).write(to: ready)
 
-        // Wait for the host to take the framebuffer screenshot, keeping the run loop alive.
-        let deadline = Date(timeIntervalSinceNow: 30)
+        // Wait for the host to take the framebuffer screenshot, keeping the run loop alive. Moving
+        // on early would put the next screen in this file (simctl is slow on a CI VM); the job's
+        // timeout covers a host that never answers.
+        let deadline = Date(timeIntervalSinceNow: 600)
         while !FileManager.default.fileExists(atPath: done.path) && Date() < deadline {
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.005))
         }
@@ -585,7 +587,7 @@ enum ServerCapture {
     /// Sizes the display to the capture, like a device's panel (blurs and shadows clamp at its edges).
     static func fit(width: Int, height: Int, scale: CGFloat) -> Bool {
         guard let display, let resize, resize(0, UInt32(width), UInt32(height)) else { return false }
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
             if let b = (display.value(forKey: "bounds") as? NSValue)?.cgRectValue,
                (Int(b.width) == width && Int(b.height) == height) || (Int((b.width * scale).rounded()) == width && Int((b.height * scale).rounded()) == height) {
@@ -720,7 +722,8 @@ enum ServerCapture {
         // The first frame with the commit, then the last one before the server goes idle
         // (implicit animations, materials settling), as a device would show it.
         let shown = Date()
-        guard var surface = frame(after: &seen, width: w, height: h, timeout: 2) else { log("server capture: no frame"); return nil }
+        // The first frame can take seconds on a CI VM's paravirtual GPU (shaders compiling).
+        guard var surface = frame(after: &seen, width: w, height: h, timeout: 20) else { log("server capture: no frame"); return nil }
         let first = Date()
         var frames = 1
         // Idle = no new frame for three gaps of half the time this machine took to present the
