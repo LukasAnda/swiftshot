@@ -271,6 +271,9 @@ final class AgentRunner {
                     // the app's (as on a device, the app's materials don't see them).
                     let chrome = preview.layout.kind.isDevice && job.statusBar != false ? SystemChrome.chrome(over: window, root: vc, size: geo.size) : nil
                     ServerCapture.chrome = chrome
+                    if let chrome, let path = ProcessInfo.processInfo.environment["SWIFTSHOT_TREE"] {
+                        try? layerLines(chrome.layer, 0).joined(separator: "\n").write(toFile: path + ".chrome", atomically: true, encoding: .utf8)
+                    }
                     defer { ServerCapture.chrome = nil; chrome?.isHidden = true }
                     let format = UIGraphicsImageRendererFormat()
                     format.scale = device.scale
@@ -348,7 +351,12 @@ final class AgentRunner {
             func dump(_ v: UIView, _ depth: Int) -> [String] {
                 ["\(depth) \(type(of: v)) f=\(v.frame) s=\(v.safeAreaInsets) m=\(v.layoutMargins)"] + v.subviews.flatMap { dump($0, depth + 1) }
             }
-            try? dump(window, 0).joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
+            var out = dump(window, 0)
+            out.append("traits \(window.traitCollection)")
+            if let scene = window.windowScene { out.append("scene geometry \(scene.effectiveGeometry) session \(scene.session.role.rawValue)") }
+            out += layerLines(window.layer, 0)
+            for other in window.windowScene?.windows ?? [] where other !== window { out.append("=== \(type(of: other))"); out += layerLines(other.layer, 0) }
+            try? out.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
         }
     }
 
@@ -448,8 +456,13 @@ final class AgentRunner {
         // on early would put the next screen in this file (simctl is slow on a CI VM); the job's
         // timeout covers a host that never answers.
         let deadline = Date(timeIntervalSinceNow: 600)
+        var reported = Date()
         while !FileManager.default.fileExists(atPath: done.path) && Date() < deadline {
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.005))
+            if Date().timeIntervalSince(reported) > 60 {
+                reported = Date()
+                log("still waiting for the host to grab \(ready.path) (exists: \(FileManager.default.fileExists(atPath: ready.path)))")
+            }
         }
         let px = scene.screen.nativeBounds.size
         result.shots.append(ShotRecord(
@@ -549,7 +562,6 @@ enum SystemChrome {
             "cellularEntry": ["class": "STStatusBarDataCellularEntry", "status": 5, "rawValue": 4, "displayValue": 4, "type": 5],
             "wifiEntry": ["class": "STStatusBarDataWifiEntry", "status": 5, "rawValue": 3, "displayValue": 3, "type": 0],
             "mainBatteryEntry": ["class": "STStatusBarDataBatteryEntry", "capacity": 100, "state": 2],
-            "menuBarEntry": ["class": "STStatusBarDataEntry"],
         ] as NSDictionary,
     ] }
 
@@ -596,16 +608,15 @@ enum SystemChrome {
         chrome.isHidden = false
         chrome.isUserInteractionEnabled = false
         let bar = statusBar(over: window, root: root, size: size, in: chrome)
-        // An iPad's apps are windows by default (a new simulator's multitasking mode): no home
-        // indicator, SpringBoard's resize grabber in the bottom trailing corner instead.
-        let pill = NoBoot.screen?.idiom == "pad" ? resizeGrabber(size: size, in: chrome) : homeIndicator(over: window, size: size, in: chrome)
+        // iPhones: none. The simulator hides it a moment after a launch, and iOS leaves it out of
+        // screenshots; an iPad running apps full screen keeps showing it.
+        let pill = NoBoot.screen?.idiom == "pad" ? homeIndicator(over: window, size: size, in: chrome) : nil
         guard bar != nil || pill != nil else { chrome.isHidden = true; return nil }
         chrome.layoutIfNeeded()
         return chrome
     }
 
     static func statusBar(over window: UIWindow, root: UIViewController, size: CGSize, in chrome: UIWindow) -> UIView? {
-        // iPhones only for now: an iPad's bar also shows the date and the app's menu bar.
         guard size.width < size.height || NoBoot.screen?.idiom == "pad", let first = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) else { return nil }
         let container = UIView(frame: first.frame)
         container.isUserInteractionEnabled = false
@@ -622,13 +633,19 @@ enum SystemChrome {
         if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) {
             // iOS 26 styles the regions either side of the island on their own: a bar per style,
             // each shown on its side.
-            container.addSubview(second)
             second.setValue(trailing, forKey: "style"); second.layoutIfNeeded()
+            container.addSubview(second)
+            // Each bar shows only its side's regions. Not masked or clipped: either renders the bar
+            // offscreen, where the battery's punched-out bolt (destOut) no longer cuts through to
+            // the app as it does on a device.
             let mid = (NoBoot.screen?.display?.exclusionArea).flatMap { $0.count == 4 ? $0[0] + $0[2] / 2 : nil } ?? size.width / 2
-            for (bar, rect) in [(first, CGRect(x: 0, y: 0, width: mid, height: container.bounds.height)),
-                                (second, CGRect(x: mid, y: 0, width: size.width - mid, height: container.bounds.height))] {
-                let mask = CALayer(); mask.frame = rect; mask.backgroundColor = UIColor.black.cgColor
-                bar.layer.mask = mask
+            for (bar, leading) in [(first, true), (second, false)] {
+                // The items (time, signal, Wi-Fi, battery…): the innermost status bar views.
+                func items(_ v: UIView) -> [UIView] {
+                    let inner = v.subviews.flatMap(items)
+                    return inner.isEmpty && NSStringFromClass(type(of: v)).hasPrefix("STUIStatusBar") && v !== bar ? [v] : inner
+                }
+                for item in items(bar) where (item.convert(item.bounds, to: bar).midX < mid) != leading { item.isHidden = true }
             }
         }
         for bar in container.subviews { bar.isHidden = false }
@@ -657,7 +674,6 @@ enum SystemChrome {
            let group = provider.value(forKey: "lumaTrackingGroup") as AnyObject?, group.responds(to: pause) {
             unsafeBitCast(class_getMethodImplementation(type(of: group), pause), to: Pause.self)(group, pause, true)
         }
-        if bar.responds(to: NSSelectorFromString("setMenuBarProvider:")) { bar.setValue(MenuBarProvider.shared, forKey: "menuBarProvider") }
         apply?(bar)
         // Its data update is applied (aggregated) on the next run-loop passes.
         let until = Date().addingTimeInterval(0.25)
@@ -690,43 +706,6 @@ enum SystemChrome {
         let scale = UIScreen.main.scale   // centred on a whole pixel, like SpringBoard's
         pill.frame = CGRect(x: ((size.width - pillSize.width) / 2 * scale).rounded() / scale, y: size.height - spacing - pillSize.height, width: pillSize.width, height: pillSize.height)
         pill.setValue(3, forKey: "style")   // adaptive: the luma-dodge filter lightens or darkens what's under it
-        chrome.addSubview(pill)
-        return pill
-    }
-
-    /// SpringBoard's resize grabber (SBAppResizeGrabberView, which only loads in SpringBoard):
-    /// a luma-dodge pill along an arc 6 pt inside the display's bottom trailing corner, 30 pt
-    /// long at most a quarter turn, centred on the corner's diagonal.
-    static func resizeGrabber(size: CGSize, in chrome: UIWindow) -> UIView? {
-        dlopen("/System/Library/PrivateFrameworks/MaterialKit.framework/MaterialKit", RTLD_NOW)
-        let initSel = NSSelectorFromString("initWithFrame:settings:graphicsQuality:"), pathSel = NSSelectorFromString("setCustomPillShapePath:animated:")
-        guard let cls = NSClassFromString("MTLumaDodgePillView") as? UIView.Type, let settings = NSClassFromString("MTLumaDodgePillSettings") as? NSObject.Type,
-              cls.instancesRespond(to: initSel), cls.instancesRespond(to: pathSel) else { return nil }
-        let radius = max(NoBoot.screen?.cornerRadius ?? 0, 18)
-        let curve = max(radius - 6, 6), offset = (radius * (1 - 0.5.squareRoot())).rounded()
-        let circumference = (2 * .pi * curve).rounded()
-        let sweep = min(30, circumference / 4) / circumference * 2 * .pi
-        let path = UIBezierPath()
-        let centre = CGPoint(x: offset + 14 - curve, y: offset + 14 - curve)   // the display corner's centre, in the pill
-        let start = CGFloat.pi / 4 + sweep / 2, end = CGFloat.pi / 4 - sweep / 2
-        let first = CGPoint(x: centre.x + curve * cos(start), y: centre.y + curve * sin(start))
-        path.move(to: first); path.addLine(to: first)
-        path.addArc(withCenter: centre, radius: curve, startAngle: start, endAngle: end, clockwise: false)
-        path.addLine(to: CGPoint(x: centre.x + curve * cos(end), y: centre.y + curve * sin(end)))
-        typealias Init = @convention(c) (AnyObject, Selector, CGRect, AnyObject, Int) -> UIView
-        typealias SetPath = @convention(c) (AnyObject, Selector, UIBezierPath, Bool) -> Void
-        let shared = settings.perform(NSSelectorFromString("sharedInstance")).takeUnretainedValue()
-        let pill = unsafeBitCast(class_getMethodImplementation(cls, initSel), to: Init.self)(cls.perform(NSSelectorFromString("alloc")).takeUnretainedValue(), initSel, .zero, shared, -100)
-        pill.setValue(1, forKey: "style")
-        pill.clipsToBounds = false
-        if let backdrop = pill.layer as? NSObject, backdrop.responds(to: NSSelectorFromString("setScale:")) { backdrop.setValue(1.0, forKey: "scale") }
-        unsafeBitCast(class_getMethodImplementation(cls, pathSel), to: SetPath.self)(pill, pathSel, path, false)
-        let rtl = chrome.effectiveUserInterfaceLayoutDirection == .rightToLeft
-        // Flush with the screen's bottom trailing corner (mirrored into the leading one).
-        let side = offset + 20
-        pill.bounds = CGRect(x: 0, y: 0, width: side, height: side)
-        pill.center = CGPoint(x: rtl ? side / 2 : size.width - side / 2, y: size.height - side / 2)
-        if rtl { pill.transform = CGAffineTransform(scaleX: -1, y: 1) }
         chrome.addSubview(pill)
         return pill
     }
@@ -1446,24 +1425,20 @@ enum NoBoot {
     }
 }
 
-/// What SpringBoard hands an iPad's status bar for the app's menu bar: the app menu's title,
-/// which the bar styles like its other items (SBStatusBarMenuBarView).
-final class MenuBarProvider: NSObject {
-    static let shared = MenuBarProvider()
-    @objc func menuBarViewForStatusBar(_ bar: AnyObject) -> UIView {
-        let label = MenuBarTitle()
-        let info = Bundle.main.infoDictionary
-        label.text = (info?["CFBundleDisplayName"] ?? info?["CFBundleName"]) as? String
-        return label
+/// The layer tree with the properties that decide how it composites (SWIFTSHOT_TREE).
+func layerLines(_ l: CALayer, _ depth: Int) -> [String] {
+    var line = "\(depth) \(type(of: l)) f=\(l.frame) o=\(l.opacity)"
+    if let filters = l.filters, !filters.isEmpty { line += " filters=\(filters)" }
+    if let f = l.compositingFilter { line += " comp=\(f)" }
+    if let bg = l.backgroundColor { line += " bg=\(UIColor(cgColor: bg))" }
+    if l.contents != nil { line += " contents" }
+    if l.mask != nil { line += " mask" }
+    if l.masksToBounds { line += " clip" }
+    if !CATransform3DIsIdentity(l.transform) { line += " xf" }
+    if String(describing: type(of: l)).contains("Backdrop") {
+        for k in ["scale", "groupName", "captureOnly", "zoom", "marginWidth"] where l.responds(to: NSSelectorFromString(k)) { line += " \(k)=\(String(describing: l.value(forKey: k)))" }
     }
-}
-
-final class MenuBarTitle: UILabel {
-    @objc func applyStyleAttributes(_ attributes: NSObject) {
-        if let font = attributes.value(forKey: "emphasizedFont") as? UIFont { self.font = font }
-        if let color = attributes.value(forKey: "textColor") as? UIColor { textColor = color }
-        invalidateIntrinsicContentSize()
-    }
+    return [line] + (l.sublayers ?? []).flatMap { layerLines($0, depth + 1) }
 }
 
 /// Stands in for a scene's bar-position component; UIKit only asks it this.

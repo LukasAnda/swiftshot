@@ -422,6 +422,7 @@ final class Runner {
             let t = Date()
             let device = try await Simctl.ensureDevice(type: type, runtime: runtime, suffix: suffix)
             let firstBoot = await TemplateStore.shared.prepare(device, runtime: runtime)
+            if type.name.hasPrefix("iPad") { try await Simctl.useFullScreenApps(device) }
             try await Simctl.boot(device.udid, firstBoot: firstBoot)
             self.record("boot \(device.name)", t)
             return device
@@ -513,7 +514,7 @@ final class Runner {
                     // after a launch (an iPad's home indicator fades out, a cold boot's Wi-Fi).
                     var previous: Data?
                     for _ in 0..<8 {
-                        try? await Simctl.screenshot(device.udid, to: path)
+                        do { try await Simctl.screenshot(device.udid, to: path) } catch { Log.warn("\(type.name): screenshot \(next) failed: \(error)") }
                         let grab = FileManager.default.contents(atPath: path)
                         if grab != nil && grab == previous { break }
                         previous = grab

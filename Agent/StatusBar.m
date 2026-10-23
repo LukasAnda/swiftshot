@@ -24,6 +24,8 @@ void swiftshot_apply_status_bar_data(UIView *bar) {
 id swiftshot_status_bar_data_from_spec(NSDictionary *entries, NSString *dataClass) {
     id data = [NSClassFromString(dataClass ?: @"_UIStatusBarData") new];
     for (NSString *key in entries) {
+        // Entries this runtime's data class doesn't have (added in a later iOS) are left out.
+        if (![data respondsToSelector:NSSelectorFromString(key)]) continue;
         NSDictionary *e = entries[key];
         Class cls = NSClassFromString(e[@"class"] ?: @"_UIStatusBarDataEntry");
         id entry = [cls new];

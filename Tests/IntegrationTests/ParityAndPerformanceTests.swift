@@ -11,7 +11,7 @@ final class ParityAndPerformanceTests: XCTestCase {
     static let tool = root.appendingPathComponent("bin/swiftshot").path
     static let app = root.appendingPathComponent("Example/DemoApp")
     static let env = ProcessInfo.processInfo.environment
-    static let devices = env["SWIFTSHOT_IT_DEVICES"] ?? "iPhone 18 Pro,iPhone 17"
+    static let devices = env["SWIFTSHOT_IT_DEVICES"] ?? "iPhone 18 Pro,iPhone 17,iPad Pro 13-inch (M5)"
     static let ios = env["SWIFTSHOT_IT_IOS"] ?? "27.0"
     static var work = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SWIFTSHOT_IT_OUT"] ?? FileManager.default.temporaryDirectory.path)
         .appendingPathComponent("swiftshot-it-\(ProcessInfo.processInfo.processIdentifier)")
@@ -49,12 +49,10 @@ final class ParityAndPerformanceTests: XCTestCase {
 
     struct Diff { var max = 0; var pixels = 0 }
 
-    /// Max channel difference outside the system chrome a booted simulator composites over the
-    /// app and swiftshot doesn't draw: the status bar (top `skipTop` rows, or `skip` rectangles)
-    /// and the home indicator (a pill centred at the bottom, which SpringBoard shows or hides
-    /// depending on timing). A pixel counts as equal when it equals any of the references: the
-    /// booted simulator itself flips a few glass pixels by 1/255 between runs.
-    func diff(_ a: URL, _ refs: [URL], skipTop: Int, skip: [CGRect] = [], scale: Int = 3, pillHalfWidth: Int = 0) throws -> Diff {
+    /// Max channel difference outside the rows (`skipTop`) and rectangles (`skip`) left out. A
+    /// pixel counts as equal when it equals any of the references: the booted simulator itself
+    /// flips a few glass pixels by 1/255 between runs.
+    func diff(_ a: URL, _ refs: [URL], skipTop: Int, skip: [CGRect] = []) throws -> Diff {
         let x = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: a)))
         let ys = try refs.map { try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: $0))) }
         XCTAssertEqual(x.bitsPerSample, 8, "\(a.lastPathComponent): 8-bit like the framebuffer")
@@ -62,9 +60,8 @@ final class ParityAndPerformanceTests: XCTestCase {
         guard ys.allSatisfy({ $0.pixelsWide == x.pixelsWide && $0.pixelsHigh == x.pixelsHigh }), let bx = x.bitmapData else { return Diff(max: 255, pixels: -1) }
         var d = Diff()
         let px = x.bitsPerPixel / 8
-        let pill = (x.pixelsWide / 2 - pillHalfWidth * scale)...(x.pixelsWide / 2 + pillHalfWidth * scale), pillTop = pillHalfWidth > 0 ? x.pixelsHigh - 21 * scale : Int.max
         for r in skipTop..<x.pixelsHigh {
-            for c in 0..<x.pixelsWide where !(r >= pillTop && pill.contains(c)) && !skip.contains(where: { $0.contains(CGPoint(x: c, y: r)) }) {
+            for c in 0..<x.pixelsWide where !skip.contains(where: { $0.contains(CGPoint(x: c, y: r)) }) {
                 var best = Int.max
                 for y in ys {
                     guard let by = y.bitmapData else { continue }
@@ -80,8 +77,8 @@ final class ParityAndPerformanceTests: XCTestCase {
     }
 
     /// Renders `previews` without a simulator and twice on booted simulators, and requires every
-    /// pixel outside the system chrome to equal a booted one.
-    func assertParity(devices: String, ios: String, previews: [String], skipTop: Int, skip: [CGRect] = [], pillHalfWidth: Int = 0, tag: String) throws {
+    /// pixel (outside `skip`) to equal a booted one.
+    func assertParity(devices: String, ios: String, previews: [String], skipTop: Int, skip: [CGRect] = [], tag: String) throws {
         let list = previews.joined(separator: ",")
         let virtual = Self.work.appendingPathComponent("\(tag)virtual")
         let refs = (1...2).map { Self.work.appendingPathComponent("\(tag)device\($0)") }
@@ -91,7 +88,7 @@ final class ParityAndPerformanceTests: XCTestCase {
         XCTAssertEqual(files.count, previews.count * devices.split(separator: ",").count)
         var report: [String] = []
         for file in files {
-            let d = try diff(virtual.appendingPathComponent("en-US/\(file)"), refs.map { $0.appendingPathComponent("en-US/\(file)") }, skipTop: skipTop, skip: skip, pillHalfWidth: pillHalfWidth)
+            let d = try diff(virtual.appendingPathComponent("en-US/\(file)"), refs.map { $0.appendingPathComponent("en-US/\(file)") }, skipTop: skipTop, skip: skip)
             report.append("\(file): max \(d.max)/255, \(d.pixels) px")
             XCTAssertEqual(d.max, 0, "\(file) differs from the booted simulator: max \(d.max)/255 on \(d.pixels) px")
         }
@@ -99,20 +96,19 @@ final class ParityAndPerformanceTests: XCTestCase {
     }
 
     func testNoBootMatchesBootedFramebuffer() throws {
-        // The whole frame, status bar included. swiftshot draws the home indicator too, but a
-        // booted simulator hides its own after a moment idle, so the pill's band is left out.
-        try assertParity(devices: Self.devices, ios: Self.ios, previews: Self.parityPreviews + ["Root", "UIKit habit list"], skipTop: 0, pillHalfWidth: 80, tag: "")
+        // The whole frame: status bar, and an iPad's home indicator.
+        try assertParity(devices: Self.devices, ios: Self.ios, previews: Self.parityPreviews + ["Root", "UIKit habit list"], skipTop: 0, tag: "")
     }
 
     /// iPhone Duo (status bar in a rail on the right, floating sheets, per-corner radii): every
-    /// pixel but the status capsule and the home indicator, Root included.
+    /// pixel but the status capsule, Root included.
     func testDuoMatchesBootedFramebuffer() throws {
         let runtimes = Process(); runtimes.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun"); runtimes.arguments = ["simctl", "list", "devicetypes"]
         let pipe = Pipe(); runtimes.standardOutput = pipe; try runtimes.run(); runtimes.waitUntilExit()
         try XCTSkipUnless(String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).contains("iPhone Duo"), "no iPhone Duo device type (Xcode 27.1)")
         let ios = Self.env["SWIFTSHOT_IT_DUO_IOS"] ?? "27.1"
         try assertParity(devices: "iPhone Duo", ios: ios, previews: Self.parityPreviews + ["Root"], skipTop: 0,
-                         skip: [CGRect(x: 1160, y: 50, width: 186, height: 441)], pillHalfWidth: 84, tag: "duo-")
+                         skip: [CGRect(x: 1160, y: 50, width: 186, height: 441)], tag: "duo-")
     }
 
     /// Apple Watch: no-boot against a booted watch's framebuffer, below the clock (80 px).
@@ -127,7 +123,7 @@ final class ParityAndPerformanceTests: XCTestCase {
         try swiftshot(["--watch-scheme", "DemoWatch", "--devices", watch, "--previews", previews, "--mode", "device", "--output", device.path])
         for name in previews.split(separator: ",") {
             let file = "en-US/\(watch)-\(name).png"
-            let d = try diff(virtual.appendingPathComponent(file), [device.appendingPathComponent(file)], skipTop: 80, scale: 0)
+            let d = try diff(virtual.appendingPathComponent(file), [device.appendingPathComponent(file)], skipTop: 80)
             print("\(watch)-\(name): max \(d.max)/255, \(d.pixels) px")
             // The booted watch itself varies by 1/255 on a few pixels of the week chart between
             // runs; everything else must be equal.

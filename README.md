@@ -124,10 +124,12 @@ tab bars, sheets) or `UIView`s:
 
 ### The status bar and home indicator
 
-Full-screen iPhone screenshots show the system status bar (9:41, full Wi-Fi and cellular, charged
-battery, light or dark like on the device) and the home indicator, drawn with SpringBoard's own
-code. `--no-status-bar` (`"status_bar": false`) leaves both out. iPads don't get a status bar yet
-(an iPad's shows the date and the app's menu bar), and landscape iPhones have none, as on a device.
+Full-screen screenshots show the system status bar (9:41 on Tuesday 9 January 2007, full Wi-Fi
+and cellular, charged battery, light or dark like on the device; iPads show the date too) and the
+home indicator, drawn with SpringBoard's own code. `--no-status-bar` (`"status_bar": false`)
+leaves both out. Landscape iPhones have no status bar, as on a device. iPads are shown in the
+"Full Screen Apps" multitasking mode (a new simulator defaults to windowed apps, which puts a resize
+grabber in the corner); `--mode device` sets its simulators up the same way.
 
 ### The matrix
 
@@ -214,8 +216,8 @@ test` runs this comparison (see [Tests](#tests)).
 * **A real iPhone 14 Pro (iOS 26.5)**, captured with `devicectl device capture screenshot`: within
   2/255 of swiftshot below the status bar (GPU rounding of a real A16 versus the simulator), the
   glass "+" under the status bar within 10/255.
-* **UIKit:** identical on iPhone 16e. On 402 pt-wide iPhones an inset-grouped `UITableView`'s
-  section margins are 16 pt where a `--mode device` capture shows 20 pt (being investigated).
+* **UIKit:** a navigation controller with a large title and an inset-grouped table is
+  byte-identical on every iPhone above, margins included.
 * **Landscape** previews render the landscape window like a booted host does (its scene stays
   portrait).
 * **Apple Watch** (Series 11 42 mm and 46 mm, Ultra 4): byte-identical to a booted watch below the
@@ -402,7 +404,8 @@ swiftshot [run|list|devices|calibrate|emit-table] [options]
 | `--delay s`, `--settle-frames n` | – | `0`, `3` |
 | `--watch-scheme`, `--watch-app`, `--watchos` | – | |
 | `--content-size L` (base Dynamic Type, no suffix) | – | iOS `L`, watch per model |
-| `--format png\|jpeg` | – | `png` |\n| `--no-status-bar` | `override_status_bar` (inverse) | status bar drawn |
+| `--format png\|jpeg` | – | `png` |
+| `--no-status-bar` | `status_bar` (false) | status bar drawn |
 | `--boot`, `--mode device`, `--device-set`, `--template-cache`, `--shutdown` | – | no boot |
 | `--download-missing-runtimes` | – | |
 | `--allow-unsupported-devices` | – | skip |

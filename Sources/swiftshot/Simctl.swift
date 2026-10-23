@@ -123,6 +123,18 @@ enum Simctl {
         if firstBoot { try await firstBootLimiter.run(work) } else { try await work() }
     }
 
+    /// iPads run apps full screen, the classic look (a new simulator defaults to windowed apps:
+    /// a resize grabber instead of the home indicator, SpringBoard's window frame under the app's
+    /// glass). Written to SpringBoard's preferences while the simulator is shut down.
+    static func useFullScreenApps(_ device: SimDevice) async throws {
+        guard let data = device.dataPath else { return }
+        let prefs = (data as NSString).appendingPathComponent("Library/Preferences/com.apple.springboard")
+        let key = "SBMedusaMultitaskingEnabled"
+        if (try? await sh(["defaults", "read", prefs, key]))?.trimmingCharacters(in: .whitespacesAndNewlines) == "0" { return }
+        if try await state(device.udid) == "Booted" { try await shutdown(device.udid) }
+        try await sh(["defaults", "write", prefs, key, "-bool", "NO"])
+    }
+
     static func shutdown(_ udid: String) async throws {
         try await sh(Simctl.cmd(["shutdown", udid]), allowFailure: true)
     }
@@ -167,7 +179,7 @@ enum Simctl {
     }
 
     static func screenshot(_ udid: String, to path: String) async throws {
-        try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", path]))
+        try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", path]), timeout: 60)
     }
 }
 
