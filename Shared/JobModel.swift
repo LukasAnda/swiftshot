@@ -151,8 +151,11 @@ struct Job: Codable {
     var fullLength: Bool? = nil
     /// Draw the system status bar like a device shows it (no-boot); nil (older host): yes.
     var statusBar: Bool? = nil
-    /// The Mac's locale and time zone: a simulator formats its status bar clock with them.
+    /// What a simulator formats its status bar clock with: English in the Mac's region ("en_US",
+    /// "en_KR"; Simctl.statusBarLocales) and the Mac's time zone.
     var statusBarLocale: String? = nil
+    /// SpringBoard's localization (from the Mac's languages): the status bar's layout direction.
+    var statusBarLanguage: String? = nil
     var statusBarTimeZone: String? = nil
 
     var rules: [ScreenRule] { screenRules ?? [] }

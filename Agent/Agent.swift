@@ -559,7 +559,7 @@ enum SystemChrome {
         "barClass": "STUIStatusBar", "dataClass": "STMutableStatusBarData", "avoidExclusionArea": true,
         "entries": [
             "timeEntry": ["class": "STStatusBarDataStringEntry", "stringValue": clock.time],
-            "shortTimeEntry": ["class": "STStatusBarDataStringEntry", "stringValue": clock.time],
+            "shortTimeEntry": ["class": "STStatusBarDataStringEntry", "stringValue": clock.shortTime],
             "dateEntry": ["class": "STStatusBarDataStringEntry", "stringValue": clock.date],
             "cellularEntry": ["class": "STStatusBarDataCellularEntry", "status": 5, "rawValue": 4, "displayValue": 4, "type": 5],
             "wifiEntry": ["class": "STStatusBarDataWifiEntry", "status": 5, "rawValue": 3, "displayValue": 3, "type": 0],
@@ -568,19 +568,33 @@ enum SystemChrome {
     ] }
 
     /// 9:41 on Tuesday 9 January 2007 (what --mode device overrides the simulator to), formatted
-    /// like SpringBoard does with the Mac's locale (a simulator's): "9:41" or "09:41", no AM/PM.
+    /// like a simulator does with the Mac's region (statusBarLocale: English in that region,
+    /// "en_US", "en_NL", "en_KR"), i.e. like +[STStatusBarData timeFormatter / shortTimeFormatter
+    /// / dateFormatter] (which use the current locale: the app's here):
+    /// - time: the short time style ("9:41 AM", "09:41"; iPads show it);
+    /// - short time: the same with empty AM/PM symbols, keeping the separator next to them
+    ///   ("9:41\u{202F}" in en_US): the label is centred with it, so the digits sit 1 pt left of
+    ///   a bare "9:41";
+    /// - date: the "EEEdMMM" pattern with its punctuation characters (quotes included) removed
+    ///   from the pattern itself ("EEE, MMM d" → "Tue Jan 9", "M月d日(EEE)" → "1月9日火").
     static var job: Job?
-    static var clock: (time: String, date: String) {
+    /// Whether SpringBoard reads right to left (its localization is Arabic, Hebrew…).
+    static var springBoardRTL: Bool {
+        Locale(identifier: job?.statusBarLanguage ?? job?.statusBarLocale ?? "en_US").language.characterDirection == .rightToLeft
+    }
+    static var clock: (time: String, shortTime: String, date: String) {
         let locale = Locale(identifier: job?.statusBarLocale ?? "en_US")
         let zone = job?.statusBarTimeZone.flatMap(TimeZone.init(identifier:)) ?? .current
         var cal = Calendar(identifier: .gregorian); cal.timeZone = zone
         let date = cal.date(from: DateComponents(year: 2007, month: 1, day: 9, hour: 9, minute: 41))!
         let f = DateFormatter(); f.locale = locale; f.timeZone = zone
-        let pattern = DateFormatter.dateFormat(fromTemplate: "jmm", options: 0, locale: locale) ?? "h:mm"
-        f.dateFormat = pattern.replacingOccurrences(of: "a", with: "").trimmingCharacters(in: .whitespaces)
+        f.dateStyle = .none; f.timeStyle = .short
         let time = f.string(from: date)
-        f.dateFormat = DateFormatter.dateFormat(fromTemplate: "EEEdMMM", options: 0, locale: locale) ?? "EEE d MMM"
-        return (time, f.string(from: date).replacingOccurrences(of: ",", with: ""))
+        f.amSymbol = ""; f.pmSymbol = ""
+        let shortTime = f.string(from: date)
+        let pattern = DateFormatter.dateFormat(fromTemplate: "EEEdMMM", options: 0, locale: locale) ?? "EEE d MMM"
+        f.dateFormat = pattern.components(separatedBy: .punctuationCharacters).joined()
+        return (time, shortTime, f.string(from: date))
     }
 
     /// The spec with the visual provider SpringBoard picks for the rendered screen (island,
@@ -609,7 +623,6 @@ enum SystemChrome {
         chrome.overrideUserInterfaceStyle = window.traitCollection.userInterfaceStyle
         // SpringBoard's language, not the app's: an Arabic app's status bar still reads left to
         // right (its ring, dots and label) on a simulator in a left-to-right language.
-        let springBoardRTL = Locale(identifier: job?.statusBarLocale ?? "en_US").language.characterDirection == .rightToLeft
         chrome.traitOverrides.layoutDirection = springBoardRTL ? .rightToLeft : .leftToRight
         chrome.forcedSafeArea = window.safeAreaInsets
         chrome.isHidden = false
@@ -669,9 +682,11 @@ enum SystemChrome {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
         // SpringBoard lays its status bar out in the system language's direction, not the app's:
         // an Arabic app on an English simulator keeps the time on the left, and the labels'
-        // natural alignment stays left (each view resolves its own direction).
-        func leftToRight(_ v: UIView) { v.semanticContentAttribute = .forceLeftToRight; v.setNeedsLayout(); v.subviews.forEach(leftToRight) }
-        container.subviews.forEach(leftToRight)
+        // natural alignment stays left (each view resolves its own direction); an Arabic
+        // simulator's has the time on the right.
+        let direction: UISemanticContentAttribute = springBoardRTL ? .forceRightToLeft : .forceLeftToRight
+        func force(_ v: UIView) { v.semanticContentAttribute = direction; v.setNeedsLayout(); v.subviews.forEach(force) }
+        container.subviews.forEach(force)
         for bar in container.subviews { bar.layoutIfNeeded() }
         return container
     }
