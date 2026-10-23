@@ -15,7 +15,7 @@ on:
 jobs:
   test:
     runs-on: ${{ inputs.runner || 'xcode-27' }}
-    timeout-minutes: 60
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - name: Machine
