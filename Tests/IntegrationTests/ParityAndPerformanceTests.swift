@@ -96,7 +96,7 @@ final class ParityAndPerformanceTests: XCTestCase {
     }
 
     func testNoBootMatchesBootedFramebuffer() throws {
-        // The whole frame: status bar, and an iPad's home indicator.
+        // The whole frame: status bar and the home indicator's band.
         try assertParity(devices: Self.devices, ios: Self.ios, previews: Self.parityPreviews + ["Root", "UIKit habit list"], skipTop: 0, tag: "")
     }
 

@@ -129,7 +129,9 @@ and cellular, charged battery, light or dark like on the device; iPads show the 
 home indicator, drawn with SpringBoard's own code. `--no-status-bar` (`"status_bar": false`)
 leaves both out. Landscape iPhones have no status bar, as on a device. iPads are shown in the
 "Full Screen Apps" multitasking mode (a new simulator defaults to windowed apps, which puts a resize
-grabber in the corner); `--mode device` sets its simulators up the same way.
+grabber in the corner); `--mode device` sets its simulators up the same way. With the new design
+(iOS 26 and later) SpringBoard hides the home indicator once touches are idle, on iPads too, so
+screenshots there show none; `--mode device` captures after it has faded out.
 
 ### The matrix
 
@@ -209,6 +211,9 @@ test` runs this comparison (see [Tests](#tests)).
   sheets, alerts, confirmation dialogs, Liquid Glass, gradients, blurs, the dimmed backdrop behind
   sheets, light and dark. The home indicator is identical too whenever the simulator shows its own
   (a booted simulator hides it after a moment idle, so the tests leave its band out).
+* **iPad Pro 13-inch (M5), iOS 27.0**: every DemoApp screen byte-identical over the whole frame,
+  light and dark, in all five DemoApp languages (Arabic included: the status bar keeps the
+  simulator's left-to-right layout).
 * **iOS 26.5** (iPhone 17): byte-identical below the status bar.
 * **iPhone Duo (iOS 27.1):** byte-identical outside the status capsule in the rail, Root and the
   floating sheet included. The rail's glyphs are identical; the faint blur platter behind them is

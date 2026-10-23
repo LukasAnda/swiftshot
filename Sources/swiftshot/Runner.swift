@@ -497,6 +497,11 @@ final class Runner {
             try? FileManager.default.removeItem(atPath: control)
             try FileManager.default.createDirectory(atPath: control, withIntermediateDirectories: true)
             let job = makeJob(mode: .device, language: language, runtime: runtime, devices: [profile], controlDir: control, target: target)
+            // iPads on iOS 26+ show the home grabber when the app comes up and hide it once touches
+            // are idle; captures show the settled screen without it.
+            let major = Int(runtime.version.split(separator: ".").first ?? "") ?? 0
+            let grabber = profile.idiom == "pad" && profile.safeArea.bottom > 0 && major >= 26 ? await HomeGrabberWatch(udid: device.udid) : nil
+            defer { grabber?.stop() }
 
             // Screenshot pump: whenever the agent signals N.ready, grab the framebuffer and ack. It
             // serves the lowest unanswered request, so a relaunched app (retry) starts over cleanly.
@@ -510,8 +515,13 @@ final class Runner {
                           let path = info["path"] as? String else {
                         try? await Task.sleep(nanoseconds: 5_000_000); continue
                     }
+                    if let grabber, !grabber.settled {
+                        let deadline = Date().addingTimeInterval(30)
+                        while !grabber.settled && Date() < deadline && !Task.isCancelled { try? await Task.sleep(nanoseconds: 5_000_000) }
+                        if !grabber.settled { Log.warn("\(type.name): the home grabber did not hide; capturing anyway") }
+                    }
                     // Until two grabs agree: SpringBoard is still animating its own chrome right
-                    // after a launch (an iPad's home indicator fades out, a cold boot's Wi-Fi).
+                    // after a launch (a cold boot's Wi-Fi).
                     var previous: Data?
                     for _ in 0..<8 {
                         do { try await Simctl.screenshot(device.udid, to: path) } catch { Log.warn("\(type.name): screenshot \(next) failed: \(error)") }

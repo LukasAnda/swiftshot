@@ -4,12 +4,12 @@
 // Devices missing here fall back to a heuristic; `swiftshot calibrate` makes them exact.
 enum BuiltInDevices {
     static let table: [String: (Insets, Insets)] = [
-        "iPad (A16)": (Insets(top: 32, left: 0, bottom: 20, right: 0), Insets(top: 32, left: 0, bottom: 20, right: 0)),
-        "iPad Air 11-inch (M4)": (Insets(top: 32, left: 0, bottom: 20, right: 0), Insets(top: 32, left: 0, bottom: 20, right: 0)),
-        "iPad Air 13-inch (M4)": (Insets(top: 32, left: 0, bottom: 20, right: 0), Insets(top: 32, left: 0, bottom: 20, right: 0)),
-        "iPad Pro 11-inch (M5)": (Insets(top: 32, left: 0, bottom: 20, right: 0), Insets(top: 32, left: 0, bottom: 20, right: 0)),
-        "iPad Pro 13-inch (M5)": (Insets(top: 32, left: 0, bottom: 20, right: 0), Insets(top: 32, left: 0, bottom: 20, right: 0)),
-        "iPad mini (A17 Pro)": (Insets(top: 32, left: 0, bottom: 20, right: 0), Insets(top: 32, left: 0, bottom: 20, right: 0)),
+        "iPad (A16)": (Insets(top: 32, left: 0, bottom: 25, right: 0), Insets(top: 32, left: 0, bottom: 25, right: 0)),
+        "iPad Air 11-inch (M4)": (Insets(top: 32, left: 0, bottom: 25, right: 0), Insets(top: 32, left: 0, bottom: 25, right: 0)),
+        "iPad Air 13-inch (M4)": (Insets(top: 32, left: 0, bottom: 25, right: 0), Insets(top: 32, left: 0, bottom: 25, right: 0)),
+        "iPad Pro 11-inch (M5)": (Insets(top: 32, left: 0, bottom: 25, right: 0), Insets(top: 32, left: 0, bottom: 25, right: 0)),
+        "iPad Pro 13-inch (M5)": (Insets(top: 32, left: 0, bottom: 25, right: 0), Insets(top: 32, left: 0, bottom: 25, right: 0)),
+        "iPad mini (A17 Pro)": (Insets(top: 32, left: 0, bottom: 25, right: 0), Insets(top: 32, left: 0, bottom: 25, right: 0)),
         "iPhone 13 mini": (Insets(top: 50, left: 0, bottom: 34, right: 0), Insets(top: 0, left: 50, bottom: 21, right: 50)),
         "iPhone 14": (Insets(top: 47, left: 0, bottom: 34, right: 0), Insets(top: 0, left: 47, bottom: 21, right: 47)),
         "iPhone 15": (Insets(top: 59, left: 0, bottom: 34, right: 0), Insets(top: 0, left: 59, bottom: 21, right: 59)),

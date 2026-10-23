@@ -203,3 +203,52 @@ actor AsyncLimiter {
         return try await work()
     }
 }
+
+/// Follows SpringBoard's home grabber on a booted simulator through its HomeAffordance log. With
+/// the new design (iOS 26+) the grabber always auto-hides: it fades in when an app comes up and
+/// out again once touches have been idle (`SBHomeGrabberView`, "touch idleness changed - started
+/// asserting hidden"). A capture waits for that, rather than for some time to pass.
+final class HomeGrabberWatch: @unchecked Sendable {
+    private let process = Process()
+    private let lock = NSLock()
+    private var pending = ""
+    private var streaming = false, shown = false, hidden = false
+
+    /// Starts following and returns once the log stream is live (its header is printed).
+    init(udid: String) async {
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = Simctl.cmd(["spawn", udid, "log", "stream", "--level", "debug", "--style", "compact", "--predicate",
+                                        "subsystem == \"com.apple.SpringBoard\" AND category == \"HomeAffordance\""])
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            if !data.isEmpty { self?.feed(String(decoding: data, as: UTF8.self)) }
+        }
+        process.terminationHandler = { [weak self] _ in self?.lock.withLock { self?.streaming = true } }
+        do { try process.run() } catch { lock.withLock { streaming = true } }
+        let deadline = Date().addingTimeInterval(30)   // a stream that never comes up
+        while !lock.withLock({ streaming }) && Date() < deadline { try? await Task.sleep(nanoseconds: 5_000_000) }
+    }
+
+    private func feed(_ text: String) {
+        lock.lock(); defer { lock.unlock() }
+        pending += text
+        while let r = pending.range(of: "\n") {
+            let line = pending[..<r.lowerBound]
+            pending.removeSubrange(..<r.upperBound)
+            if line.hasPrefix("Filtering the log data") { streaming = true }
+            // A grabber's presence: "additive presence change to visible with …" / "… finished".
+            if line.contains("presence change to visible") { shown = true; hidden = false }
+            else if line.contains("presence change to hidden finished") { if shown { hidden = true } }
+            else if line.contains("presence change to hidden") { hidden = false }
+        }
+    }
+
+    /// True once a grabber has been shown and has finished hiding again (and not come back).
+    var settled: Bool { lock.withLock { hidden } }
+
+    func stop() { if process.isRunning { process.terminate() } }
+}
