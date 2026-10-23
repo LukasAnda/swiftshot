@@ -31,6 +31,15 @@ typedef struct { SSOrigin origin; SSSize size; } SSRegion;
 - (void)addSublayer:(id)layer;
 - (void)removeFromSuperlayer;
 - (id)superlayer;
+- (CGPoint)anchorPoint;
+- (void)setAnchorPoint:(CGPoint)p;
+- (CGPoint)position;
+- (void)setPosition:(CGPoint)p;
+- (CGAffineTransform)affineTransform;
+- (void)setAffineTransform:(CGAffineTransform)t;
+- (void)addSublayer:(id)layer;
+- (void)removeFromSuperlayer;
+- (id)superlayer;
 - (CGPoint)anchorPoint; - (void)setAnchorPoint:(CGPoint)p;
 - (CGPoint)position; - (void)setPosition:(CGPoint)p;
 - (CGAffineTransform)affineTransform; - (void)setAffineTransform:(CGAffineTransform)t;
@@ -129,6 +138,115 @@ void swiftshot_watch_show(id window, id controller) {
 static void collect_image_layers(id layer, NSMutableArray *into) {
     if ([NSStringFromClass([layer class]) hasSuffix:@"ImageLayer"] && [layer contents]) [into addObject:layer];
     for (id sub in [layer sublayers]) collect_image_layers(sub, into);
+}
+
+// MARK: window server capture (as on iOS: Agent/FakeDisplay.c provides the display)
+
+// The watchOS SDK has no IOSurface library to link; the runtime has the framework.
+typedef void *SSSurface;
+static size_t (*IOSurfaceGetWidth)(SSSurface), (*IOSurfaceGetHeight)(SSSurface), (*IOSurfaceGetBytesPerRow)(SSSurface);
+static void *(*IOSurfaceGetBaseAddress)(SSSurface);
+static int (*IOSurfaceLock)(SSSurface, uint32_t, uint32_t *), (*IOSurfaceUnlock)(SSSurface, uint32_t, uint32_t *);
+static BOOL load_iosurface(void) {
+    if (IOSurfaceGetWidth) return YES;
+    void *h = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    if (!h) return NO;
+    IOSurfaceGetWidth = dlsym(h, "IOSurfaceGetWidth"); IOSurfaceGetHeight = dlsym(h, "IOSurfaceGetHeight");
+    IOSurfaceGetBytesPerRow = dlsym(h, "IOSurfaceGetBytesPerRow"); IOSurfaceGetBaseAddress = dlsym(h, "IOSurfaceGetBaseAddress");
+    IOSurfaceLock = dlsym(h, "IOSurfaceLock"); IOSurfaceUnlock = dlsym(h, "IOSurfaceUnlock");
+    return IOSurfaceGetWidth && IOSurfaceGetHeight && IOSurfaceGetBytesPerRow && IOSurfaceGetBaseAddress && IOSurfaceLock && IOSurfaceUnlock;
+}
+
+static id server_context, server_display;
+
+static SSSurface next_frame(uint64_t *seen, NSUInteger w, NSUInteger h, double timeout) {
+    SSSurface (*wait)(int, uint64_t, double, uint64_t *) = dlsym(RTLD_DEFAULT, "swiftshot_fb_wait");
+    if (!wait) return NULL;
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    do {
+        uint64_t frame = 0;
+        SSSurface s = wait(0, *seen, 0.004, &frame);
+        if (s) {
+            *seen = frame;
+            if (IOSurfaceGetWidth(s) == w && IOSurfaceGetHeight(s) == h) return s;
+            CFRelease(s);
+        }
+        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+    } while ([deadline timeIntervalSinceNow] > 0);
+    return NULL;
+}
+
+/// The window composited by Core Animation's window server in this process (CA_FORCE_LOCAL_SERVER),
+/// as backboardd composites a watch's screen: a CGImage (+1) of the presented framebuffer, or NULL.
+CGImageRef swiftshot_watch_server_capture(id window, double width, double height, double scale) {
+    NSUInteger w = (NSUInteger)llround(width * scale), h = (NSUInteger)llround(height * scale);
+    if (!load_iosurface()) return NULL;
+    if (!server_context) {
+        setenv("SWIFTSHOT_DISPLAYS", [NSString stringWithFormat:@"%lux%lu@326", (unsigned long)w, (unsigned long)h].UTF8String, 1);
+        id server = [NSClassFromString(@"CAWindowServer") performSelector:@selector(server)];
+        server_display = [[server valueForKey:@"displays"] firstObject];
+        id displayId = [server_display valueForKey:@"displayId"];
+        if (!displayId) return NULL;
+        NSString *idKey = *(__unsafe_unretained NSString **)dlsym(RTLD_DEFAULT, "kCAContextDisplayId");
+        NSString *displayableKey = *(__unsafe_unretained NSString **)dlsym(RTLD_DEFAULT, "kCAContextDisplayable");
+        server_context = [NSClassFromString(@"CAContext") performSelector:@selector(remoteContextWithOptions:) withObject:@{idKey: displayId, displayableKey: @YES}];
+        if (!server_context) return NULL;
+    }
+    bool (*resize)(int, unsigned, unsigned) = dlsym(RTLD_DEFAULT, "swiftshot_fb_resize");
+    if (!resize || !resize(0, (unsigned)w, (unsigned)h)) return NULL;
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
+    while ([deadline timeIntervalSinceNow] > 0) {
+        CGRect b = CGRectZero;
+        [(NSValue *)[server_display valueForKey:@"bounds"] getValue:&b size:sizeof b];
+        if ((NSUInteger)b.size.width == w && (NSUInteger)b.size.height == h) break;
+        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+    }
+    id layer = [window layer], superlayer = [layer superlayer];
+    CGPoint anchor = [layer anchorPoint], position = [layer position];
+    CGAffineTransform transform = [layer affineTransform];
+    id root = [NSClassFromString(@"CALayer") new];
+    [root setFrame:CGRectMake(0, 0, w, h)];
+    [root addSublayer:layer];
+    [layer setAnchorPoint:CGPointZero]; [layer setPosition:CGPointZero];
+    [layer setAffineTransform:CGAffineTransformMakeScale(scale, scale)];
+    SSSurface surface = NULL;
+    // Shown once first (materials settle on what's composited under them), then captured once
+    // the server goes idle.
+    for (int pass = 0; pass < 2; pass++) {
+        uint64_t seen = 0;
+        SSSurface (*wait)(int, uint64_t, double, uint64_t *) = dlsym(RTLD_DEFAULT, "swiftshot_fb_wait");
+        SSSurface cur = wait ? wait(0, UINT64_MAX - 1, 0, &seen) : NULL;
+        if (cur) CFRelease(cur);
+        [server_context setValue:root forKey:@"layer"];
+        [NSClassFromString(@"CATransaction") flush];
+        SSSurface s = next_frame(&seen, w, h, 2);
+        int quiet = 0;
+        NSDate *idle = [NSDate dateWithTimeIntervalSinceNow:1];
+        while (s && quiet < 3 && [idle timeIntervalSinceNow] > 0) {
+            SSSurface n = next_frame(&seen, w, h, 0.016);
+            if (n) { CFRelease(s); s = n; quiet = 0; } else quiet++;
+        }
+        if (pass == 1) surface = s; else if (s) CFRelease(s);
+        [server_context setValue:nil forKey:@"layer"];
+        [NSClassFromString(@"CATransaction") flush];
+    }
+    [layer removeFromSuperlayer];
+    [layer setAffineTransform:transform]; [layer setAnchorPoint:anchor]; [layer setPosition:position];
+    if (superlayer) [superlayer addSublayer:layer];
+    if (!surface) return NULL;
+    IOSurfaceLock(surface, 1, NULL);
+    size_t stride = IOSurfaceGetBytesPerRow(surface);
+    void *bytes = malloc(w * h * 4);
+    for (NSUInteger y = 0; y < h; y++) memcpy((char *)bytes + y * w * 4, (char *)IOSurfaceGetBaseAddress(surface) + y * stride, w * 4);
+    IOSurfaceUnlock(surface, 1, NULL);
+    CFRelease(surface);
+    CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef ctx = CGBitmapContextCreate(bytes, w, h, 8, w * 4, srgb, kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little);
+    CGImageRef image = ctx ? CGBitmapContextCreateImage(ctx) : NULL;
+    if (ctx) CGContextRelease(ctx);
+    CGColorSpaceRelease(srgb);
+    free(bytes);
+    return image;
 }
 
 /// Renders the window's layer tree at `scale` and returns a CGImage (+1), or NULL.

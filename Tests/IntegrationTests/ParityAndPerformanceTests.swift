@@ -108,6 +108,7 @@ final class ParityAndPerformanceTests: XCTestCase {
         let shots = try FileManager.default.contentsOfDirectory(atPath: out.appendingPathComponent("en-US").path).filter { $0.hasSuffix(".png") }.count
         XCTAssertGreaterThanOrEqual(shots, 20)
         let inApp = run.output.range(of: #"in-app (\d+) ms"#, options: .regularExpression).flatMap { Double(run.output[$0].dropFirst(7).dropLast(3)) } ?? .infinity
+        for line in run.output.split(separator: "\n") where line.contains("slow capture") { print(line) }
         print("perf: \(shots) shots in \(String(format: "%.1f", run.seconds)) s wall, \(Int(inApp)) ms in-app (\(Int(inApp) / max(shots, 1)) ms/shot)")
         XCTAssertLessThan(run.seconds, 30, "wall time for \(shots) shots (incl. the incremental build)")
         XCTAssertLessThan(inApp / Double(shots), 400, "in-app ms per screenshot")

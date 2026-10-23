@@ -527,6 +527,7 @@ enum ServerCapture {
     static var context: NSObject?
     static var display: NSObject?
     static var started = false
+    static var timings: [String] = []
 
     static func constant(_ name: String) -> NSString? {
         dlsym(UnsafeMutableRawPointer(bitPattern: -2), name).map { $0.assumingMemoryBound(to: NSString.self).pointee }
@@ -578,7 +579,15 @@ enum ServerCapture {
 
     static func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
+        let t0 = Date()
         guard start(width: w, height: h) != nil, fit(width: w, height: h) else { return nil }
+        let tFit = Date()
+        defer {
+            // Slow captures point at the machine's GPU / window server (CI VMs): say where.
+            let total = Date().timeIntervalSince(t0)
+            if total > 0.5 { log("warning: slow capture \(w)x\(h): \(Int(total * 1000)) ms (display resize \(Int(tFit.timeIntervalSince(t0) * 1000)) ms, \(timings.map { "\($0)" }.joined(separator: ", ")))") }
+            timings = []
+        }
         let info = CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         guard opaque else {
             // The framebuffer has no alpha: composite over black and over white, and take
@@ -632,12 +641,16 @@ enum ServerCapture {
         CATransaction.flush()
         // The first frame with the commit, then the last one before the server goes idle
         // (implicit animations, materials settling), as a device would show it.
+        let shown = Date()
         guard var surface = frame(after: &seen, width: w, height: h, timeout: 2) else { log("server capture: no frame"); return nil }
+        let first = Date()
+        var frames = 1
         var quiet = 0
         let idle = Date().addingTimeInterval(1)
         while quiet < 3 && Date() < idle {
-            if let next = frame(after: &seen, width: w, height: h, timeout: 0.016) { surface = next; quiet = 0 } else { quiet += 1 }
+            if let next = frame(after: &seen, width: w, height: h, timeout: 0.016) { surface = next; quiet = 0; frames += 1 } else { quiet += 1 }
         }
+        timings.append("\(prime ? "prime" : "capture"): first frame \(Int(first.timeIntervalSince(shown) * 1000)) ms, idle after \(Int(Date().timeIntervalSince(first) * 1000)) ms, \(frames) frames")
         if prime { return [] }
         IOSurfaceLock(surface, .readOnly, nil)
         defer { IOSurfaceUnlock(surface, .readOnly, nil) }
