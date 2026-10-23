@@ -796,7 +796,6 @@ enum ServerCapture {
     static var chromeContext: NSObject?
     static var display: NSObject?
     static var started = false
-    static var warmedUp = false
     /// How long the last capture pass waited for its first frame (long: shaders compiled).
     static var lastFirstFrame: TimeInterval = 0
     static var timings: [String] = []
@@ -896,11 +895,10 @@ enum ServerCapture {
         // fewer, some glass controls land a 1/255 step off at random, depending on what earlier
         // previews left in the window server). iOS 27 iPhones are deterministic after one.
         let needsExtra = runtimeMajor < 27 || (NoBoot.screen?.display?.verticalBarAllowed ?? 0) != 0
-        let showings = needsExtra ? 2 : (warmedUp ? 0 : 1)
-        if showings > 0 {
-            warmedUp = true
-            for _ in 0..<showings { _ = settled(window, w, h, scale, background: nil) }
-        }
+        // Every capture starts from the render server's cold state (see purgeServer), like the
+        // process's first one, so each gets the first one's showing too.
+        purgeServer()
+        for _ in 0..<(needsExtra ? 2 : 1) { _ = settled(window, w, h, scale, background: nil) }
         guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
         // A material seen for the first time compiles its shaders during the capture; glass that
         // first appeared that slowly settles a hair differently. Capture it again, fresh.
@@ -913,6 +911,24 @@ enum ServerCapture {
               let raw = ctx.makeImage() else { return nil }
         // The framebuffer's bytes as they are: what `simctl io screenshot` saves.
         return UIImage(cgImage: raw, scale: scale, orientation: .up)
+    }
+
+    typealias Purge = @convention(c) (UInt32) -> Void
+    static let purge: Purge? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CARenderServerPurgeServer").map { unsafeBitCast($0, to: Purge.self) }
+
+    /// Starts every capture from the render server's cold resource state, so it doesn't depend on
+    /// what was captured before. The renderer (CA::OGL::Context) keeps the intermediate surfaces
+    /// and transient render textures earlier frames used and hands them out again; per frame,
+    /// Context::collect(false) releases only those unused for a number of frames, and our
+    /// captures are a handful of frames apart. Glass rendered with what an earlier preview left
+    /// there came out a 1/255 step off: the Duo's Share dialog popover after Delete alert
+    /// (~5,500 px; a single-preview run matched the device), iPhone 17 Root dark in a full run.
+    /// Context::collect(true) alone removes the difference (measured by calling it directly);
+    /// CARenderServerPurgeServer is the server's exported purge request (a MIG call answered once
+    /// done): Render::collect(now, true), then SimServer::purge_resources → MetalContext::purge(true)
+    /// → Context::purge(true) → collect(true).
+    static func purgeServer() {
+        purge?(0)
     }
 
     static func settled(_ window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
