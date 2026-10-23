@@ -617,7 +617,9 @@ enum SystemChrome {
     }
 
     static func statusBar(over window: UIWindow, root: UIViewController, size: CGSize, in chrome: UIWindow) -> UIView? {
-        guard size.width < size.height || NoBoot.screen?.idiom == "pad", let first = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) else { return nil }
+        // A rail (iPhone Duo: no top inset) lays its items out in the bar's full height.
+        let height = window.safeAreaInsets.top > 0 ? window.safeAreaInsets.top : size.height
+        guard size.width < size.height || NoBoot.screen?.idiom == "pad", let first = makeBar(over: chrome, width: size.width, height: height) else { return nil }
         let container = UIView(frame: first.frame)
         container.isUserInteractionEnabled = false
         chrome.addSubview(container)
@@ -630,7 +632,7 @@ enum SystemChrome {
         let styles = decided.map { $0 ?? (split ? (window.traitCollection.userInterfaceStyle == .dark ? 1 : 3) : 0) }
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar styles \(decided) -> \(styles)") }
         first.setValue(styles.first ?? 0, forKey: "style"); first.layoutIfNeeded()
-        if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: window.safeAreaInsets.top) {
+        if let leading = styles.first, let trailing = styles.last, leading != trailing, let second = makeBar(over: chrome, width: size.width, height: height) {
             // iOS 26 styles the regions either side of the island on their own: a bar per style,
             // each shown on its side.
             second.setValue(trailing, forKey: "style"); second.layoutIfNeeded()

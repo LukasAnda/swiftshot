@@ -128,11 +128,17 @@ enum Simctl {
     /// glass). Written to SpringBoard's preferences while the simulator is shut down.
     static func useFullScreenApps(_ device: SimDevice) async throws {
         guard let data = device.dataPath else { return }
-        let prefs = (data as NSString).appendingPathComponent("Library/Preferences/com.apple.springboard")
+        // The file itself (plutil): the host's `defaults` caches a write and the simulator's own
+        // preferences daemon never sees it.
+        let prefs = (data as NSString).appendingPathComponent("Library/Preferences/com.apple.springboard.plist")
         let key = "SBMedusaMultitaskingEnabled"
-        if (try? await sh(["defaults", "read", prefs, key]))?.trimmingCharacters(in: .whitespacesAndNewlines) == "0" { return }
+        if (try? await sh(["plutil", "-extract", key, "raw", prefs], stdoutOnly: true))?.trimmingCharacters(in: .whitespacesAndNewlines) == "false" { return }
         if try await state(device.udid) == "Booted" { try await shutdown(device.udid) }
-        try await sh(["defaults", "write", prefs, key, "-bool", "NO"])
+        if !FileManager.default.fileExists(atPath: prefs) {
+            try FileManager.default.createDirectory(atPath: (prefs as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try await sh(["plutil", "-create", "binary1", prefs])
+        }
+        try await sh(["plutil", "-replace", key, "-bool", "NO", prefs])
     }
 
     static func shutdown(_ udid: String) async throws {
