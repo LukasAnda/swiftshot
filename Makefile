@@ -55,7 +55,19 @@ install: all
 	install -d $(PREFIX)/bin
 	install bin/swiftshot bin/SwiftshotAgent.dylib bin/SwiftshotAgent-watchOS.dylib bin/SwiftshotNoBoot.dylib bin/SwiftshotNoBoot-watchOS.dylib bin/swiftshot-simhost $(PREFIX)/bin/
 
+# A release archive: the CLI and everything it loads, for Apple silicon Macs.
+VERSION ?= dev
+dist:
+	sed -i '' 's/^let swiftshotVersion = .*/let swiftshotVersion = "$(VERSION)"/' Sources/swiftshot/Version.swift
+	$(MAKE) all
+	sed -i '' 's/^let swiftshotVersion = .*/let swiftshotVersion = "dev"/' Sources/swiftshot/Version.swift
+	rm -rf dist && mkdir -p dist/swiftshot/bin
+	cp bin/swiftshot bin/swiftshot-simhost bin/SwiftshotAgent.dylib bin/SwiftshotAgent-watchOS.dylib bin/SwiftshotNoBoot.dylib bin/SwiftshotNoBoot-watchOS.dylib dist/swiftshot/bin/
+	cp README.md LICENSE dist/swiftshot/ 2>/dev/null || cp README.md dist/swiftshot/
+	tar -C dist -czf dist/swiftshot-macos-arm64.tar.gz swiftshot
+	shasum -a 256 dist/swiftshot-macos-arm64.tar.gz | sed 's| dist/| |' > dist/swiftshot-macos-arm64.tar.gz.sha256
+
 clean:
 	rm -rf .build bin
 
-.PHONY: all install clean
+.PHONY: all install clean dist

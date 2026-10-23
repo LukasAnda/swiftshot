@@ -1,23 +1,229 @@
 # Swiftshot
 
-App Store screenshots **straight from your SwiftUI `#Preview`s**: every iPhone, iPad and Apple
-Watch, every iOS/watchOS version, language, appearance and Dynamic Type size. No UI tests, no
+App Store screenshots **straight from your SwiftUI and UIKit `#Preview`s**: every iPhone, iPad and
+Apple Watch, every iOS/watchOS version, language, appearance and Dynamic Type size. No UI tests, no
 `SnapshotHelper.swift`, and **no simulator to boot**. It replaces `fastlane snapshot` /
-`capture_ios_screenshots`, and settings can be overridden **per screenshot**.
+`capture_ios_screenshots`, settings can be overridden **per screenshot**, and the output is
+pixel-for-pixel what a booted simulator shows, status bar included.
 
 ```
 swiftshot --project MyApp.xcodeproj --scheme MyApp \
-  --devices "iPhone 17 Pro Max,iPhone SE (3rd generation),iPad Pro 13-inch (M5)" \
+  --devices "iPhone 17 Pro Max,iPhone 16e,iPad Pro 13-inch (M5)" \
   --ios "26.5,27.0" --languages "en-US,de-DE,ar,ja" --appearances light,dark
-
-# Apple Watch: add watch models and the watch app's scheme
-swiftshot --project MyApp.xcodeproj --scheme MyApp --watch-scheme MyWatchApp \
-  --devices "iPhone 17 Pro Max,Apple Watch Series 11 (46mm),Apple Watch Ultra 3 (49mm)"
 ```
 
 The output uses the fastlane/deliver layout (`screenshots/<language>/<device>-<preview>.png`), so
 `fastlane deliver` uploads it unchanged. A `screenshots.html` gallery and a machine-readable
 `swiftshot-report.json` are written next to it.
+
+* [Set up on your Mac](#set-up-on-your-mac) · [Set up on CI](#set-up-on-ci) · [Features](#features) ·
+  [Fidelity](#fidelity) · [vs fastlane](#swiftshot-vs-fastlane) · [How it works](#how-it-works) ·
+  [Reference](#reference) · [Development](#development)
+
+## Set up on your Mac
+
+**Requirements:** an Apple silicon Mac, Xcode 26.6 or 27.x with the simulator runtimes you want to
+render (Xcode → Settings → Components), and an app target with `#Preview`s (iOS 17+). Nothing has
+to be added to your project.
+
+1. **Install** the latest release into `~/.swiftshot/bin` (or set `SWIFTSHOT_PREFIX`), and put it
+   on your `PATH`:
+
+   ```
+   curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | sh
+   export PATH="$HOME/.swiftshot/bin:$PATH"
+   swiftshot --version
+   ```
+
+   Or build from source: `git clone https://github.com/LukasAnda/swiftshot && cd swiftshot && make install`
+   (`PREFIX=/usr/local`).
+
+2. **Check what it sees:** `swiftshot devices` lists the installed runtimes and the geometry used
+   for each device; `swiftshot list --project MyApp.xcodeproj --scheme MyApp` builds the app and
+   prints the previews it found.
+
+3. **Write a `swiftshot.json`** next to your project (fastlane-style keys; every key is also a flag):
+
+   ```json
+   {
+     "project": "MyApp.xcodeproj",
+     "scheme": "MyApp",
+     "devices": ["iPhone 17 Pro Max", "iPhone 16e", "iPad Pro 13-inch (M5)"],
+     "ios_versions": ["27.0"],
+     "languages": ["en-US", "de-DE", "ja"],
+     "appearances": ["light", "dark"],
+     "output_directory": "fastlane/screenshots",
+     "clear_previous_screenshots": true
+   }
+   ```
+
+4. **Render:** `swiftshot` (same as `swiftshot run`). Open `fastlane/screenshots/screenshots.html`
+   to review, and `fastlane deliver` to upload.
+
+Build with the Debug configuration (the default): the compiler only emits `#Preview` code into Debug
+builds, and swiftshot stops with an explanatory error if it finds no previews.
+
+## Set up on CI
+
+swiftshot needs a Mac with Xcode and the runtimes you render; **no simulators, no GUI session and
+no Simulator.app**. It runs on the free GitHub-hosted `macos-26` and `xcode-27` images.
+
+**GitHub Actions**, with the action from this repo (it installs the release and runs `swiftshot run`
+with your `swiftshot.json`, or with `args`):
+
+```yaml
+jobs:
+  screenshots:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - uses: LukasAnda/swiftshot@v0.1.0
+        with:
+          version: 0.1.0                       # or "latest"
+          # args: --devices "iPhone 17 Pro Max" --languages en-US,de-DE
+      - uses: actions/upload-artifact@v4       # the screenshots, gallery and report
+        with:
+          name: screenshots
+          path: fastlane/screenshots
+```
+
+**Any other CI** (Bitrise, CircleCI, Jenkins, Xcode Cloud post-actions…): install the release and
+run it.
+
+```
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.1.0 sh
+~/.swiftshot/bin/swiftshot run --download-missing-runtimes
+```
+
+Pin `SWIFTSHOT_VERSION` (the archive's SHA-256 is checked on install). Releases are on the
+[releases page](https://github.com/LukasAnda/swiftshot/releases): `swiftshot-macos-arm64.tar.gz`
+holds `bin/swiftshot` and the helper and agent dylibs it loads from the same folder.
+
+* `--download-missing-runtimes` fetches runtimes the image lacks.
+* The exit code is non-zero if any screenshot failed. Crashes are reported with the app's output;
+  macOS crash reporting is turned off for the rendering processes, so a CI machine doesn't pile up
+  crash dialogs.
+* Keep DerivedData between jobs (`--derived-data <dir>` plus your CI's cache) to skip the full build.
+* `.github/workflows/benchmark.yml` and `tests.yml` in this repo are working examples.
+
+## Features
+
+### UIKit previews
+
+`#Preview` bodies can be SwiftUI views, `UIViewController`s (with their navigation controllers,
+tab bars, sheets) or `UIView`s:
+
+```swift
+#Preview("UIKit habit list") {
+    let nav = UINavigationController(rootViewController: HabitTableViewController())
+    nav.navigationBar.prefersLargeTitles = true
+    return nav
+}
+#Preview("Streak badge", traits: .sizeThatFitsLayout) { StreakBadgeView(days: 12) }
+```
+
+### The status bar and home indicator
+
+Full-screen iPhone screenshots show the system status bar (9:41, full Wi-Fi and cellular, charged
+battery, light or dark like on the device) and the home indicator, drawn with SpringBoard's own
+code. `--no-status-bar` (`"status_bar": false`) leaves both out. iPads don't get a status bar yet
+(an iPad's shows the date and the app's menu bar), and landscape iPhones have none, as on a device.
+
+### The matrix
+
+`--devices`, `--ios`, `--watchos`, `--languages`, `--appearances light,dark` and
+`--text-sizes default,XXXL,AX5`: every combination is rendered. Text sizes are `XS S M L XL XXL
+XXXL AX1…AX5` or `default` (the device's own). Non-default sizes get a `-<size>` file name suffix.
+
+### Per-screenshot settings
+
+Every setting can be narrowed per preview (exact name or `*` glob, first match wins):
+
+```
+swiftshot … --appearances light \
+  --screen "Welcome: appearances=light,dark" \
+  --screen "Stats: languages=de-DE,ja devices=iPad*" \
+  --screen "Onboarding: text_sizes=default,AX3" \
+  --screen "History: full_length=true" \
+  --screen "Paywall: ios=27 delay=1.5" \
+  --screen "Debug*: skip=true"
+```
+
+or in `swiftshot.json`:
+
+```json
+"screens": [
+  { "preview": "Welcome", "appearances": ["light", "dark"] },
+  { "preview": "Stats", "languages": ["de-DE", "ja"], "devices": ["iPad*"] },
+  { "preview": "Onboarding", "text_sizes": ["default", "AX3"] },
+  { "preview": "History", "full_length": true },
+  { "preview": "Paywall", "ios_versions": ["27"], "delay": 1.5 },
+  { "preview": "Debug*", "skip": true }
+]
+```
+
+Keys: `appearances`, `languages`, `devices` (globs), `ios_versions` (prefix: `27` = 27.x),
+`text_sizes`, `full_length`, `delay`, `skip`.
+
+### Partial views
+
+Previews with `.sizeThatFitsLayout` are rendered at their own size; `.fixedLayout(width:height:)`
+previews at exactly that size. Both get no safe area, like in Xcode, on iOS and on Apple Watch.
+
+```swift
+#Preview("Habit row", traits: .sizeThatFitsLayout) { HabitRow(habit: .sample).padding() }
+```
+
+### Full-length screenshots
+
+`--full-length` (or `full_length=true` per screen) grows a full-screen preview until its main
+scroll view shows all of its content: long lists, forms, settings pages. Lazy content is re-measured
+as it appears. Height is capped at one Metal texture (16384 px; 5461 pt at 3×). iOS only for now.
+
+### Sheets, alerts and dialogs
+
+Present them in the preview the way the app does, and they're captured fully presented (no
+animation in flight):
+
+```swift
+#Preview("New habit sheet") {
+    HabitListView().sheet(isPresented: .constant(true)) { NewHabitView().presentationDetents([.medium]) }
+}
+#Preview("Delete alert") {
+    HabitListView().alert("Delete “Drink water”?", isPresented: .constant(true)) {
+        Button("Delete", role: .destructive) { }
+        Button("Cancel", role: .cancel) { }
+    }
+}
+```
+
+## Fidelity
+
+Checked pixel by pixel against the framebuffer of a booted simulator (`--mode device`); `swift
+test` runs this comparison (see [Tests](#tests)).
+
+* **iPhone, iOS 27.0** (iPhone 18 Pro, iPhone 17, iPhone 16e): every DemoApp screen is
+  **byte-identical** (0/255) to the booted framebuffer **over the whole frame**: the status bar,
+  sheets, alerts, confirmation dialogs, Liquid Glass, gradients, blurs, the dimmed backdrop behind
+  sheets, light and dark. The home indicator is identical too whenever the simulator shows its own
+  (a booted simulator hides it after a moment idle, so the tests leave its band out).
+* **iOS 26.5** (iPhone 17): byte-identical below the status bar.
+* **iPhone Duo (iOS 27.1):** byte-identical outside the status capsule in the rail, Root and the
+  floating sheet included. The rail's glyphs are identical; the faint blur platter behind them is
+  within 3/255 (22/255 over a saturated gradient).
+* **A real iPhone 14 Pro (iOS 26.5)**, captured with `devicectl device capture screenshot`: within
+  2/255 of swiftshot below the status bar (GPU rounding of a real A16 versus the simulator), the
+  glass "+" under the status bar within 10/255.
+* **UIKit:** identical on iPhone 16e. On 402 pt-wide iPhones an inset-grouped `UITableView`'s
+  section margins are 16 pt where a `--mode device` capture shows 20 pt (being investigated).
+* **Landscape** previews render the landscape window like a booted host does (its scene stays
+  portrait).
+* **Apple Watch** (Series 11 42 mm and 46 mm, Ultra 4): byte-identical to a booted watch below the
+  clock, except a few pixels of the week chart at 1/255, where the booted watch itself differs by
+  as much between two of its own runs.
+* **Dynamic Type:** each `--text-sizes` value is pixel-identical (0/255) to a process started at
+  that system text size, on iOS and watchOS.
+* **Determinism:** repeated runs produce byte-identical files (tested).
 
 ## Swiftshot vs fastlane
 
@@ -123,6 +329,12 @@ CoreSimulator only gives it an environment and a few services. swiftshot provide
   bounds, corner radius, P3 gamut, and the display data UIKit derives layout from (safe areas,
   home-affordance allowance, system margins). Without that data, for example, the floating tab bar
   would sit at the wrong height.
+* **System chrome.** The status bar is SpringBoard's own (SystemStatusUI's `STUIStatusBar`, with
+  the visual provider the screen gets: Dynamic Island, notch or the Duo's rail), fed with what
+  `simctl status_bar override` shows (9:41, full bars, charged battery) and laid out around the
+  measured island. Its style follows the app, or the luma of what's under it like SpringBoard's
+  automatic style; the clock is formatted with the Mac's locale, as a simulator does. The home
+  indicator is MaterialKit's adaptive luma-dodge pill.
 * **Capture.** A booted simulator's screen is composited by backboardd with Core Animation's
   window server (`CAWindowServer`), drawing into displays that CoreSimulator's framebuffer service
   provides. swiftshot runs that same window server inside the app process:
@@ -159,175 +371,9 @@ in-process window server as iOS (started before any UI, so SwiftUI's display tim
 watchOS reads some screen answers once per process, so each watch model gets its own short process.
 Text size defaults follow the model (L on small cases, XL from 44 mm up), like a real watch.
 
-## Fidelity
+## Reference
 
-Checked pixel by pixel against the framebuffer of a booted simulator (`--mode device`), below the
-status bar. `swift test` runs this comparison (see [Tests](#tests)).
-
-* **iOS 27.0** (iPhone 18 Pro, iPhone 17) and **iOS 26.5** (iPhone 17): every DemoApp screen is
-  **byte-identical** (0/255) to the booted framebuffer, including sheets, alerts, confirmation
-  dialogs, Liquid Glass, gradients and blurs. That includes the dimmed, blurred backdrop behind
-  sheets and alerts, because it's composited by the same window server code as on a device.
-* **A real iPhone 14 Pro (iOS 26.5)**, DemoApp launched on the phone and captured with
-  `devicectl device capture screenshot`: Welcome, Stats and Settings within 2/255 of swiftshot's
-  no-boot output below the status bar (GPU rounding of a real A16 versus the simulator), Habit list
-  within 10/255 (the glass "+" under the real status bar).
-* **System chrome is not drawn.** A device shows SpringBoard's status bar (and sometimes the home
-  indicator) over the app; swiftshot's output has neither, like Xcode previews. Glass controls
-  that sit right under them blur them in on a device, so those few hundred pixels differ (up to
-  10/255 on the "+" button under the battery, and the tab bar over the home indicator on Root).
-  An in-process status bar (UIKit's own `_UIStatusBar`) is in progress (`SWIFTSHOT_STATUSBAR`).
-  The small black mark a simulator's screen has over its top-left 3¼ px in portrait (in every
-  screenshot, home screen included) is reproduced.
-* **iPhone Duo (iOS 27.1):** every DemoApp screen, Root and the floating sheet included, is
-  **byte-identical** to a booted Duo outside the status capsule in the rail and the home
-  indicator. That takes the Duo's display data: the status bar rail (status bar axis, vertical
-  bar traits, scene corner insets, bar position and exclusion area), the scene's "system provides
-  vertical bars" flag that switches sheets to their floating, 8 pt-inset metrics, and the panel's
-  per-corner radii (8 pt on the hinge side, 59 pt outside) that the sheet's corners follow.
-* **Landscape** previews render the landscape window like a booted host does (its scene stays
-  portrait); `--mode device` doesn't rotate the simulator, so there's no framebuffer reference for
-  them yet.
-* **Apple Watch** (Series 11 42 mm and 46 mm, Ultra 4): byte-identical to a booted watch below the
-  clock, except a few pixels of the week chart at 1/255, where the booted watch itself differs by
-  as much between two of its own runs.
-* **Dynamic Type:** each `--text-sizes` value is pixel-identical (0/255) to a process started at
-  that system text size, on iOS and watchOS.
-* **Determinism:** repeated runs produce byte-identical files (tested).
-
-## Features
-
-### The matrix
-
-`--devices`, `--ios`, `--watchos`, `--languages`, `--appearances light,dark` and
-`--text-sizes default,XXXL,AX5`: every combination is rendered. Text sizes are `XS S M L XL XXL
-XXXL AX1…AX5` or `default` (the device's own). Non-default sizes get a `-<size>` file name suffix.
-
-### Per-screenshot settings
-
-Every setting can be narrowed per preview (exact name or `*` glob, first match wins):
-
-```
-swiftshot … --appearances light \
-  --screen "Welcome: appearances=light,dark" \
-  --screen "Stats: languages=de-DE,ja devices=iPad*" \
-  --screen "Onboarding: text_sizes=default,AX3" \
-  --screen "History: full_length=true" \
-  --screen "Paywall: ios=27 delay=1.5" \
-  --screen "Debug*: skip=true"
-```
-
-or in `swiftshot.json`:
-
-```json
-"screens": [
-  { "preview": "Welcome", "appearances": ["light", "dark"] },
-  { "preview": "Stats", "languages": ["de-DE", "ja"], "devices": ["iPad*"] },
-  { "preview": "Onboarding", "text_sizes": ["default", "AX3"] },
-  { "preview": "History", "full_length": true },
-  { "preview": "Paywall", "ios_versions": ["27"], "delay": 1.5 },
-  { "preview": "Debug*", "skip": true }
-]
-```
-
-Keys: `appearances`, `languages`, `devices` (globs), `ios_versions` (prefix: `27` = 27.x),
-`text_sizes`, `full_length`, `delay`, `skip`.
-
-### Partial views
-
-Previews with `.sizeThatFitsLayout` are rendered at their own size; `.fixedLayout(width:height:)`
-previews at exactly that size. Both get no safe area, like in Xcode, on iOS and on Apple Watch.
-
-```swift
-#Preview("Habit row", traits: .sizeThatFitsLayout) { HabitRow(habit: .sample).padding() }
-```
-
-### Full-length screenshots
-
-`--full-length` (or `full_length=true` per screen) grows a full-screen preview until its main
-scroll view shows all of its content: long lists, forms, settings pages. Lazy content is re-measured
-as it appears. Height is capped at one Metal texture (16384 px; 5461 pt at 3×). iOS only for now.
-
-### Sheets, alerts and dialogs
-
-Present them in the preview the way the app does, and they're captured fully presented (no
-animation in flight):
-
-```swift
-#Preview("New habit sheet") {
-    HabitListView().sheet(isPresented: .constant(true)) { NewHabitView().presentationDetents([.medium]) }
-}
-#Preview("Delete alert") {
-    HabitListView().alert("Delete “Drink water”?", isPresented: .constant(true)) {
-        Button("Delete", role: .destructive) { }
-        Button("Cancel", role: .cancel) { }
-    }
-}
-```
-
-## Tests
-
-```
-swift test                                                  # unit tests, seconds, no simulator
-make && SWIFTSHOT_INTEGRATION=1 swift test --filter IntegrationTests
-```
-
-The integration tests run on `Example/DemoApp` with the built tool:
-
-* **Parity:** renders 8 screens on iPhone 18 Pro and iPhone 17 without a simulator, renders the
-  same screens twice on booted simulators (`--mode device`), and requires every pixel outside the
-  system status bar and home indicator to equal a booted one. (Two references, because a booted
-  simulator itself flips a few glass pixels by 1/255 between runs.)
-* **iPhone Duo parity:** the same on iOS 27.1 with Root, excluding only the status capsule in the
-  rail and the home indicator (skipped without an iPhone Duo device type).
-* **Watch parity:** the same against a booted Apple Watch.
-* **Determinism:** two runs give byte-identical files.
-* **Performance:** all 22 DemoApp screenshots (two iPhones, warm) in under 30 s wall time and
-  under 400 ms per screenshot inside the app (currently ~12 s and ~330 ms on an M-series Mac).
-* **No boot:** a no-boot run leaves the set of booted simulators unchanged.
-
-`SWIFTSHOT_IT_DEVICES` and `SWIFTSHOT_IT_IOS` pick other devices or a runtime. To compare one
-screen by hand, `SWIFTSHOT_TREE=<file>` dumps every view's frame, safe area and margins, in both
-modes.
-
-## CI
-
-* Needs a Mac with Xcode and the simulator runtimes you render. It needs **no simulators, no GUI
-  session and no Simulator.app**. It runs on the free GitHub-hosted `macos-26` and `xcode-27` images
-  (`.github/workflows/benchmark.yml` is a working example).
-* Missing runtimes can be fetched with `--download-missing-runtimes`.
-* Exit code is non-zero if any screenshot failed. Crashes are reported with the app's output;
-  macOS crash reporting is turned off for the rendering processes, so a CI machine doesn't pile up
-  crash dialogs.
-* `bench/run.sh` reproduces the benchmark locally (`bench/run.sh noboot`, `bench/run.sh fastlane`).
-
-## Booted modes (`--boot`, `--mode device`)
-
-The pre-no-boot engine is still there:
-
-* `--boot` renders the same virtual devices inside booted simulators: one per runtime and native
-  scale, seeded from a per-runtime **boot template** (an APFS clone of a migrated data container,
-  so new simulators boot in ~8 s instead of ~30 s), booting while `xcodebuild` builds.
-  `--template-cache <dir>` persists templates between CI jobs.
-* `--mode device` boots a real simulator per device, overrides the status bar (9:41), shows each
-  preview full-screen and grabs the framebuffer with `simctl io screenshot`, for when you want the
-  system status bar and home indicator in the picture.
-* `--device-set <dir>` keeps booted simulators in a private CoreSimulator set; `--shutdown` shuts
-  them down afterwards.
-
-## Install
-
-```
-make            # bin/swiftshot, bin/swiftshot-simhost (macOS), the iOS and watchOS agent and
-                # no-boot dylibs
-make install    # PREFIX=/usr/local
-```
-
-Tested with Xcode 26.6 and 27.x, and no-boot rendering with the iOS 26.5, iOS 27.0 and watchOS 27.0
-runtimes. Previews need iOS 17+ (`#Preview`), and the app's deployment target must be ≤ the oldest
-runtime you render on.
-
-## Usage
+### Usage
 
 ```
 swiftshot [run|list|devices|calibrate|emit-table] [options]
@@ -356,7 +402,7 @@ swiftshot [run|list|devices|calibrate|emit-table] [options]
 | `--delay s`, `--settle-frames n` | – | `0`, `3` |
 | `--watch-scheme`, `--watch-app`, `--watchos` | – | |
 | `--content-size L` (base Dynamic Type, no suffix) | – | iOS `L`, watch per model |
-| `--format png\|jpeg` | – | `png` |
+| `--format png\|jpeg` | – | `png` |\n| `--no-status-bar` | `override_status_bar` (inverse) | status bar drawn |
 | `--boot`, `--mode device`, `--device-set`, `--template-cache`, `--shutdown` | – | no boot |
 | `--download-missing-runtimes` | – | |
 | `--allow-unsupported-devices` | – | skip |
@@ -393,13 +439,70 @@ can put in a `#Preview` works: mock data, environment objects, presented sheets.
 `.environment(\.locale)`, because the real locale is set per process. Use `--delay` (or a per-screen
 `delay`) if a view loads images asynchronously.
 
-## Device support per runtime
+### Device support per runtime
 
 A device is rendered on a runtime only if that runtime supports the device type. Anything else is
 reported as `Skipped: … does not support …` and the exit code stays 0.
 `--allow-unsupported-devices` renders those combinations anyway, best effort and with a warning.
 
-## Layout
+### Booted modes (`--boot`, `--mode device`)
+
+The pre-no-boot engine is still there:
+
+* `--boot` renders the same virtual devices inside booted simulators: one per runtime and native
+  scale, seeded from a per-runtime **boot template** (an APFS clone of a migrated data container,
+  so new simulators boot in ~8 s instead of ~30 s), booting while `xcodebuild` builds.
+  `--template-cache <dir>` persists templates between CI jobs.
+* `--mode device` boots a real simulator per device, overrides the status bar (9:41), shows each
+  preview full-screen and grabs the framebuffer with `simctl io screenshot`, for when you want the
+  system status bar and home indicator in the picture.
+* `--device-set <dir>` keeps booted simulators in a private CoreSimulator set; `--shutdown` shuts
+  them down afterwards.
+
+## Development
+
+```
+make                                    # bin/: the CLI, swiftshot-simhost, iOS/watchOS agent and no-boot dylibs
+swift test                              # unit tests, seconds, no simulator
+make && SWIFTSHOT_INTEGRATION=1 swift test --filter IntegrationTests
+```
+
+### Tests
+
+The integration tests run on `Example/DemoApp` with the built tool:
+
+* **Parity:** renders 9 screens on iPhone 18 Pro and iPhone 17 without a simulator, renders the
+  same screens twice on booted simulators (`--mode device`), and requires every pixel of the frame
+  (status bar included; not the home indicator's band) to equal a booted one. Two references,
+  because a booted simulator itself flips a few glass pixels by 1/255 between runs.
+* **iPhone Duo parity:** the same on iOS 27.1, excluding the status capsule in the rail (skipped
+  without an iPhone Duo device type).
+* **Watch parity:** the same against a booted Apple Watch, below the clock.
+* **Determinism:** two runs give byte-identical files.
+* **Performance:** all DemoApp screenshots on two iPhones (warm) in under 30 s wall time and under
+  400 ms per screenshot inside the app.
+* **No boot:** a no-boot run leaves the set of booted simulators unchanged.
+
+`SWIFTSHOT_IT_DEVICES` and `SWIFTSHOT_IT_IOS` pick other devices or a runtime. To compare one
+screen by hand, `SWIFTSHOT_DEBUG=1 SWIFTSHOT_TREE=<file>` dumps every view's frame, safe area and
+margins, in both modes. `bench/run.sh` reproduces the benchmark (`bench/run.sh noboot`,
+`bench/run.sh fastlane`).
+
+### The device table
+
+`Sources/swiftshot/BuiltInDisplays.swift` is generated by booting every device type on every
+runtime (`bench/update-device-table.sh`, which runs `swiftshot calibrate --emit-table`).
+`.github/workflows/device-table.yml` re-measures it weekly on the hosted images and opens a PR when
+Apple changes anything.
+
+### Releasing
+
+Push a tag (`git tag v0.1.0 && git push origin v0.1.0`) or run the `release` workflow by hand: it
+builds `make dist VERSION=<version>` on a hosted runner and attaches
+`swiftshot-macos-arm64.tar.gz` and its `.sha256` to the GitHub release, which `install.sh` and the
+action download.
+
+### Layout
 
 ```
 Sources/swiftshot/   macOS CLI: orchestration, no-boot launcher, simctl/xcodebuild, device table, report
@@ -407,5 +510,5 @@ Agent/               injected dylibs: discovery, iOS and watchOS renderers, no-b
                      swiftshot-simhost (SimHost.m)
 Shared/JobModel.swift  host ⇄ agent job/result model
 Example/DemoApp/     iOS + watchOS sample app (5 languages incl. RTL) + an equivalent fastlane setup
-bench/               benchmark and device-table scripts used by the workflows
+bench/               benchmark and device-table scripts used by the workflows\ninstall.sh, action.yml  release installer and the GitHub Action
 ```

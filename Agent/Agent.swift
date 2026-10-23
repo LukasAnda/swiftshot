@@ -599,11 +599,20 @@ enum SystemChrome {
         dlopen("/System/Library/PrivateFrameworks/MaterialKit.framework/MaterialKit", RTLD_NOW)
         guard let cls = NSClassFromString("MTLumaDodgePillView") as? UIView.Type else { return nil }
         let pill = cls.init(frame: .zero)
-        typealias SizeFor = @convention(c) (AnyObject, Selector, CGFloat, UIScreen) -> CGSize
-        typealias Spacing = @convention(c) (AnyObject, Selector, UIScreen) -> CGFloat
-        let sizeSel = NSSelectorFromString("suggestedSizeForContentWidth:screen:"), spaceSel = NSSelectorFromString("suggestedEdgeSpacingForScreen:")
-        let pillSize = unsafeBitCast(class_getMethodImplementation(cls, sizeSel), to: SizeFor.self)(pill, sizeSel, size.width, UIScreen.main)
-        let spacing = unsafeBitCast(class_getMethodImplementation(cls, spaceSel), to: Spacing.self)(pill, spaceSel, UIScreen.main)
+        // Sized and spaced like SpringBoard asks for (iOS 27 takes the screen, iOS 26 doesn't).
+        typealias SizeForScreen = @convention(c) (AnyObject, Selector, CGFloat, UIScreen) -> CGSize
+        typealias SizeFor = @convention(c) (AnyObject, Selector, CGFloat) -> CGSize
+        typealias SpacingForScreen = @convention(c) (AnyObject, Selector, UIScreen) -> CGFloat
+        typealias Spacing = @convention(c) (AnyObject, Selector) -> CGFloat
+        let sizeScreenSel = NSSelectorFromString("suggestedSizeForContentWidth:screen:"), sizeSel = NSSelectorFromString("suggestedSizeForContentWidth:")
+        let spaceScreenSel = NSSelectorFromString("suggestedEdgeSpacingForScreen:"), spaceSel = NSSelectorFromString("suggestedEdgeSpacing")
+        let pillSize: CGSize, spacing: CGFloat
+        if pill.responds(to: sizeScreenSel) { pillSize = unsafeBitCast(class_getMethodImplementation(cls, sizeScreenSel), to: SizeForScreen.self)(pill, sizeScreenSel, size.width, UIScreen.main) }
+        else if pill.responds(to: sizeSel) { pillSize = unsafeBitCast(class_getMethodImplementation(cls, sizeSel), to: SizeFor.self)(pill, sizeSel, size.width) }
+        else { return nil }
+        if pill.responds(to: spaceScreenSel) { spacing = unsafeBitCast(class_getMethodImplementation(cls, spaceScreenSel), to: SpacingForScreen.self)(pill, spaceScreenSel, UIScreen.main) }
+        else if pill.responds(to: spaceSel) { spacing = unsafeBitCast(class_getMethodImplementation(cls, spaceSel), to: Spacing.self)(pill, spaceSel) }
+        else { return nil }
         let scale = UIScreen.main.scale   // centred on a whole pixel, like SpringBoard's
         pill.frame = CGRect(x: ((size.width - pillSize.width) / 2 * scale).rounded() / scale, y: size.height - spacing - pillSize.height, width: pillSize.width, height: pillSize.height)
         pill.setValue(3, forKey: "style")   // adaptive: the luma-dodge filter lightens or darkens what's under it
@@ -622,7 +631,11 @@ enum SystemChrome {
         case .darkContent: return 3
         default: break
         }
-        guard let provider = bar.value(forKey: "visualProvider") as AnyObject? else { return nil }
+        // Automatic (luma-driven) style is the bar's own decision (iOS 27); iOS 26 keeps the default.
+        let auto = NSSelectorFromString("_useAutomaticStyle")
+        typealias Flag = @convention(c) (AnyObject, Selector) -> Bool
+        guard bar.responds(to: auto), unsafeBitCast(class_getMethodImplementation(type(of: bar), auto), to: Flag.self)(bar, auto),
+              let provider = bar.value(forKey: "visualProvider") as AnyObject? else { return nil }
         let views = ["leadingBackgroundLumaView", "centerBackgroundLumaView", "trailingBackgroundLumaView"]
             .compactMap { provider.responds(to: NSSelectorFromString($0)) ? provider.value(forKey: $0) as? UIView : nil }
         guard !views.isEmpty else { return nil }
@@ -630,9 +643,14 @@ enum SystemChrome {
         if let bounds = views[0].value(forKey: "transitionBoundaries") as? NSValue {
             var pair = (0.0, 0.0); bounds.getValue(&pair, size: MemoryLayout<(Double, Double)>.size); (lower, upper) = pair
         }
-        let luma = views.map { luminance(of: window, in: $0.convert($0.bounds, to: window)) }.reduce(0, +) / Double(views.count)
-        if luma < lower { return 1 }
-        if luma > upper { return 3 }
+        let lumas = views.map { luminance(of: window, in: $0.convert($0.bounds, to: window)) }
+        let luma = lumas.reduce(0, +) / Double(views.count)
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar luma \(lumas) bounds \(lower)…\(upper)") }
+        // iOS 27's group goes by the mean of its regions; iOS 26 switches only when all of them
+        // are past a boundary (measured against booted simulators on both).
+        let major = Int(job?.runtime.split(separator: ".").first ?? "27") ?? 27
+        if major >= 27 ? luma < lower : lumas.allSatisfy({ $0 < lower }) { return 1 }
+        if major >= 27 ? luma > upper : lumas.allSatisfy({ $0 > upper }) { return 3 }
         return nil
     }
 

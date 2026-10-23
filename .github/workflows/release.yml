@@ -1,0 +1,38 @@
+# Publishes a release: push a tag like v0.1.0 (or run by hand with a version). Builds the CLI and
+# its simulator agents on a hosted runner and attaches swiftshot-macos-arm64.tar.gz (+ .sha256)
+# to the GitHub release, which install.sh and the CI examples in the README download.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version (e.g. 0.1.0); a v-prefixed tag is created for it
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: |
+          v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: xcodebuild -version && make dist VERSION=${{ steps.v.outputs.version }}
+      - name: Smoke test
+        run: dist/swiftshot/bin/swiftshot --version
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=v${{ steps.v.outputs.version }}
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "swiftshot $tag" --generate-notes
+          gh release upload "$tag" dist/swiftshot-macos-arm64.tar.gz dist/swiftshot-macos-arm64.tar.gz.sha256 --clobber

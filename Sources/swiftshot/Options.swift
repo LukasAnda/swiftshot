@@ -242,6 +242,7 @@ struct Options: Codable {
             case "--no-status-bar": options.statusBar = false
             case "--verbose", "-v": options.verbose = true
             case "--help", "-h": print(usage); exit(0)
+            case "--version": print("swiftshot \(swiftshotVersion)"); exit(0)
             default:
                 // emit-table takes calibration files as plain arguments.
                 guard options.command == "emit-table", !args[i].hasPrefix("-") else { throw CLIError("Unknown option \(args[i])\n\n\(usage)") }
