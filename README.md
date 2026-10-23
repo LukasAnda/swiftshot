@@ -79,8 +79,10 @@ swiftshot does none of that:
                                                   + SwiftshotAgent.dylib   ├─ scan __swift5_proto → every #Preview
                                                                            ├─ preview × device × appearance × text size:
                                                                            │   window with the device's size, scale,
-                                                                           │   safe area, display data → CARenderer
- screenshots/de-DE/*.png  ◀──────────── written directly ──────────────────┘   (Metal) → PNG
+                                                                           │   safe area, display data
+                                                  + in-process CAWindowServer on a stand-in display
+                                                    (the compositor backboardd runs) → framebuffer
+ screenshots/de-DE/*.png  ◀──────────── written directly ──────────────────┘   → PNG
 ```
 
 ### 1. Finding the previews
@@ -115,9 +117,18 @@ CoreSimulator only gives it an environment and a few services. swiftshot provide
   bounds, corner radius, P3 gamut, and the display data UIKit derives layout from (safe areas,
   home-affordance allowance, system margins). Without that data, for example, the floating tab bar
   would sit at the wrong height.
-* **Capture.** Each window is rendered with Core Animation's own renderer (`CARenderer`) into a
-  Metal texture, the same engine the render server uses, Liquid Glass included. The result is
-  stored as 16-bit Display P3, like a booted simulator's screenshot.
+* **Capture.** A booted simulator's screen is composited by backboardd with Core Animation's
+  window server (`CAWindowServer`), drawing into displays that CoreSimulator's framebuffer service
+  provides. swiftshot runs that same window server inside the app process:
+  `Agent/FakeDisplay.c` stands in for the framebuffer client (`SimFramebufferClient`, ~20 C
+  functions) and gives it a display with the rendered device's pixel size, resized per screenshot.
+  Each window reaches it through a remote context, the way an app's windows reach backboardd
+  (`CA_FORCE_LOCAL_SERVER` makes remote contexts connect to the in-process server). The frame it
+  presents is the screenshot: the same 8-bit BGRA bytes `simctl io screenshot` saves, written
+  as is. Every window is shown once before the capture, so materials that adapt to what's behind
+  them (Liquid Glass) have settled, as on a device where the screen has been visible for a moment.
+  Previews with a transparent background (`.sizeThatFitsLayout`) are composited over black and
+  over white, and their alpha comes from the difference.
 
 ### 3. Rendering every device in one process
 
@@ -143,21 +154,30 @@ Text size defaults follow the model (L on small cases, XL from 44 mm up), like a
 
 ## Fidelity
 
-Every claim here is checked pixel by pixel against booted simulators (`--boot`):
+Checked pixel by pixel against the framebuffer of a booted simulator (`--mode device`), below the
+status bar. `swift test` runs this comparison (see [Tests](#tests)).
 
-* **iOS 27.0:** all 55 DemoApp screenshots match booted output to within 1–2/255 (dithering). The
-  exception is the vibrant glyphs inside Liquid Glass buttons (≤ 10/255 on ~70 px), where the
-  render server and `CARenderer` differ: a booted simulator's own `CARenderer` gives exactly our
-  result.
-* **Floating tab bar, safe areas, margins:** identical, because the display data comes from the
-  measured table.
-* **Apple Watch** (Series 11, 46 mm): all screens within 1–2/255 below the clock. A booted watch shows the live time
-  in the corner; no-boot output has no status bar (like iOS previews).
-* **Sheets, alerts, confirmation dialogs:** same layout and content as booted. Differences are
-  confined to glass and blur materials (up to ~60/255 in the blurred backdrop).
+* **iOS 27.0** (iPhone 18 Pro, iPhone 17) and **iOS 26.5** (iPhone 17): every DemoApp screen is
+  **byte-identical** (0/255) to the booted framebuffer, including sheets, alerts, confirmation
+  dialogs, Liquid Glass, gradients and blurs. That includes the dimmed, blurred backdrop behind
+  sheets and alerts, because it's composited by the same window server code as on a device.
+* **System chrome is not drawn.** A device shows SpringBoard's status bar (and sometimes the home
+  indicator) over the app; swiftshot's output has neither, like Xcode previews. Glass controls
+  that sit right under them blur them in on a device, so those few hundred pixels differ (up to
+  10/255 on the "+" button under the battery, and the tab bar over the home indicator on Root).
+  An in-process status bar (UIKit's own `_UIStatusBar`) is in progress (`SWIFTSHOT_STATUSBAR`).
+* **iPhone Duo (iOS 27.1):** the side status bar rail is reproduced (status bar axis, vertical
+  bar traits, scene corner insets and bar position, the rail's safe area); navigation bars lay out
+  like on the device (inline large title at y 24). List content is still 4 pt narrower than on a
+  booted Duo, so its screenshots are not yet identical.
+* **Landscape** previews render the landscape window like a booted host does (its scene stays
+  portrait); `--mode device` doesn't rotate the simulator, so there's no framebuffer reference for
+  them yet.
+* **Apple Watch** (Series 11, 46 mm): all screens within 1–2/255 of a booted watch below the clock
+  (watchOS still captures with `CARenderer`).
 * **Dynamic Type:** each `--text-sizes` value is pixel-identical (0/255) to a process started at
   that system text size, on iOS and watchOS.
-* **Determinism:** repeated runs of the DemoApp matrix produce bit-identical files.
+* **Determinism:** repeated runs produce byte-identical files (tested).
 
 ## Features
 
@@ -228,6 +248,27 @@ animation in flight):
     }
 }
 ```
+
+## Tests
+
+```
+swift test                                                  # unit tests, seconds, no simulator
+make && SWIFTSHOT_INTEGRATION=1 swift test --filter IntegrationTests
+```
+
+The integration tests run on `Example/DemoApp` with the built tool:
+
+* **Parity:** renders 8 screens on iPhone 18 Pro and iPhone 17 without a simulator, renders the
+  same screens on booted simulators (`--mode device`), and requires every pixel outside the system
+  status bar and home indicator to be equal.
+* **Determinism:** two runs give byte-identical files.
+* **Performance:** all 22 DemoApp screenshots (two iPhones, warm) in under 30 s wall time and
+  under 400 ms per screenshot inside the app (currently ~10 s and ~260 ms).
+* **No boot:** a no-boot run leaves the set of booted simulators unchanged.
+
+`SWIFTSHOT_IT_DEVICES` and `SWIFTSHOT_IT_IOS` pick other devices or a runtime. To compare one
+screen by hand, `SWIFTSHOT_TREE=<file>` dumps every view's frame, safe area and margins, in both
+modes.
 
 ## CI
 
