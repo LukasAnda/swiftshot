@@ -40,6 +40,12 @@ cold start (105× warm).
 On an Apple Silicon laptop (warm DerivedData), the same 55 iOS screenshots take **8–9 s**; with the
 watch, 70 take 17 s.
 
+fastlane runs with the setup its `snapshot` docs recommend (`Example/DemoApp/fastlane/Snapfile`):
+one simulator per device, created once and reused for every language and screenshot
+(`concurrent_simulators` on, no erase or reinstall between runs), `override_status_bar`, and the
+app built once with `xcodebuild build-for-testing` and then run with `test_without_building`, so no
+language pays for a build (`bench/run.sh fastlane`; the build is counted in its time).
+
 ### Why fastlane is slow, and why swiftshot isn't
 
 fastlane drives your app through **UI tests on booted simulators**:
@@ -171,10 +177,14 @@ status bar. `swift test` runs this comparison (see [Tests](#tests)).
   that sit right under them blur them in on a device, so those few hundred pixels differ (up to
   10/255 on the "+" button under the battery, and the tab bar over the home indicator on Root).
   An in-process status bar (UIKit's own `_UIStatusBar`) is in progress (`SWIFTSHOT_STATUSBAR`).
-* **iPhone Duo (iOS 27.1):** the side status bar rail is reproduced (status bar axis, vertical
-  bar traits, scene corner insets and bar position, the rail's safe area); navigation bars lay out
-  like on the device (inline large title at y 24). List content is still 4 pt narrower than on a
-  booted Duo, so its screenshots are not yet identical.
+  The small black mark a simulator's screen has over its top-left 3¼ px in portrait (in every
+  screenshot, home screen included) is reproduced.
+* **iPhone Duo (iOS 27.1):** every DemoApp screen, Root and the floating sheet included, is
+  **byte-identical** to a booted Duo outside the status capsule in the rail and the home
+  indicator. That takes the Duo's display data: the status bar rail (status bar axis, vertical
+  bar traits, scene corner insets, bar position and exclusion area), the scene's "system provides
+  vertical bars" flag that switches sheets to their floating, 8 pt-inset metrics, and the panel's
+  per-corner radii (8 pt on the hinge side, 59 pt outside) that the sheet's corners follow.
 * **Landscape** previews render the landscape window like a booted host does (its scene stays
   portrait); `--mode device` doesn't rotate the simulator, so there's no framebuffer reference for
   them yet.
@@ -265,12 +275,15 @@ make && SWIFTSHOT_INTEGRATION=1 swift test --filter IntegrationTests
 The integration tests run on `Example/DemoApp` with the built tool:
 
 * **Parity:** renders 8 screens on iPhone 18 Pro and iPhone 17 without a simulator, renders the
-  same screens on booted simulators (`--mode device`), and requires every pixel outside the system
-  status bar and home indicator to be equal.
+  same screens twice on booted simulators (`--mode device`), and requires every pixel outside the
+  system status bar and home indicator to equal a booted one. (Two references, because a booted
+  simulator itself flips a few glass pixels by 1/255 between runs.)
+* **iPhone Duo parity:** the same on iOS 27.1 with Root, excluding only the status capsule in the
+  rail and the home indicator (skipped without an iPhone Duo device type).
 * **Watch parity:** the same against a booted Apple Watch.
 * **Determinism:** two runs give byte-identical files.
 * **Performance:** all 22 DemoApp screenshots (two iPhones, warm) in under 30 s wall time and
-  under 400 ms per screenshot inside the app (currently ~10 s and ~260 ms).
+  under 400 ms per screenshot inside the app (currently ~12 s and ~330 ms on an M-series Mac).
 * **No boot:** a no-boot run leaves the set of booted simulators unchanged.
 
 `SWIFTSHOT_IT_DEVICES` and `SWIFTSHOT_IT_IOS` pick other devices or a runtime. To compare one

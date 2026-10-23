@@ -54,6 +54,9 @@ struct DeviceProfile: Codable {
     var safeArea: Insets           // portrait safe area
     var landscapeSafeArea: Insets
     var cornerRadius: Double
+    /// Per-corner display radii (top left, bottom left, bottom right, top right) when they differ
+    /// from `cornerRadius` (iPhone Duo: 8 on the hinge side). Sheets follow them.
+    var cornerRadii: [Double]? = nil
     /// Panel size in pixels when it differs from size × scale (the "mini" phones render at @3x and
     /// are downsampled by the system to a smaller panel).
     var panelWidth: Double? = nil

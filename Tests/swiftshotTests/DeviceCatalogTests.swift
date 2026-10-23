@@ -33,6 +33,24 @@ final class DeviceCatalogTests: XCTestCase {
         XCTAssertEqual(DeviceCatalog.screen(of: type)?.corner, 59)
     }
 
+    /// The per-corner radii travel separately (scene settings report them; sheets follow them),
+    /// in UIKit's order: top left, bottom left, bottom right, top right.
+    func testPerCornerRadiiWhenTheyDiffer() throws {
+        let duo = try deviceType(name: "iPhone Duo", capabilities: [
+            "DeviceCornerRadius": 59,
+            "displays": [["deviceName": "primary", "width": 1398, "height": 2034, "scale": 3,
+                          "cornerRadiusUL": 8, "cornerRadiusLL": 8, "cornerRadiusLR": 59, "cornerRadiusUR": 59]],
+        ])
+        XCTAssertEqual(DeviceCatalog.screen(of: duo)?.radii, [8, 8, 59, 59])
+        XCTAssertEqual(try XCTUnwrap(DeviceCatalog.profile(for: duo, runtime: "27.1", cache: [:])).0.cornerRadii, [8, 8, 59, 59])
+        let phone = try deviceType(name: "Test Phone", capabilities: [
+            "DeviceCornerRadius": 62,
+            "displays": [["deviceName": "primary", "width": 1206, "height": 2622, "scale": 3,
+                          "cornerRadiusUL": 62, "cornerRadiusLL": 62, "cornerRadiusLR": 62, "cornerRadiusUR": 62]],
+        ])
+        XCTAssertNil(DeviceCatalog.screen(of: phone)?.radii, "uniform corners need no override")
+    }
+
     func testLegacyScreenDimensions() throws {
         let type = try deviceType(name: "Old Phone", capabilities: [
             "ScreenDimensionsCapability": ["main-screen-width": 750, "main-screen-height": 1334, "main-screen-scale": 2],

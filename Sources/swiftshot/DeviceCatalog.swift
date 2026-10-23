@@ -31,7 +31,7 @@ enum DeviceCatalog {
 
     static func cacheKey(device: String, runtime: String) -> String { "\(device)@\(runtime)" }
 
-    struct Screen { let width: Double; let height: Double; let scale: Double; let corner: Double; let faceID: Bool; var pitch: Double = 0 }
+    struct Screen { let width: Double; let height: Double; let scale: Double; let corner: Double; let faceID: Bool; var pitch: Double = 0; var radii: [Double]? = nil }
 
     static func screen(of type: SimDeviceType) -> Screen? {
         let url = URL(fileURLWithPath: type.bundlePath).appendingPathComponent("Contents/Resources/capabilities.plist")
@@ -58,6 +58,8 @@ enum DeviceCatalog {
             // (iPhone Duo: 8 on the hinge side, 59 outside).
             var screen = make(w, h, s, corner > 0 ? corner : number(primary, "cornerRadiusUL") ?? 0)
             screen.pitch = number(primary, "hdpi") ?? 0
+            let radii = ["cornerRadiusUL", "cornerRadiusLL", "cornerRadiusLR", "cornerRadiusUR"].compactMap { number(primary, $0) }
+            if radii.count == 4, radii.contains(where: { $0 != screen.corner }) { screen.radii = radii }
             return screen
         }
         // Older device types: MobileGestalt-style screen dimensions, or mainScreen* in profile.plist.
@@ -110,10 +112,10 @@ enum DeviceCatalog {
         var panel: (Double, Double)?
         if let logical = BuiltInDevices.logicalSize[type.name] {
             panel = (screen.width * screen.scale, screen.height * screen.scale)
-            screen = Screen(width: logical.width, height: logical.height, scale: 3, corner: screen.corner, faceID: screen.faceID)
+            screen = Screen(width: logical.width, height: logical.height, scale: 3, corner: screen.corner, faceID: screen.faceID, radii: screen.radii)
         }
         func withPanel(_ p: DeviceProfile) -> DeviceProfile {
-            var p = p; p.panelWidth = panel?.0; p.panelHeight = panel?.1
+            var p = p; p.panelWidth = panel?.0; p.panelHeight = panel?.1; p.cornerRadii = screen.radii
             p.display = builtInDisplay(type.name, runtime: runtime)
             p.contentSizeCategory = BuiltInDisplays.contentSizeCategory[type.name]
             return p

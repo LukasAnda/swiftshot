@@ -208,16 +208,16 @@ final class AgentRunner {
         for preview in previews where job.wants(preview.name) {
             for device in job.devices where job.wants(preview.name, device: device.name) {
                 for appearance in job.appearances(for: preview.name) {
-                  for textSize in job.textSizes(for: preview.name) {
+                  for textSize in job.textSizes(for: preview.name) { autoreleasepool {
                     let t0 = now()
                     DeviceIdiom.current = device.idiom == "pad" ? .pad : .phone
                     NoBoot.screen = device
-                    let ex = device.display?.exclusionArea ?? ProcessInfo.processInfo.environment["SWIFTSHOT_EXCLUSION"].map { $0.split(separator: ",").compactMap { Double($0) } }
+                    let ex = device.display?.exclusionArea
                     swiftshot_set_exclusion_rect(ex.flatMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil } ?? .null)
                     if let corners = device.display?.cornerInsets, corners.count == 8 { corners.withUnsafeBufferPointer { swiftshot_set_corner_insets($0.baseAddress) } } else { swiftshot_set_corner_insets(nil) }
                     defer { DeviceIdiom.current = nil }
                     guard let vc = controller(fromBody: preview.body()) else {
-                        result.errors.append("\(preview.name): could not build preview body"); continue
+                        result.errors.append("\(preview.name): could not build preview body"); return
                     }
                     var geo = geometry(for: preview, on: device)
                     let window = makeWindow()
@@ -255,10 +255,14 @@ final class AgentRunner {
                         log("\(preview.name) \(device.name): UIDevice idiom \(UIDevice.current.userInterfaceIdiom.rawValue) window safe \(window.safeAreaInsets) view safe \(vc.view.safeAreaInsets) additional \(vc.additionalSafeAreaInsets) frame \(window.frame) vcframe \(vc.view.frame)")
                     }
                     settle(frames: job.settleFrames, delay: job.delay(for: preview.name))
-                    if NoBoot.enabled { NoBoot.finishPresentations(of: vc, in: window, settle: { self.settle(frames: 2, delay: 0) }) }
+                    if NoBoot.enabled { NoBoot.finishLayout(of: vc, in: window, settle: { self.settle(frames: 2, delay: 0) }) }
                     if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { dumpPresentation(vc, window) }
                     if preview.layout.kind.isDevice && job.fullLength(for: preview.name) {
                         geo.size = growToContent(of: vc, in: window, size: geo.size, scale: device.scale, name: preview.name)
+                    }
+                    if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil {
+                        func animated(_ l: CALayer) -> [String] { ((l.animationKeys() ?? []).isEmpty ? [] : ["\(type(of: l.delegate as AnyObject? ?? l)):\(l.animationKeys()!)"]) + (l.sublayers ?? []).flatMap(animated) }
+                        log("animations before capture: \(animated(window.layer).prefix(12))")
                     }
                     // The system status bar over the app, as a device shows it.
                     let statusBar = preview.layout.kind.isDevice && geo.size.width < geo.size.height ? SystemChrome.statusBar(width: geo.size.width, height: window.safeAreaInsets.top) : nil
@@ -283,8 +287,14 @@ final class AgentRunner {
                             window.drawHierarchy(in: bounds, afterScreenUpdates: true)
                         }
                     }
+                    // A presentation's teardown finishes on later run-loop passes; until then the
+                    // next preview's floating bar (iPhone Duo) still sees it in its glass.
+                    func tree(_ c: UIViewController) -> [UIViewController] { [c] + c.children.flatMap(tree) }
+                    let presented = tree(vc).first(where: { $0.presentedViewController != nil })
+                    presented?.dismiss(animated: false)
                     window.isHidden = true
                     window.rootViewController = nil
+                    if presented != nil, (device.display?.verticalBarAllowed ?? 0) != 0 { settle(frames: 1, delay: 0.05) }
                     let output = device.panelWidth.flatMap { w in device.panelHeight.map { h in
                         // Like the real "mini" phones: lay out at @3x, then downsample to the panel.
                         let landscape = geo.size.width > geo.size.height && preview.layout.kind.isDevice
@@ -303,7 +313,7 @@ final class AgentRunner {
                         runtime: job.runtime, file: "\(job.language)/\(file)",
                         width: Int(output.size.width * output.scale), height: Int(output.size.height * output.scale),
                         renderMs: (now() - t0) * 1000))
-                  }
+                  } }
                 }
             }
         }
@@ -312,9 +322,21 @@ final class AgentRunner {
     func dumpPresentation(_ root: UIViewController, _ window: UIWindow) {
         func tree(_ c: UIViewController) -> [UIViewController] { [c] + c.children.flatMap(tree) }
         log("window \(window.frame) safe \(window.safeAreaInsets) screen \(window.screen.bounds) subviews \(window.subviews.map { "\(type(of: $0)) \($0.frame) safe \($0.safeAreaInsets)" })")
+        let isel = NSSelectorFromString("valueForNSIntegerTrait:")
+        typealias Trait = @convention(c) (AnyObject, Selector, AnyClass) -> Int
+        func trait(_ name: String, _ tc: UITraitCollection) -> String {
+            guard let c = NSClassFromString(name), let imp = class_getMethodImplementation(type(of: tc), isel) else { return "-" }
+            return "\(unsafeBitCast(imp, to: Trait.self)(tc, isel, c))"
+        }
         for c in tree(root) { guard let p = c.presentedViewController else { continue }
             var v: UIView? = p.view
             while let view = v { log("  \(type(of: view)) frame \(view.frame) safe \(view.safeAreaInsets)"); v = view.superview }
+            if let pc = p.presentationController {
+                var values: [String] = []
+                for k in ["_preferredStatusBarAxisForPresentation", "_containerViewVerticalBarAllowed", "_verticalBarAllowedForPresentation"] where pc.responds(to: NSSelectorFromString(k)) { values.append("\(k)=\(pc.value(forKey: k) ?? "nil")") }
+                for n in ["_UITraitSystemVerticalBarAllowed", "_UITraitVerticalBarAllowed", "_UITraitVerticalBarSuppressed"] { values.append("\(n)=\(trait(n, p.view.traitCollection))") }
+                log("  presentation " + values.joined(separator: " "))
+            }
             if let sheet = p.sheetPresentationController { log("  sheet detents \(sheet.detents) container \(sheet.containerView?.bounds ?? .zero) safe \(sheet.containerView?.safeAreaInsets ?? .zero) frameOfPresented \(sheet.frameOfPresentedViewInContainerView)") }
         }
         // SWIFTSHOT_TREE=<file>: every view's frame, safe area and margins, to diff a no-boot render
@@ -530,8 +552,10 @@ enum ServerCapture {
     static let wait: Wait? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_wait").map { unsafeBitCast($0, to: Wait.self) }
     static let resize: Resize? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_resize").map { unsafeBitCast($0, to: Resize.self) }
     static var context: NSObject?
+    static var windowContext: NSObject?
     static var display: NSObject?
     static var started = false
+    static var warmedUp = false
     static var timings: [String] = []
 
     static func constant(_ name: String) -> NSString? {
@@ -549,17 +573,24 @@ enum ServerCapture {
               let contextClass = NSClassFromString("CAContext") as? NSObject.Type else { log("server capture: no window server"); return nil }
         let options: NSDictionary = [constant("kCAContextDisplayId") ?? "displayId": id, constant("kCAContextDisplayable") ?? "displayable": true]
         context = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: options)?.takeUnretainedValue() as? NSObject
-        if context == nil { log("server capture: no context") }
+        // The window's own layer tree goes into a context that isn't shown; the shown one hosts
+        // it scaled (CALayerHost), like SpringBoard hosts an app's windows. A scale transform on
+        // the window's layer itself would reach UIKit's coordinate conversions.
+        windowContext = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: NSDictionary())?.takeUnretainedValue() as? NSObject
+        if context == nil || windowContext == nil { log("server capture: no context") }
         self.display = display
         return context
     }
 
     /// Sizes the display to the capture, like a device's panel (blurs and shadows clamp at its edges).
-    static func fit(width: Int, height: Int) -> Bool {
+    static func fit(width: Int, height: Int, scale: CGFloat) -> Bool {
         guard let display, let resize, resize(0, UInt32(width), UInt32(height)) else { return false }
         let deadline = Date().addingTimeInterval(2)
         while Date() < deadline {
-            if let b = (display.value(forKey: "bounds") as? NSValue)?.cgRectValue, Int(b.width) == width, Int(b.height) == height { return true }
+            if let b = (display.value(forKey: "bounds") as? NSValue)?.cgRectValue,
+               (Int(b.width) == width && Int(b.height) == height) || (Int((b.width * scale).rounded()) == width && Int((b.height * scale).rounded()) == height) {
+                return true
+            }
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.001))
         }
         log("server capture: display did not resize to \(width)x\(height)")
@@ -585,7 +616,11 @@ enum ServerCapture {
     static func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
         let t0 = Date()
-        guard start(width: w, height: h) != nil, fit(width: w, height: h) else { return nil }
+        // The window server keeps material (Liquid Glass) adaptation on the display: an alert's
+        // dimming would bleed into the next preview's glass for seconds, where a device's
+        // screenshot shows it settled. Resizing the display starts each capture afresh.
+        if started { _ = fit(width: w, height: h - 2, scale: scale) }
+        guard start(width: w, height: h) != nil, fit(width: w, height: h, scale: scale) else { return nil }
         let tFit = Date()
         defer {
             // Slow captures point at the machine's GPU / window server (CI VMs): say where.
@@ -613,8 +648,17 @@ enum ServerCapture {
         // Shown until two consecutive frames agree: materials (Liquid Glass) adapt to what the
         // server composited under them, as on a device where the screen has been visible for a
         // moment (one extra pass on a fast Mac, more on a slow CI GPU).
-        guard var bytes = settled(window, w, h, scale, background: nil),
-              let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
+        // The process's first frame compiles shaders (half a second, more on CI); glass that
+        // first saw the screen then settles a hair differently. Show the first window once
+        // and start over from fresh display state.
+        if !warmedUp {
+            warmedUp = true
+            _ = settled(window, w, h, scale, background: nil)
+            _ = fit(width: w, height: h - 2, scale: scale); _ = fit(width: w, height: h, scale: scale)
+        }
+        guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
+        if h > w, NoBoot.screen?.idiom == "phone" { addCornerMark(&bytes, width: w) }
+        guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
               let raw = ctx.makeImage() else { return nil }
         // The framebuffer's bytes as they are: what `simctl io screenshot` saves.
         return UIImage(cgImage: raw, scale: scale, orientation: .up)
@@ -630,23 +674,43 @@ enum ServerCapture {
         return last
     }
 
+    /// A portrait iPhone's screen (simulator screenshots, any app or the home screen) has a
+    /// black 3¼ px square over its top-left pixels, blended in sRGB.
+    static func addCornerMark(_ bytes: inout [UInt8], width w: Int) {
+        for y in 0...3 { for x in 0...3 {
+            let factor = x < 3 && y < 3 ? 0 : x == 3 && y == 3 ? 239 : 191
+            let i = (y * w + x) * 4
+            for k in 0..<3 { bytes[i + k] = UInt8((Int(bytes[i + k]) * factor + 127) / 255) }
+        } }
+    }
+
     /// One composited frame of the window (BGRA rows, w × h).
     static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
-        guard let context, let wait else { return nil }
-        // The window's layer under a pixel-sized root, at the device's scale, for the capture.
+        guard let context, let windowContext, let wait, let hostClass = NSClassFromString("CALayerHost") as? CALayer.Type else { return nil }
         let layer = window.layer
-        let saved = (layer.superlayer, layer.anchorPoint, layer.position, layer.affineTransform())
+        let saved = (layer.superlayer, layer.anchorPoint, layer.position)
+        // The window's layer as the root of its own context, at its own geometry (points)…
+        let windowRoot = CALayer()
+        windowRoot.frame = CGRect(x: 0, y: 0, width: CGFloat(w) / scale, height: CGFloat(h) / scale)
+        windowRoot.addSublayer(layer)
+        layer.anchorPoint = .zero; layer.position = .zero
+        windowContext.setValue(windowRoot, forKey: "layer")
+        // …hosted at the device's scale on the display.
         let root = CALayer()
         root.frame = CGRect(x: 0, y: 0, width: w, height: h)
         root.backgroundColor = background?.cgColor
-        root.addSublayer(layer)
-        layer.anchorPoint = .zero; layer.position = .zero
-        layer.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
+        let host = hostClass.init()
+        host.setValue(windowContext.value(forKey: "contextId"), forKey: "contextId")
+        host.anchorPoint = .zero; host.position = .zero
+        host.bounds = windowRoot.frame
+        host.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
+        root.addSublayer(host)
         defer {
             context.setValue(nil, forKey: "layer")
+            windowContext.setValue(nil, forKey: "layer")
             CATransaction.flush()
             layer.removeFromSuperlayer()
-            layer.setAffineTransform(saved.3); layer.anchorPoint = saved.1; layer.position = saved.2
+            layer.anchorPoint = saved.1; layer.position = saved.2
             saved.0?.addSublayer(layer)
         }
         var seen: UInt64 = 0
@@ -827,15 +891,23 @@ enum NoBoot {
             typealias Insets3 = @convention(c) (AnyObject, Selector, Bool, Int, Int) -> UIEdgeInsets
             let original = unsafeBitCast(method_getImplementation(m), to: Insets3.self)
             let block: @convention(block) (AnyObject, Bool, Int, Int) -> UIEdgeInsets = { w, statusBar, axis, visibility in
-                guard screen?.display?.statusBarAxis != nil, var insets = (w as? DeviceWindow)?.forcedSafeArea else { return original(w, fullSel, statusBar, axis, visibility) }
-                if statusBar { insets.top = max(insets.top, screen?.display?.statusBarFrameHeight ?? 0) }
+                guard let display = screen?.display, let railAxis = display.statusBarAxis, var insets = (w as? DeviceWindow)?.forcedSafeArea else { return original(w, fullSel, statusBar, axis, visibility) }
+                // Asked for another axis (a sheet lays out with a horizontal status bar): the
+                // display's own safe area, without the rail.
+                if axis != railAxis {
+                    let p = display.safeAreaPortrait
+                    return UIEdgeInsets(top: p.top, left: p.left, bottom: p.bottom, right: p.right)
+                }
+                if statusBar { insets.top = max(insets.top, display.statusBarFrameHeight ?? 0) }
                 return insets
             }
             method_setImplementation(m, imp_implementationWithBlock(block))
         }
         // The scene's own per-orientation insets (a booted scene resolves the status bar rail into them).
-        func profileInsets(_ orientation: Int) -> UIEdgeInsets? {
-            guard screen?.display?.statusBarAxis != nil, let p = screen else { return nil }
+        func profileInsets(_ orientation: Int, hidden: Bool = false) -> UIEdgeInsets? {
+            guard let display = screen?.display, display.statusBarAxis != nil, let p = screen else { return nil }
+            // A hidden status bar takes its rail with it.
+            if hidden { let d = display.safeAreaPortrait; return UIEdgeInsets(top: d.top, left: d.left, bottom: d.bottom, right: d.right) }
             let i = orientation >= 3 ? p.landscapeSafeArea : p.safeArea
             return UIEdgeInsets(top: i.top, left: i.left, bottom: i.bottom, right: i.right)
         }
@@ -844,7 +916,8 @@ enum NoBoot {
             guard let m = class_getInstanceMethod(UIWindowScene.self, sel) else { continue }
             typealias Get = @convention(c) (AnyObject, Selector, Int, Bool, Int) -> UIEdgeInsets
             let original = unsafeBitCast(method_getImplementation(m), to: Get.self)
-            let block: @convention(block) (AnyObject, Int, Bool, Int) -> UIEdgeInsets = { scene, o, hidden, axis in profileInsets(o) ?? original(scene, sel, o, hidden, axis) }
+            let takesHidden = name.contains("statusBarHidden")
+            let block: @convention(block) (AnyObject, Int, Bool, Int) -> UIEdgeInsets = { scene, o, hidden, axis in profileInsets(o, hidden: takesHidden && hidden) ?? original(scene, sel, o, hidden, axis) }
             method_setImplementation(m, imp_implementationWithBlock(block))
         }
         let sceneSel = NSSelectorFromString("_sceneSafeAreaInsetsIncludingStatusBar:")
@@ -860,7 +933,14 @@ enum NoBoot {
     }
 
     @MainActor static func setVerticalBar(of display: DisplayInfo?, on window: UIWindow) {
-        guard let overrides = window.value(forKey: "traitOverrides") as AnyObject? else { return }
+        // The window's subtree, and the scene: system containers (the floating bar container)
+        // take their traits from the scene.
+        for holder in [window as NSObject, window.windowScene as NSObject?].compactMap({ $0 }) where holder.responds(to: NSSelectorFromString("traitOverrides")) {
+            if let overrides = holder.value(forKey: "traitOverrides") as AnyObject? { applySceneTraits(of: display, to: overrides) }
+        }
+    }
+
+    @MainActor static func applySceneTraits(of display: DisplayInfo?, to overrides: AnyObject) {
         let selector = NSSelectorFromString("setNSIntegerValue:forTrait:")
         guard let method = class_getInstanceMethod(type(of: overrides), selector) else { return }
         typealias Setter = @convention(c) (AnyObject, Selector, Int, AnyClass) -> Void
@@ -900,6 +980,34 @@ enum NoBoot {
         if let cls = NSClassFromString("CADisplay"), let m = class_getClassMethod(cls, NSSelectorFromString("displays")) {
             let none: @convention(block) (AnyObject) -> NSArray = { _ in NSArray() }
             method_setImplementation(m, imp_implementationWithBlock(none))
+        }
+        // Sheets switch to their vertical-bar metrics (floating, 8 pt margins…) when the scene's
+        // bar-position component says the system provides vertical bars (iPhone Duo). That
+        // component reads FrontBoard scene settings, which a scene without a simulator lacks.
+        if let m = class_getInstanceMethod(UIScene.self, NSSelectorFromString("_barPositionClientComponent")) {
+            typealias Getter = @convention(c) (AnyObject, Selector) -> AnyObject?
+            let original = unsafeBitCast(method_getImplementation(m), to: Getter.self), sel = method_getName(m)
+            let block: @convention(block) (AnyObject) -> AnyObject? = { scene in
+                (screen?.display?.verticalBarAllowed ?? 0) != 0 ? VerticalBarComponent.shared : original(scene, sel)
+            }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+        // Per-corner display radii come from the scene settings (FrontBoard fills them in); the
+        // window's bounding path, and the sheets concentric with it, follow them.
+        for name in ["UIApplicationSceneSettings", "UIMutableApplicationSceneSettings"] {
+            guard let cls = NSClassFromString(name), let m = class_getInstanceMethod(cls, NSSelectorFromString("cornerRadiusConfiguration")),
+                  let config = NSClassFromString("BSCornerRadiusConfiguration") else { continue }
+            typealias Getter = @convention(c) (AnyObject, Selector) -> AnyObject?
+            typealias Make = @convention(c) (AnyObject, Selector, Double, Double, Double, Double) -> AnyObject?
+            let original = unsafeBitCast(method_getImplementation(m), to: Getter.self), sel = method_getName(m)
+            let block: @convention(block) (AnyObject) -> AnyObject? = { settings in
+                if let value = original(settings, sel) { return value }
+                guard let r = screen?.cornerRadii, r.count == 4,
+                      let alloc = (config as? NSObject.Type)?.perform(NSSelectorFromString("alloc"))?.takeUnretainedValue() else { return nil }
+                let initSel = NSSelectorFromString("initWithTopLeft:bottomLeft:bottomRight:topRight:")
+                return unsafeBitCast(class_getMethodImplementation(config, initSel), to: Make.self)(alloc, initSel, r[0], r[1], r[2], r[3])
+            }
+            method_setImplementation(m, imp_implementationWithBlock(block))
         }
         // Without a display UIScreen describes an external screen of scale 1. Report the rendered
         // device's built-in panel instead (values as a booted simulator of that model reports them).
@@ -944,6 +1052,9 @@ enum NoBoot {
             method_setImplementation(m, imp_implementationWithBlock(skip))
         }
         installDisplayInfo()
+        // End states, as --mode device captures them: presentations (sheets) land at their
+        // detent instead of springing there.
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_ANIMATIONS"] == nil { UIView.setAnimationsEnabled(false) }
         installStatusBar()
         swiftshot_install_corner_insets()
         swiftshot_install_exclusion_area()
@@ -961,13 +1072,22 @@ enum NoBoot {
         if let m = class_getInstanceMethod(UIApplication.self, NSSelectorFromString("_sceneInterfaceOrientationFromWindow:")) { method_setImplementation(m, imp_implementationWithBlock(portraitFor)) }
     }
 
-    /// Without a display, nothing runs the layout pass a device would after a presentation: the
+    /// Without a display, nothing runs the layout passes a device would after its first frames: a
     /// presented controller (sheet, alert, dialog) keeps its initial frame and SwiftUI never builds
-    /// its content. Lay the window out until presentations have settled.
-    static func finishPresentations(of root: UIViewController, in window: UIWindow, settle: () -> Void) {
+    /// its content, and the floating bar's buttons (iPhone Duo) only get their symbols on a later
+    /// pass. Lay the window out until both have settled.
+    static func finishLayout(of root: UIViewController, in window: UIWindow, settle: () -> Void) {
         func tree(_ c: UIViewController) -> [UIViewController] { [c] + c.children.flatMap(tree) }
-        guard tree(root).contains(where: { $0.presentedViewController != nil }) else { return }
-        for _ in 0..<3 {
+        let presenting = tree(root).filter { $0.presentedViewController != nil }
+        // Presentation traits (vertical bar suppression…) were resolved before the container
+        // settled; a device re-resolves them on its next scene update.
+        for c in presenting {
+            guard let pc = c.presentedViewController?.presentationController else { continue }
+            let sel = NSSelectorFromString("_updateTraitsForPresentation")
+            if pc.responds(to: sel) { pc.perform(sel) }
+        }
+        let floatingBar = (screen?.display?.verticalBarAllowed ?? 0) != 0
+        for _ in 0..<(!presenting.isEmpty ? 3 : floatingBar ? 1 : 0) {
             window.setNeedsLayout(); window.layoutIfNeeded()
             for view in window.subviews { view.setNeedsLayout(); view.layoutIfNeeded() }
             settle()
@@ -1004,11 +1124,22 @@ enum NoBoot {
     }
 }
 
+/// Stands in for a scene's bar-position component; UIKit only asks it this.
+final class VerticalBarComponent: NSObject {
+    static let shared = VerticalBarComponent()
+    @objc func _systemProvidesVerticalBars() -> Bool { true }
+}
+
 /// A window that reports the *target* device's safe area instead of the host simulator's.
 final class DeviceWindow: UIWindow {
     var forcedSafeArea: UIEdgeInsets = .zero {
-        // UIKit caches which edges are aligned with the scene's safe area (bars lay out by it).
-        didSet { if responds(to: NSSelectorFromString("_updateSceneSafeAreaAlignedEdges")) { perform(NSSelectorFromString("_updateSceneSafeAreaAlignedEdges")) } }
+        // UIKit caches which edges are aligned with the scene's safe area (bars and sheets lay out
+        // by it) when the window's safe area is set; its updater is a direct method, so set it.
+        didSet {
+            let sel = NSSelectorFromString("setSafeAreaInsets:")
+            typealias Set = @convention(c) (AnyObject, Selector, UIEdgeInsets) -> Void
+            if let imp = class_getMethodImplementation(UIView.self, sel), responds(to: sel) { unsafeBitCast(imp, to: Set.self)(self, sel, forcedSafeArea) }
+        }
     }
     override var safeAreaInsets: UIEdgeInsets { forcedSafeArea }
 }

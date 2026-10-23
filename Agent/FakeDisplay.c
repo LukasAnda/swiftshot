@@ -239,29 +239,6 @@ IOSurfaceRef swiftshot_fb_wait(int display, uint64_t after, double timeout, uint
     return s;
 }
 
-// MARK: render server lookup
-
-// Remote contexts find the render server with bootstrap_look_up("com.apple.CARenderServer").
-// Without a booted device there is none; once the agent has started the window server in this
-// process (SWIFTSHOT_LOCAL_RENDER_SERVER set), answer with its port. That's what
-// CA_FORCE_LOCAL_SERVER does too, but that switch also changes how apps set themselves up
-// (watchOS SwiftUI layout then never settles).
-typedef char name_t[128];  // <servers/bootstrap.h> (not in the watchOS SDK)
-extern kern_return_t real_bootstrap_look_up(mach_port_t, const name_t, mach_port_t *) __asm__("_bootstrap_look_up");
-static kern_return_t ss_bootstrap_look_up(mach_port_t bp, const name_t name, mach_port_t *port) {
-    TRACE("bootstrap_look_up %s\n", name ? name : "(null)");
-    if (name && strcmp(name, "com.apple.CARenderServer") == 0 && getenv("SWIFTSHOT_LOCAL_RENDER_SERVER")) {
-        mach_port_t (*server_port)(void) = (mach_port_t (*)(void))dlsym(RTLD_DEFAULT, "CARenderServerGetPort");
-        mach_port_t p = server_port ? server_port() : MACH_PORT_NULL;
-        if (p != MACH_PORT_NULL && mach_port_insert_right(mach_task_self(), p, p, MACH_MSG_TYPE_MAKE_SEND) == KERN_SUCCESS) {
-            TRACE("render server lookup -> in-process port\n");
-            *port = p;
-            return KERN_SUCCESS;
-        }
-    }
-    return real_bootstrap_look_up(bp, name, port);
-}
-
 // MARK: interposing
 
 extern void *SFBConnectionCreate(CFAllocatorRef, CFStringRef) __attribute__((weak_import));
@@ -298,5 +275,4 @@ __attribute__((used, section("__DATA,__interpose"))) static struct { const void 
     I(ss_display_get_canvas_size, SFBDisplayGetCurrentCanvasSize), I(ss_display_create_swapchain, SFBDisplayCreateSwapchain),
     I(ss_swap_begin, SFBSwapchainSwapBegin), I(ss_swap_add_surface, SFBSwapchainSwapAddSurface),
     I(ss_swap_set_callback, SFBSwapchainSwapSetCallback), I(ss_swap_submit, SFBSwapchainSwapSubmit), I(ss_swap_cancel, SFBSwapchainSwapCancel),
-    I(ss_bootstrap_look_up, real_bootstrap_look_up),
 };
