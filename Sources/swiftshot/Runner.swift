@@ -151,13 +151,14 @@ final class Runner {
 
     func makeJob(mode: JobMode, language: String, runtime: SimRuntime, devices: [DeviceProfile], controlDir: String? = nil,
                  target: Target? = nil) -> Job {
-        Job(mode: mode, outputDir: outputDir, language: language, runtime: runtime.version, devices: devices,
+        let statusBar = Simctl.statusBarLocales(runtime)
+        return Job(mode: mode, outputDir: outputDir, language: language, runtime: runtime.version, devices: devices,
             appearances: options.appearances, previewFilter: options.previews, format: options.format,
             settleFrames: options.settleFrames, settleDelay: options.delay, controlDir: controlDir,
             fileNamePattern: "{device}-{preview}{appearance}{textSize}", includeRuntimeInName: target?.includeRuntimeInName ?? false,
             screenRules: options.screens, targetPlatform: (target?.platform ?? .ios).rawValue, textSizes: options.textSizes,
             fullLength: options.fullLength, statusBar: options.statusBar,
-            statusBarLocale: Locale.current.identifier, statusBarTimeZone: TimeZone.current.identifier)
+            statusBarLocale: statusBar.clock, statusBarLanguage: statusBar.language, statusBarTimeZone: TimeZone.current.identifier)
     }
 
     func writeJob(_ job: Job, tag: String) throws -> String {
