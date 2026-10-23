@@ -139,6 +139,7 @@ final class AgentRunner {
             // the floating tab bar sits above the bottom edge.
             window.traitOverrides.displayGamut = .P3
             NoBoot.setDisplayCornerRadius(device.cornerRadius, on: window)
+            NoBoot.setVerticalBar(of: device.display, on: window)
             // A booted app takes the layout direction from UIApplication (none here).
             let rtl = Locale.Language(identifier: job.language).characterDirection == .rightToLeft
             window.traitOverrides.layoutDirection = rtl ? .rightToLeft : .leftToRight
@@ -211,6 +212,7 @@ final class AgentRunner {
                     let t0 = now()
                     DeviceIdiom.current = device.idiom == "pad" ? .pad : .phone
                     NoBoot.screen = device
+                    if let corners = device.display?.cornerInsets, corners.count == 8 { corners.withUnsafeBufferPointer { swiftshot_set_corner_insets($0.baseAddress) } } else { swiftshot_set_corner_insets(nil) }
                     defer { DeviceIdiom.current = nil }
                     guard let vc = controller(fromBody: preview.body()) else {
                         result.errors.append("\(preview.name): could not build preview body"); continue
@@ -301,6 +303,14 @@ final class AgentRunner {
             var v: UIView? = p.view
             while let view = v { log("  \(type(of: view)) frame \(view.frame) safe \(view.safeAreaInsets)"); v = view.superview }
             if let sheet = p.sheetPresentationController { log("  sheet detents \(sheet.detents) container \(sheet.containerView?.bounds ?? .zero) safe \(sheet.containerView?.safeAreaInsets ?? .zero) frameOfPresented \(sheet.frameOfPresentedViewInContainerView)") }
+        }
+        // SWIFTSHOT_TREE=<file>: every view's frame, safe area and margins, to diff a no-boot render
+        // against the same preview in --mode device.
+        if let path = ProcessInfo.processInfo.environment["SWIFTSHOT_TREE"] {
+            func dump(_ v: UIView, _ depth: Int) -> [String] {
+                ["\(depth) \(type(of: v)) f=\(v.frame) s=\(v.safeAreaInsets) m=\(v.layoutMargins)"] + v.subviews.flatMap { dump($0, depth + 1) }
+            }
+            try? dump(window, 0).joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
         }
     }
 
@@ -630,6 +640,28 @@ enum NoBoot {
     /// Reads the display data of a booted device (calibration).
     @MainActor static func readDisplayInfo(of screen: UIScreen) -> DisplayInfo? {
         guard let info = screen.value(forKey: "_displayInfoProvider") as AnyObject? else { return nil }
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let statusBar = scene?.statusBarManager
+        func cornerInsets() -> [Double]? {
+            guard let window = scene?.windows.first, window.responds(to: NSSelectorFromString("_sceneSafeAreaCornerInsets")),
+                  let value = window.value(forKey: "_sceneSafeAreaCornerInsets") as? NSValue else { return nil }
+            var d = [Double](repeating: 0, count: 8)
+            value.getValue(&d, size: 64)
+            return d.allSatisfy { $0 == 0 } ? nil : d
+        }
+        func barPosition() -> [Double]? {
+            guard let position = scene?.traitCollection.value(forKey: "_sceneBarPosition") as AnyObject?,
+                  let insets = (position.value(forKey: "barAlignmentInsets") as? NSValue)?.uiEdgeInsetsValue, insets.top.isFinite else { return nil }
+            let classes = ["topBarSizeClass", "bottomBarSizeClass", "leadingBarSizeClass", "trailingBarSizeClass"].map { (position.value(forKey: $0) as? Double) ?? 0 }
+            return [insets.top, insets.left, insets.bottom, insets.right] + classes
+        }
+        func sceneTrait(_ name: String) -> Int? {
+            guard let traits = scene?.traitCollection, let trait = NSClassFromString(name) else { return nil }
+            let sel = NSSelectorFromString("valueForNSIntegerTrait:")
+            guard traits.responds(to: sel) else { return nil }
+            typealias Get = @convention(c) (AnyObject, Selector, AnyClass) -> Int
+            return unsafeBitCast(class_getMethodImplementation(type(of: traits), sel), to: Get.self)(traits, sel, trait)
+        }
         func get(_ key: String) -> Any? { info.responds(to: NSSelectorFromString(key)) ? info.value(forKey: key) : nil }
         return DisplayInfo(
             safeAreaPortrait: insets(get("safeAreaInsetsPortrait")),
@@ -641,7 +673,14 @@ enum NoBoot {
             systemMinimumMargin: (get("systemMinimumMargin") as? Double) ?? 0,
             artworkSubtype: (get("artworkSubtype") as? Int) ?? 0,
             screenPeriphery: insets(screen.value(forKey: "_peripheryInsets")),
-            screenDisplayPeriphery: insets(screen.value(forKey: "_displayPeripheryInsets")))
+            screenDisplayPeriphery: insets(screen.value(forKey: "_displayPeripheryInsets")),
+            statusBarAxis: statusBar.flatMap { $0.responds(to: NSSelectorFromString("statusBarAxis")) ? ($0.value(forKey: "statusBarAxis") as? Int) : nil },
+            statusBarFrameHeight: statusBar.map { Double($0.statusBarFrame.height) },
+            statusBarHeight: statusBar.flatMap { $0.responds(to: NSSelectorFromString("statusBarHeight")) ? ($0.value(forKey: "statusBarHeight") as? Double) : nil },
+            verticalBarAllowed: sceneTrait("_UITraitSystemVerticalBarAllowed"),
+            verticalBarEdge: sceneTrait("_UITraitSystemVerticalBarHorizontalEdge"),
+            cornerInsets: cornerInsets(),
+            barPosition: barPosition())
     }
 
     /// Reports the rendered device's display data from UIKit's display info provider and screen.
@@ -667,6 +706,114 @@ enum NoBoot {
             if let cls = NSClassFromString("_UIDisplayInfoProvider"), let m = class_getInstanceMethod(cls, NSSelectorFromString(name)) {
                 method_setImplementation(m, imp_implementationWithBlock(block))
             }
+        }
+    }
+
+    /// Where the system status bar is (iPhone Duo on iOS 27.1: a side rail) changes navigation bar
+    /// layout; report the rendered device's, as its booted simulator does.
+    static func installStatusBar() {
+        let axis: @convention(block) (AnyObject) -> Int = { _ in screen?.display?.statusBarAxis ?? -1 }
+        if let m = class_getInstanceMethod(UIStatusBarManager.self, NSSelectorFromString("statusBarAxis")) { method_setImplementation(m, imp_implementationWithBlock(axis)) }
+        let frame: @convention(block) (AnyObject) -> CGRect = { _ in
+            guard let h = screen?.display?.statusBarFrameHeight else { return .zero }
+            return CGRect(x: 0, y: 0, width: screen?.width ?? 0, height: h)
+        }
+        if let m = class_getInstanceMethod(UIStatusBarManager.self, #selector(getter: UIStatusBarManager.statusBarFrame)) { method_setImplementation(m, imp_implementationWithBlock(frame)) }
+        let defaultSel = NSSelectorFromString("defaultStatusBarHeightInOrientation:")
+        if let m = class_getInstanceMethod(UIStatusBarManager.self, defaultSel) {
+            typealias Height = @convention(c) (AnyObject, Selector, Int) -> CGFloat
+            let original = unsafeBitCast(method_getImplementation(m), to: Height.self)
+            let block: @convention(block) (AnyObject, Int) -> CGFloat = { m, o in screen?.display?.statusBarFrameHeight.map { CGFloat($0) } ?? original(m, defaultSel, o) }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+        let heightSel = NSSelectorFromString("statusBarHeight")
+        if let m = class_getInstanceMethod(UIStatusBarManager.self, heightSel) {
+            typealias Height = @convention(c) (AnyObject, Selector) -> CGFloat
+            let original = unsafeBitCast(method_getImplementation(m), to: Height.self)
+            let block: @convention(block) (AnyObject) -> CGFloat = { m in screen?.display?.statusBarHeight.map { CGFloat($0) } ?? original(m, heightSel) }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+        // The scene-level insets UIKit's bars lay out by (a booted scene resolves them per status
+        // bar axis): the device window's safe area, plus the status bar when asked to include it.
+        typealias Insets0 = @convention(c) (AnyObject, Selector) -> UIEdgeInsets
+        typealias Insets1 = @convention(c) (AnyObject, Selector, Bool) -> UIEdgeInsets
+        let normalizedSel = NSSelectorFromString("_normalizedSafeAreaInsets")
+        if let m = class_getInstanceMethod(UIWindow.self, normalizedSel) {
+            let original = unsafeBitCast(method_getImplementation(m), to: Insets0.self)
+            let block: @convention(block) (AnyObject) -> UIEdgeInsets = { w in (w as? DeviceWindow)?.forcedSafeArea ?? original(w, normalizedSel) }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+        // A device window fills its scene, so all its edges line up with the scene's safe area.
+        let alignedSel = NSSelectorFromString("_sceneSafeAreaAlignedEdgesForFrame:inSuperview:ignoreViewController:")
+        if let m = class_getInstanceMethod(UIWindow.self, alignedSel) {
+            typealias Aligned = @convention(c) (AnyObject, Selector, CGRect, AnyObject?, Bool) -> UInt
+            let original = unsafeBitCast(method_getImplementation(m), to: Aligned.self)
+            let block: @convention(block) (AnyObject, CGRect, AnyObject?, Bool) -> UInt = { w, frame, superview, ignore in
+                w is DeviceWindow ? UIRectEdge.all.rawValue : original(w, alignedSel, frame, superview, ignore)
+            }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+        let fullSel = NSSelectorFromString("_sceneSafeAreaInsetsIncludingStatusBar:statusBarAxis:statusBarVisibility:")
+        if let m = class_getInstanceMethod(UIWindow.self, fullSel) {
+            typealias Insets3 = @convention(c) (AnyObject, Selector, Bool, Int, Int) -> UIEdgeInsets
+            let original = unsafeBitCast(method_getImplementation(m), to: Insets3.self)
+            let block: @convention(block) (AnyObject, Bool, Int, Int) -> UIEdgeInsets = { w, statusBar, axis, visibility in
+                guard screen?.display?.statusBarAxis != nil, var insets = (w as? DeviceWindow)?.forcedSafeArea else { return original(w, fullSel, statusBar, axis, visibility) }
+                if statusBar { insets.top = max(insets.top, screen?.display?.statusBarFrameHeight ?? 0) }
+                return insets
+            }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+        // The scene's own per-orientation insets (a booted scene resolves the status bar rail into them).
+        func profileInsets(_ orientation: Int) -> UIEdgeInsets? {
+            guard screen?.display?.statusBarAxis != nil, let p = screen else { return nil }
+            let i = orientation >= 3 ? p.landscapeSafeArea : p.safeArea
+            return UIEdgeInsets(top: i.top, left: i.left, bottom: i.bottom, right: i.right)
+        }
+        for name in ["_safeAreaInsetsForInterfaceOrientation:", "_safeAreaInsetsForInterfaceOrientation:statusBarHidden:", "_safeAreaInsetsForInterfaceOrientation:statusBarHidden:statusBarAxis:"] {
+            let sel = NSSelectorFromString(name)
+            guard let m = class_getInstanceMethod(UIWindowScene.self, sel) else { continue }
+            typealias Get = @convention(c) (AnyObject, Selector, Int, Bool, Int) -> UIEdgeInsets
+            let original = unsafeBitCast(method_getImplementation(m), to: Get.self)
+            let block: @convention(block) (AnyObject, Int, Bool, Int) -> UIEdgeInsets = { scene, o, hidden, axis in profileInsets(o) ?? original(scene, sel, o, hidden, axis) }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+        let sceneSel = NSSelectorFromString("_sceneSafeAreaInsetsIncludingStatusBar:")
+        if let m = class_getInstanceMethod(UIWindow.self, sceneSel) {
+            let original = unsafeBitCast(method_getImplementation(m), to: Insets1.self)
+            let block: @convention(block) (AnyObject, Bool) -> UIEdgeInsets = { w, statusBar in
+                guard var insets = (w as? DeviceWindow)?.forcedSafeArea else { return original(w, sceneSel, statusBar) }
+                if statusBar { insets.top = max(insets.top, screen?.display?.statusBarFrameHeight ?? 0) }
+                return insets
+            }
+            method_setImplementation(m, imp_implementationWithBlock(block))
+        }
+    }
+
+    @MainActor static func setVerticalBar(of display: DisplayInfo?, on window: UIWindow) {
+        guard let overrides = window.value(forKey: "traitOverrides") as AnyObject? else { return }
+        let selector = NSSelectorFromString("setNSIntegerValue:forTrait:")
+        guard let method = class_getInstanceMethod(type(of: overrides), selector) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, Int, AnyClass) -> Void
+        let set = unsafeBitCast(method_getImplementation(method), to: Setter.self)
+        for (name, value) in [("_UITraitSystemVerticalBarAllowed", display?.verticalBarAllowed), ("_UITraitSystemVerticalBarHorizontalEdge", display?.verticalBarEdge)] {
+            if let value, let trait = NSClassFromString(name) { set(overrides, selector, value, trait) }
+        }
+        // Where the scene's bars sit and how big they are (navigation bar metrics follow).
+        let objectSelector = NSSelectorFromString("setObject:forTrait:")
+        if let p = display?.barPosition, p.count == 8, let trait = NSClassFromString("_UITraitSceneBarPosition"),
+           let cls = NSClassFromString("_UISceneBarResolvedPosition"), let objectSet = class_getInstanceMethod(type(of: overrides), objectSelector) {
+            typealias Make = @convention(c) (AnyObject, Selector, UIEdgeInsets, Int, Int) -> AnyObject?
+            let initSel = NSSelectorFromString("initWithAlignmentInsets:topBarSizeClass:bottomBarSizeClass:")
+            guard let alloc = (cls as? NSObject.Type)?.perform(NSSelectorFromString("alloc"))?.takeUnretainedValue(),
+                  let position = unsafeBitCast(class_getMethodImplementation(cls, initSel), to: Make.self)(alloc, initSel, UIEdgeInsets(top: p[0], left: p[1], bottom: p[2], right: p[3]), Int(p[4]), Int(p[5])) else { return }
+            typealias SetInt = @convention(c) (AnyObject, Selector, Int) -> Void
+            for (name, value) in [("setLeadingBarSizeClass:", p[6]), ("setTrailingBarSizeClass:", p[7])] {
+                let sel = NSSelectorFromString(name)
+                unsafeBitCast(class_getMethodImplementation(cls, sel), to: SetInt.self)(position, sel, Int(value))
+            }
+            typealias SetObject = @convention(c) (AnyObject, Selector, AnyObject, AnyClass) -> Void
+            unsafeBitCast(method_getImplementation(objectSet), to: SetObject.self)(overrides, objectSelector, position, trait)
         }
     }
 
@@ -709,6 +856,7 @@ enum NoBoot {
         let getters: [(String, Any)] = [
             ("scale", scale), ("nativeScale", scale), ("_scale", scale), ("_nativeScale", scale), ("_maximumSupportedScale", scale),
             ("bounds", bounds), ("nativeBounds", native),
+            ("_referenceBounds", bounds), ("_unjailedReferenceBounds", bounds), ("_mainSceneReferenceBounds", bounds), ("_nativeDisplayBounds", native),
             ("_displayCornerRadius", corner), ("_displayCornerRadiusIgnoringZoom", corner), ("_traitCollectionDisplayCornerRadius", corner),
             ("_isEmbeddedScreen", yes), ("_isRotatable", yes), ("_isExternal", no),
             ("_wantsWideContentMargins", wideMargins), ("_touchRadiusScaleFactor", touchRadius),
@@ -727,6 +875,8 @@ enum NoBoot {
             method_setImplementation(m, imp_implementationWithBlock(skip))
         }
         installDisplayInfo()
+        installStatusBar()
+        swiftshot_install_corner_insets()
         makeApplication()
         // A booted host scene is portrait (landscape previews are just landscape-sized windows);
         // a screen-based scene would report "unknown", which changes e.g. the tab bar's layout.
@@ -737,6 +887,8 @@ enum NoBoot {
                             (UIApplication.self, "activeInterfaceOrientation"), (UIApplication.self, "_currentExpectedInterfaceOrientation")] {
             if let m = class_getInstanceMethod(cls, NSSelectorFromString(name)) { method_setImplementation(m, imp_implementationWithBlock(portrait)) }
         }
+        let portraitFor: @convention(block) (AnyObject, AnyObject?) -> Int = { _, _ in UIInterfaceOrientation.portrait.rawValue }
+        if let m = class_getInstanceMethod(UIApplication.self, NSSelectorFromString("_sceneInterfaceOrientationFromWindow:")) { method_setImplementation(m, imp_implementationWithBlock(portraitFor)) }
     }
 
     /// Without a display, nothing runs the layout pass a device would after a presentation: the
@@ -784,7 +936,10 @@ enum NoBoot {
 
 /// A window that reports the *target* device's safe area instead of the host simulator's.
 final class DeviceWindow: UIWindow {
-    var forcedSafeArea: UIEdgeInsets = .zero
+    var forcedSafeArea: UIEdgeInsets = .zero {
+        // UIKit caches which edges are aligned with the scene's safe area (bars lay out by it).
+        didSet { if responds(to: NSSelectorFromString("_updateSceneSafeAreaAlignedEdges")) { perform(NSSelectorFromString("_updateSceneSafeAreaAlignedEdges")) } }
+    }
     override var safeAreaInsets: UIEdgeInsets { forcedSafeArea }
 }
 

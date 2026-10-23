@@ -47,3 +47,5 @@ extension Job {
 }
 
 @_silgen_name("swiftshot_flip_layer_drawing") func swiftshot_flip_layer_drawing()
+@_silgen_name("swiftshot_install_corner_insets") func swiftshot_install_corner_insets()
+@_silgen_name("swiftshot_set_corner_insets") func swiftshot_set_corner_insets(_ values: UnsafePointer<Double>?)

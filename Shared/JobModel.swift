@@ -26,6 +26,20 @@ struct DisplayInfo: Codable, Equatable {
     var artworkSubtype: Int
     var screenPeriphery: Insets
     var screenDisplayPeriphery: Insets
+    /// UIStatusBarManager: 0 horizontal (along the top), 1 vertical (a side rail, e.g. iPhone Duo).
+    var statusBarAxis: Int? = nil
+    /// statusBarFrame height and UIStatusBarManager.statusBarHeight (they differ with a rail).
+    var statusBarFrameHeight: Double? = nil
+    var statusBarHeight: Double? = nil
+    /// Private traits a scene with a status bar rail has: _UITraitSystemVerticalBarAllowed and
+    /// _UITraitSystemVerticalBarHorizontalEdge (navigation bars then use inline large titles).
+    var verticalBarAllowed: Int? = nil
+    var verticalBarEdge: Int? = nil
+    /// UIWindow._sceneSafeAreaCornerInsets: four corner sizes (width, height pairs).
+    var cornerInsets: [Double]? = nil
+    /// The scene's resolved bar position trait (_UITraitSceneBarPosition): alignment insets
+    /// (top, left, bottom, right), then top, bottom, leading and trailing bar size classes.
+    var barPosition: [Double]? = nil
 }
 
 /// Geometry of a device, in points.

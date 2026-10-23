@@ -54,7 +54,9 @@ enum DeviceCatalog {
            let primary = displays.first(where: { ($0["deviceName"] as? String) == "primary" })
                 ?? displays.first(where: { ($0["displayType"] as? String) == "integrated" }),
            let w = number(primary, "width"), let h = number(primary, "height"), let s = number(primary, "scale") {
-            var screen = make(w, h, s, number(primary, "cornerRadiusUL") ?? corner)
+            // UIScreen reports the device type's DeviceCornerRadius; per-corner radii can differ
+            // (iPhone Duo: 8 on the hinge side, 59 outside).
+            var screen = make(w, h, s, corner > 0 ? corner : number(primary, "cornerRadiusUL") ?? 0)
             screen.pitch = number(primary, "hdpi") ?? 0
             return screen
         }
@@ -148,7 +150,10 @@ enum DeviceCatalog {
             "safeAreaLandscapeLeft: \(lit(d.safeAreaLandscapeLeft)), safeAreaLandscapeRight: \(lit(d.safeAreaLandscapeRight)), " +
             "periphery: \(lit(d.periphery)), homeAffordanceOverlayAllowance: \(d.homeAffordanceOverlayAllowance), " +
             "systemMinimumMargin: \(d.systemMinimumMargin), artworkSubtype: \(d.artworkSubtype), " +
-            "screenPeriphery: \(lit(d.screenPeriphery)), screenDisplayPeriphery: \(lit(d.screenDisplayPeriphery)))"
+            "screenPeriphery: \(lit(d.screenPeriphery)), screenDisplayPeriphery: \(lit(d.screenDisplayPeriphery))" +
+            (d.statusBarAxis.map { ", statusBarAxis: \($0)" } ?? "") + (d.statusBarFrameHeight.map { ", statusBarFrameHeight: \($0)" } ?? "") + (d.statusBarHeight.map { ", statusBarHeight: \($0)" } ?? "") +
+            (d.verticalBarAllowed.map { ", verticalBarAllowed: \($0)" } ?? "") + (d.verticalBarEdge.map { ", verticalBarEdge: \($0)" } ?? "") +
+            (d.cornerInsets.map { ", cornerInsets: \($0)" } ?? "") + (d.barPosition.map { ", barPosition: \($0)" } ?? "") + ")"
         }
         var lines: [String] = []
         for (key, display) in existing where byDevice[key.split(separator: "@").first.map(String.init) ?? key] == nil {

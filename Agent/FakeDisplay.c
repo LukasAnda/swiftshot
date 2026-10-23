@@ -239,27 +239,27 @@ IOSurfaceRef swiftshot_fb_wait(int display, uint64_t after, double timeout, uint
 
 // MARK: interposing
 
-extern void *SFBConnectionCreate(CFAllocatorRef, CFStringRef);
-extern bool SFBConnectionConnect(void *, CFErrorRef *);
-extern CFArrayRef SFBConnectionCopyDisplays(void *, CFErrorRef *);
-extern void *SFBConnectionCopyDisplayByUID(void *, CFStringRef, CFErrorRef *);
-extern void SFBConnectionSetDisplayUpdatedHandler(void *, dispatch_queue_t, void (^)(void *));
-extern uint32_t SFBDisplayGetType(void *);
-extern CFStringRef SFBDisplayGetName(void *);
-extern CFStringRef SFBDisplayGetDeviceName(void *);
-extern CFStringRef SFBDisplayGetDisplayUID(void *);
-extern uint32_t SFBDisplayGetDotPitch(void *);
-extern uint16_t SFBDisplayGetModeCount(void *);
-extern bool SFBDisplayGetMode(void *, long, void *);
-extern void SFBDisplayGetCurrentMode(void *, void *);
-extern ss_size SFBDisplayGetDeviceSize(void *);
-extern ss_size SFBDisplayGetCurrentCanvasSize(void *);
-extern void *SFBDisplayCreateSwapchain(void *, long, CFDictionaryRef, CFErrorRef *, double, double);
-extern bool SFBSwapchainSwapBegin(void *, uint64_t, CFErrorRef *);
-extern bool SFBSwapchainSwapAddSurface(void *, IOSurfaceRef, double, double, double, double, double, double, double, double, long, long, CFErrorRef *);
-extern bool SFBSwapchainSwapSetCallback(void *, void *, dispatch_queue_t, void *);
-extern bool SFBSwapchainSwapSubmit(void *, CFErrorRef *);
-extern bool SFBSwapchainSwapCancel(void *, CFErrorRef *);
+extern void *SFBConnectionCreate(CFAllocatorRef, CFStringRef) __attribute__((weak_import));
+extern bool SFBConnectionConnect(void *, CFErrorRef *) __attribute__((weak_import));
+extern CFArrayRef SFBConnectionCopyDisplays(void *, CFErrorRef *) __attribute__((weak_import));
+extern void *SFBConnectionCopyDisplayByUID(void *, CFStringRef, CFErrorRef *) __attribute__((weak_import));
+extern void SFBConnectionSetDisplayUpdatedHandler(void *, dispatch_queue_t, void (^)(void *)) __attribute__((weak_import));
+extern uint32_t SFBDisplayGetType(void *) __attribute__((weak_import));
+extern CFStringRef SFBDisplayGetName(void *) __attribute__((weak_import));
+extern CFStringRef SFBDisplayGetDeviceName(void *) __attribute__((weak_import));
+extern CFStringRef SFBDisplayGetDisplayUID(void *) __attribute__((weak_import));
+extern uint32_t SFBDisplayGetDotPitch(void *) __attribute__((weak_import));
+extern uint16_t SFBDisplayGetModeCount(void *) __attribute__((weak_import));
+extern bool SFBDisplayGetMode(void *, long, void *) __attribute__((weak_import));
+extern void SFBDisplayGetCurrentMode(void *, void *) __attribute__((weak_import));
+extern ss_size SFBDisplayGetDeviceSize(void *) __attribute__((weak_import));
+extern ss_size SFBDisplayGetCurrentCanvasSize(void *) __attribute__((weak_import));
+extern void *SFBDisplayCreateSwapchain(void *, long, CFDictionaryRef, CFErrorRef *, double, double) __attribute__((weak_import));
+extern bool SFBSwapchainSwapBegin(void *, uint64_t, CFErrorRef *) __attribute__((weak_import));
+extern bool SFBSwapchainSwapAddSurface(void *, IOSurfaceRef, double, double, double, double, double, double, double, double, long, long, CFErrorRef *) __attribute__((weak_import));
+extern bool SFBSwapchainSwapSetCallback(void *, void *, dispatch_queue_t, void *) __attribute__((weak_import));
+extern bool SFBSwapchainSwapSubmit(void *, CFErrorRef *) __attribute__((weak_import));
+extern bool SFBSwapchainSwapCancel(void *, CFErrorRef *) __attribute__((weak_import));
 
 #define I(r, o) { (const void *)r, (const void *)o }
 __attribute__((used, section("__DATA,__interpose"))) static struct { const void *replacement, *original; } fake_display_interposers[] = {
