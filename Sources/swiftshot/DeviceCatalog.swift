@@ -45,7 +45,10 @@ enum DeviceCatalog {
             for key in keys { if let n = dict?[key] as? NSNumber { return n.doubleValue } }
             return nil
         }
-        let corner = number(caps, "DeviceCornerRadius") ?? 0
+        // A booted device reports the corner radius rounded to hundredths (iPhone 16e: 47.33, not
+        // the plist's 47.3333320…); sheets' corners follow it.
+        func hundredths(_ v: Double) -> Double { (v * 100).rounded() / 100 }
+        let corner = number(caps, "DeviceCornerRadius").map(hundredths) ?? 0
         func make(_ w: Double, _ h: Double, _ s: Double, _ c: Double) -> Screen {
             Screen(width: min(w, h) / s, height: max(w, h) / s, scale: s, corner: c, faceID: faceID)
         }
@@ -56,9 +59,9 @@ enum DeviceCatalog {
            let w = number(primary, "width"), let h = number(primary, "height"), let s = number(primary, "scale") {
             // UIScreen reports the device type's DeviceCornerRadius; per-corner radii can differ
             // (iPhone Duo: 8 on the hinge side, 59 outside).
-            var screen = make(w, h, s, corner > 0 ? corner : number(primary, "cornerRadiusUL") ?? 0)
+            var screen = make(w, h, s, corner > 0 ? corner : number(primary, "cornerRadiusUL").map(hundredths) ?? 0)
             screen.pitch = number(primary, "hdpi") ?? 0
-            let radii = ["cornerRadiusUL", "cornerRadiusLL", "cornerRadiusLR", "cornerRadiusUR"].compactMap { number(primary, $0) }
+            let radii = ["cornerRadiusUL", "cornerRadiusLL", "cornerRadiusLR", "cornerRadiusUR"].compactMap { number(primary, $0).map(hundredths) }
             if radii.count == 4, radii.contains(where: { $0 != screen.corner }) { screen.radii = radii }
             return screen
         }

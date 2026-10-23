@@ -200,6 +200,7 @@ final class AgentRunner {
 
     func renderVirtual(_ previews: [DiscoveredPreview]) {
         SystemChrome.job = job
+        ServerCapture.runtimeMajor = Int(job.runtime.split(separator: ".").first ?? "27") ?? 27
         let capture = NoBoot.enabled ? "carenderer" : ProcessInfo.processInfo.environment["SWIFTSHOT_CAPTURE"] ?? "hierarchy"
         // Off-screen so the window inherits no system safe area; we supply the device's instead.
         let offscreenOrigin = NoBoot.enabled ? .zero : CGPoint(x: scene.screen.bounds.width * 4, y: scene.screen.bounds.height * 4)
@@ -286,11 +287,16 @@ final class AgentRunner {
                     // A presentation's teardown finishes on later run-loop passes; until then the
                     // next preview's floating bar (iPhone Duo) still sees it in its glass.
                     func tree(_ c: UIViewController) -> [UIViewController] { [c] + c.children.flatMap(tree) }
-                    let presented = tree(vc).first(where: { $0.presentedViewController != nil })
-                    presented?.dismiss(animated: false)
+                    if let presenter = tree(vc).first(where: { $0.presentedViewController != nil }) {
+                        // Until the dismissal has finished (an event, not a delay).
+                        var dismissed = false
+                        presenter.dismiss(animated: false) { dismissed = true }
+                        let deadline = Date().addingTimeInterval(5)
+                        while !dismissed && Date() < deadline { RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01)) }
+                        settle(frames: 1, delay: 0)
+                    }
                     window.isHidden = true
                     window.rootViewController = nil
-                    if presented != nil, (device.display?.verticalBarAllowed ?? 0) != 0 { settle(frames: 1, delay: 0.05) }
                     let output = device.panelWidth.flatMap { w in device.panelHeight.map { h in
                         // Like the real "mini" phones: lay out at @3x, then downsample to the panel.
                         let landscape = geo.size.width > geo.size.height && preview.layout.kind.isDevice
@@ -317,6 +323,7 @@ final class AgentRunner {
 
     func dumpPresentation(_ root: UIViewController, _ window: UIWindow) {
         func tree(_ c: UIViewController) -> [UIViewController] { [c] + c.children.flatMap(tree) }
+        log("screen corner radius \(window.screen.value(forKey: "_displayCornerRadius") ?? "-") trait \(window.traitCollection.value(forKey: "displayCornerRadius") ?? "-")")
         log("window \(window.frame) safe \(window.safeAreaInsets) screen \(window.screen.bounds) subviews \(window.subviews.map { "\(type(of: $0)) \($0.frame) safe \($0.safeAreaInsets)" })")
         let isel = NSSelectorFromString("valueForNSIntegerTrait:")
         typealias Trait = @convention(c) (AnyObject, Selector, AnyClass) -> Int
@@ -814,10 +821,6 @@ enum ServerCapture {
     static func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
         let t0 = Date()
-        // The window server keeps material (Liquid Glass) adaptation on the display: an alert's
-        // dimming would bleed into the next preview's glass for seconds, where a device's
-        // screenshot shows it settled. Resizing the display starts each capture afresh.
-        if started { _ = fit(width: w, height: h - 2, scale: scale) }
         guard start(width: w, height: h) != nil, fit(width: w, height: h, scale: scale) else { return nil }
         let tFit = Date()
         defer {
@@ -849,16 +852,21 @@ enum ServerCapture {
         // The process's first frame compiles shaders (half a second, more on CI); glass that
         // first saw the screen then settles a hair differently. Show the first window once
         // and start over from fresh display state.
-        if !warmedUp {
+        // On iOS 26, and on the Duo (vertical bars), glass only settles the same way every time
+        // once the screen has been shown a couple of times before the capture (measured: with
+        // fewer, some glass controls land a 1/255 step off at random, depending on what earlier
+        // previews left in the window server). iOS 27 iPhones are deterministic after one.
+        let needsExtra = runtimeMajor < 27 || (NoBoot.screen?.display?.verticalBarAllowed ?? 0) != 0
+        let showings = needsExtra ? 2 : (warmedUp ? 0 : 1)
+        if showings > 0 {
             warmedUp = true
-            _ = settled(window, w, h, scale, background: nil)
-            _ = fit(width: w, height: h - 2, scale: scale); _ = fit(width: w, height: h, scale: scale)
+            for _ in 0..<showings { _ = settled(window, w, h, scale, background: nil) }
         }
         guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
         // A material seen for the first time compiles its shaders during the capture; glass that
         // first appeared that slowly settles a hair differently. Capture it again, fresh.
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("capture first frame \(Int(lastFirstFrame * 1000)) ms") }
         if lastFirstFrame > 0.2 {
-            _ = fit(width: w, height: h - 2, scale: scale); _ = fit(width: w, height: h, scale: scale)
             if let again = settled(window, w, h, scale, background: nil) { bytes = again }
         }
         if h > w, NoBoot.screen?.idiom == "phone", let area = NoBoot.screen?.display?.exclusionArea, area.count == 4, area[1] > 0 { addCornerMark(&bytes, width: w) }
@@ -869,13 +877,19 @@ enum ServerCapture {
     }
 
     static func settled(_ window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
-        guard var last = pixels(of: window, w, h, scale, background: background) else { return nil }
-        for _ in 0..<4 {
-            guard let next = pixels(of: window, w, h, scale, background: background) else { return nil }
-            if next == last { return next }
-            last = next
+        // Shown once and kept attached while the server settles, like a device's window: taking
+        // the window off the display between passes made materials re-sample at random times.
+        do {
+            keepAttached = true
+            defer { keepAttached = false; detach?(); detach = nil }
+            guard var last = pixels(of: window, w, h, scale, background: background) else { return nil }
+            for _ in 0..<4 {
+                guard let next = latest(w, h) else { return nil }
+                if next == last { return next }
+                last = next
+            }
+            return last
         }
-        return last
     }
 
     /// A portrait iPhone with a Dynamic Island (or the Duo's camera cut-out) has a black 3¼ px
@@ -887,6 +901,28 @@ enum ServerCapture {
             let i = (y * w + x) * 4
             for k in 0..<3 { bytes[i + k] = UInt8((Int(bytes[i + k]) * factor + 127) / 255) }
         } }
+    }
+
+    static var keepAttached = false
+    /// The rendered runtime's major version (set per job).
+    static var runtimeMajor = 27
+    static var lastSurface: IOSurfaceRef?
+    static var lastSeen: UInt64 = 0
+    static var detach: (() -> Void)?
+
+    /// The newest frame once the server has gone idle again (no new commit).
+    static func latest(_ w: Int, _ h: Int) -> [UInt8]? {
+        guard var surface = lastSurface else { return nil }
+        var seen = lastSeen
+        var quiet = 0
+        while quiet < 3 { if let next = frame(after: &seen, width: w, height: h, timeout: 0.03) { surface = next; quiet = 0 } else { quiet += 1 } }
+        lastSurface = surface; lastSeen = seen
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let stride = IOSurfaceGetBytesPerRow(surface), base = IOSurfaceGetBaseAddress(surface)
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        bytes.withUnsafeMutableBytes { buf in for y in 0..<h { memcpy(buf.baseAddress! + y * w * 4, base + y * stride, w * 4) } }
+        return bytes
     }
 
     /// One composited frame of the window (BGRA rows, w × h).
@@ -926,7 +962,7 @@ enum ServerCapture {
             chromeHost.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
             root.addSublayer(chromeHost)
         }
-        defer {
+        let teardown = {
             context.setValue(nil, forKey: "layer")
             windowContext.setValue(nil, forKey: "layer")
             if let chromeLayer {
@@ -940,6 +976,7 @@ enum ServerCapture {
             layer.anchorPoint = saved.1; layer.position = saved.2
             saved.0?.addSublayer(layer)
         }
+        defer { if keepAttached { detach = teardown } else { teardown() } }
         var seen: UInt64 = 0
         _ = wait(0, UInt64.max - 1, 0, &seen)
         context.setValue(root, forKey: "layer")
@@ -960,6 +997,7 @@ enum ServerCapture {
         while quiet < 3 && Date() < idle {
             if let next = frame(after: &seen, width: w, height: h, timeout: gap) { surface = next; quiet = 0; frames += 1 } else { quiet += 1 }
         }
+        lastSurface = surface; lastSeen = seen
         timings.append("pass: first frame \(Int(first.timeIntervalSince(shown) * 1000)) ms, idle after \(Int(Date().timeIntervalSince(first) * 1000)) ms, \(frames) frames")
         IOSurfaceLock(surface, .readOnly, nil)
         defer { IOSurfaceUnlock(surface, .readOnly, nil) }
