@@ -17,8 +17,7 @@ final class ParityAndPerformanceTests: XCTestCase {
         .appendingPathComponent("swiftshot-it-\(ProcessInfo.processInfo.processIdentifier)")
 
     /// Previews whose every pixel below the status bar must equal the booted simulator's
-    /// framebuffer. Root is left out: its Liquid Glass tab bar and button blur the system status
-    /// bar and home indicator, which SpringBoard draws on a device and swiftshot doesn't (yet).
+    /// framebuffer (Root is added per test: on the Duo its rail is excluded).
     static let parityPreviews = ["Welcome", "Habit list", "History", "Stats", "Settings", "New habit sheet", "Delete alert", "Share dialog"]
 
     override func setUpWithError() throws {
@@ -55,7 +54,7 @@ final class ParityAndPerformanceTests: XCTestCase {
     /// and the home indicator (a pill centred at the bottom, which SpringBoard shows or hides
     /// depending on timing). A pixel counts as equal when it equals any of the references: the
     /// booted simulator itself flips a few glass pixels by 1/255 between runs.
-    func diff(_ a: URL, _ refs: [URL], skipTop: Int, skip: [CGRect] = [], scale: Int = 3, pillHalfWidth: Int = 80) throws -> Diff {
+    func diff(_ a: URL, _ refs: [URL], skipTop: Int, skip: [CGRect] = [], scale: Int = 3, pillHalfWidth: Int = 0) throws -> Diff {
         let x = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: a)))
         let ys = try refs.map { try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: $0))) }
         XCTAssertEqual(x.bitsPerSample, 8, "\(a.lastPathComponent): 8-bit like the framebuffer")
@@ -63,7 +62,7 @@ final class ParityAndPerformanceTests: XCTestCase {
         guard ys.allSatisfy({ $0.pixelsWide == x.pixelsWide && $0.pixelsHigh == x.pixelsHigh }), let bx = x.bitmapData else { return Diff(max: 255, pixels: -1) }
         var d = Diff()
         let px = x.bitsPerPixel / 8
-        let pill = (x.pixelsWide / 2 - pillHalfWidth * scale)...(x.pixelsWide / 2 + pillHalfWidth * scale), pillTop = x.pixelsHigh - 21 * scale
+        let pill = (x.pixelsWide / 2 - pillHalfWidth * scale)...(x.pixelsWide / 2 + pillHalfWidth * scale), pillTop = pillHalfWidth > 0 ? x.pixelsHigh - 21 * scale : Int.max
         for r in skipTop..<x.pixelsHigh {
             for c in 0..<x.pixelsWide where !(r >= pillTop && pill.contains(c)) && !skip.contains(where: { $0.contains(CGPoint(x: c, y: r)) }) {
                 var best = Int.max
@@ -82,7 +81,7 @@ final class ParityAndPerformanceTests: XCTestCase {
 
     /// Renders `previews` without a simulator and twice on booted simulators, and requires every
     /// pixel outside the system chrome to equal a booted one.
-    func assertParity(devices: String, ios: String, previews: [String], skipTop: Int, skip: [CGRect] = [], pillHalfWidth: Int = 80, tag: String) throws {
+    func assertParity(devices: String, ios: String, previews: [String], skipTop: Int, skip: [CGRect] = [], pillHalfWidth: Int = 0, tag: String) throws {
         let list = previews.joined(separator: ",")
         let virtual = Self.work.appendingPathComponent("\(tag)virtual")
         let refs = (1...2).map { Self.work.appendingPathComponent("\(tag)device\($0)") }
@@ -100,7 +99,9 @@ final class ParityAndPerformanceTests: XCTestCase {
     }
 
     func testNoBootMatchesBootedFramebuffer() throws {
-        try assertParity(devices: Self.devices, ios: Self.ios, previews: Self.parityPreviews, skipTop: 186, tag: "")
+        // The whole frame, status bar included. swiftshot draws the home indicator too, but a
+        // booted simulator hides its own after a moment idle, so the pill's band is left out.
+        try assertParity(devices: Self.devices, ios: Self.ios, previews: Self.parityPreviews + ["Root"], skipTop: 0, pillHalfWidth: 80, tag: "")
     }
 
     /// iPhone Duo (status bar in a rail on the right, floating sheets, per-corner radii): every

@@ -144,6 +144,11 @@ struct Job: Codable {
     var processTextSize: String? = nil
     /// Grow full-screen previews to show the whole content of their scroll view.
     var fullLength: Bool? = nil
+    /// Draw the system status bar like a device shows it (no-boot); nil (older host): yes.
+    var statusBar: Bool? = nil
+    /// The Mac's locale and time zone: a simulator formats its status bar clock with them.
+    var statusBarLocale: String? = nil
+    var statusBarTimeZone: String? = nil
 
     var rules: [ScreenRule] { screenRules ?? [] }
     var platform: String { targetPlatform ?? "ios" }

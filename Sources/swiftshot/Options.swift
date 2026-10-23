@@ -33,6 +33,7 @@ struct Options: Codable {
     var shutdownAfter = false
     var downloadRuntimes = false
     var html = true
+    var statusBar = true
     var parallelLanguages = 1
     var timeout: TimeInterval = 600
     var screens: [ScreenRule] = []
@@ -56,7 +57,7 @@ struct Options: Codable {
              xcodebuildArgs = "xcodebuild_args", devices, iosVersions = "ios_versions", languages, appearances,
              previews, output = "output_directory", mode, format, settleFrames = "settle_frames", delay,
              clearOutput = "clear_previous_screenshots", shutdownAfter = "shutdown_simulators",
-             downloadRuntimes = "download_missing_runtimes", html, parallelLanguages = "parallel_languages", timeout, screens, deviceSet = "device_set", watchScheme = "watch_scheme", watchAppPath = "watch_app",
+             downloadRuntimes = "download_missing_runtimes", html, statusBar = "status_bar", parallelLanguages = "parallel_languages", timeout, screens, deviceSet = "device_set", watchScheme = "watch_scheme", watchAppPath = "watch_app",
              watchosVersions = "watchos_versions", contentSize = "content_size", textSizes = "text_sizes", fullLength = "full_length", allowUnsupportedDevices = "allow_unsupported_devices",
              templates = "device_templates", templateCache = "template_cache", noBoot = "no_boot", verbose
     }
@@ -78,7 +79,7 @@ struct Options: Codable {
         try read(.languages, &languages); try read(.appearances, &appearances); try read(.previews, &previews)
         try read(.output, &output); try read(.mode, &mode); try read(.format, &format)
         try read(.settleFrames, &settleFrames); try read(.delay, &delay); try read(.clearOutput, &clearOutput)
-        try read(.shutdownAfter, &shutdownAfter); try read(.downloadRuntimes, &downloadRuntimes); try read(.html, &html)
+        try read(.shutdownAfter, &shutdownAfter); try read(.downloadRuntimes, &downloadRuntimes); try read(.html, &html); try read(.statusBar, &statusBar)
         try read(.parallelLanguages, &parallelLanguages); try read(.timeout, &timeout); try read(.verbose, &verbose)
         try read(.screens, &screens); try readOpt(.deviceSet, &deviceSet)
         try readOpt(.watchScheme, &watchScheme); try readOpt(.watchAppPath, &watchAppPath); try read(.watchosVersions, &watchosVersions)
@@ -128,6 +129,8 @@ struct Options: Codable {
       --format png|jpeg                       Default: png
       --clear                                 Delete previous screenshots first
       --no-html                               Do not write screenshots.html
+      --no-status-bar                         Leave out the system status bar (9:41, full battery), which is
+                                              drawn like on a device by default
 
     RENDERING
       --mode virtual|device                   virtual (default): one simulator per iOS version renders every device
@@ -236,6 +239,7 @@ struct Options: Codable {
             case "--shutdown": options.shutdownAfter = true
             case "--download-missing-runtimes": options.downloadRuntimes = true
             case "--no-html": options.html = false
+            case "--no-status-bar": options.statusBar = false
             case "--verbose", "-v": options.verbose = true
             case "--help", "-h": print(usage); exit(0)
             default:

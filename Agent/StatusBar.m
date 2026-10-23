@@ -4,8 +4,13 @@
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <dlfcn.h>
 
 void swiftshot_apply_status_bar_data(UIView *bar);
+
+/// UIScreen._exclusionArea (the Dynamic Island's rect, which the status bar lays out around), as
+/// the rendered device's booted screen reports it. CGRectNull: none.
+static CGRect swiftshot_exclusion = {{INFINITY, INFINITY}, {0, 0}};
 
 /// Applies the bar's data; its items are built for the window it is in.
 void swiftshot_apply_status_bar_data(UIView *bar) {
@@ -16,8 +21,8 @@ void swiftshot_apply_status_bar_data(UIView *bar) {
 
 /// _UIStatusBarData from a description: {entryKey: {"class": entry class, property: value…}}.
 /// Entries listed are enabled.
-id swiftshot_status_bar_data_from_spec(NSDictionary *entries) {
-    id data = [NSClassFromString(@"_UIStatusBarData") new];
+id swiftshot_status_bar_data_from_spec(NSDictionary *entries, NSString *dataClass) {
+    id data = [NSClassFromString(dataClass ?: @"_UIStatusBarData") new];
     for (NSString *key in entries) {
         NSDictionary *e = entries[key];
         Class cls = NSClassFromString(e[@"class"] ?: @"_UIStatusBarDataEntry");
@@ -30,20 +35,24 @@ id swiftshot_status_bar_data_from_spec(NSDictionary *entries) {
 }
 
 UIView *swiftshot_make_status_bar_spec(NSDictionary *spec, CGRect frame, UIScreen *screen) {
-    Class cls = NSClassFromString(@"_UIStatusBar");
-    id data = swiftshot_status_bar_data_from_spec(spec[@"entries"]);
+    // SpringBoard's own status bar (SystemStatusUI's STUIStatusBar) when the spec names it.
+    if (spec[@"framework"]) dlopen([spec[@"framework"] fileSystemRepresentation], RTLD_NOW);
+    Class cls = NSClassFromString(spec[@"barClass"] ?: @"_UIStatusBar");
+    id data = swiftshot_status_bar_data_from_spec(spec[@"entries"], spec[@"dataClass"]);
     if (!cls || !data) return nil;
     UIView *bar = ((id (*)(id, SEL, NSInteger))objc_msgSend)([cls alloc], NSSelectorFromString(@"initWithStyle:"), [spec[@"style"] integerValue]);
     if ([bar respondsToSelector:NSSelectorFromString(@"setTargetScreen:")]) ((void (*)(id, SEL, id))objc_msgSend)(bar, NSSelectorFromString(@"setTargetScreen:"), screen);
     if (spec[@"provider"] && [bar respondsToSelector:NSSelectorFromString(@"_setVisualProviderClassName:")]) ((void (*)(id, SEL, id))objc_msgSend)(bar, NSSelectorFromString(@"_setVisualProviderClassName:"), spec[@"provider"]);
     bar.frame = frame;
+    for (NSString *k in spec[@"barProperties"]) [bar setValue:spec[@"barProperties"][k] forKey:k];
+    // The island (not a notch, which starts at the top edge), which SpringBoard's bar lays its
+    // items out around.
+    if ([spec[@"avoidExclusionArea"] boolValue] && !CGRectIsNull(swiftshot_exclusion) && swiftshot_exclusion.origin.y > 0 && [bar respondsToSelector:NSSelectorFromString(@"setAvoidanceFrame:")])
+        ((void (*)(id, SEL, CGRect))objc_msgSend)(bar, NSSelectorFromString(@"setAvoidanceFrame:"), swiftshot_exclusion);
     objc_setAssociatedObject(bar, @selector(swiftshot_apply_status_bar_data), data, OBJC_ASSOCIATION_RETAIN);
     return bar;
 }
 
-/// UIScreen._exclusionArea (the Dynamic Island's rect, which the status bar lays out around), as
-/// the rendered device's booted screen reports it. CGRectNull: none.
-static CGRect swiftshot_exclusion = {{INFINITY, INFINITY}, {0, 0}};
 
 void swiftshot_set_exclusion_rect(CGRect rect) { swiftshot_exclusion = rect; }
 

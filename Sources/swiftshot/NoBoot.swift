@@ -51,7 +51,12 @@ extension Runner {
                     } }
                 } else {
                     let byCategory = Dictionary(grouping: runtimeHosts.flatMap(\.profiles)) { options.contentSize == nil ? $0.contentSizeCategory ?? "" : "" }
-                    for (category, profiles) in byCategory.sorted(by: { $0.key < $1.key }) { groups.append((category, host.type, profiles, nil)) }
+                    for (category, profiles) in byCategory.sorted(by: { $0.key < $1.key }) {
+                        // SpringBoard's status bar keeps the first screen's metrics for the
+                        // process, so with it each model renders in its own (parallel) process.
+                        if options.statusBar { for p in profiles { groups.append((category, host.type, [p], nil)) } }
+                        else { groups.append((category, host.type, profiles, nil)) }
+                    }
                 }
                 for (category, type, profiles, textSize) in groups {
                 for language in options.languages {
@@ -61,7 +66,7 @@ extension Runner {
                             var job = self.makeJob(mode: .virtual, language: language, runtime: runtime, devices: profiles, target: target)
                             job.processTextSize = textSize
                             do {
-                                let result = try await self.launchNoBoot(job, tag: "noboot-\(runtime.version)-\(language)-\(type.name)\(category.isEmpty ? "" : "-" + category)-\(textSize ?? "all")", simhost: simhost,
+                                let result = try await self.launchNoBoot(job, tag: "noboot-\(runtime.version)-\(language)-\(type.name)\(profiles.count == 1 && profiles[0].name != type.name ? "-" + profiles[0].name : "")\(category.isEmpty ? "" : "-" + category)-\(textSize ?? "all")", simhost: simhost,
                                                                          insert: "\(shim):\(agent)", root: root, dyldCache: dyldCaches[runtime.identifier] ?? nil, runtime: runtime,
                                                                          type: type, profile: profiles[0], executable: executable,
                                                                          contentSize: category.isEmpty ? nil : category)
@@ -149,7 +154,7 @@ extension Runner {
         if let dyldCache { env["SWIFTSHOT_NOBOOT_DYLD_CACHE"] = dyldCache }
         // Remote contexts (windows) connect to the window server the agent runs in-process.
         if ProcessInfo.processInfo.environment["SWIFTSHOT_CARENDERER"] == nil { env["CA_FORCE_LOCAL_SERVER"] = "1" }
-        for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE", "SWIFTSHOT_STATUSBAR"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
+        for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
         // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
         let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil
         if osLog { env["OS_ACTIVITY_DT_MODE"] = "1" }

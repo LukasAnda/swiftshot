@@ -199,6 +199,7 @@ final class AgentRunner {
     // MARK: Virtual mode — every device rendered off-screen in this one process
 
     func renderVirtual(_ previews: [DiscoveredPreview]) {
+        SystemChrome.job = job
         let capture = NoBoot.enabled ? "carenderer" : ProcessInfo.processInfo.environment["SWIFTSHOT_CAPTURE"] ?? "hierarchy"
         // Off-screen so the window inherits no system safe area; we supply the device's instead.
         let offscreenOrigin = NoBoot.enabled ? .zero : CGPoint(x: scene.screen.bounds.width * 4, y: scene.screen.bounds.height * 4)
@@ -265,15 +266,9 @@ final class AgentRunner {
                         log("animations before capture: \(animated(window.layer).prefix(12))")
                     }
                     // The system status bar over the app, as a device shows it.
-                    let statusBar = preview.layout.kind.isDevice && geo.size.width < geo.size.height ? SystemChrome.statusBar(width: geo.size.width, height: window.safeAreaInsets.top) : nil
-                    if let statusBar {
-                        window.addSubview(statusBar)
-                        SystemChrome.apply?(statusBar)
-                        // Its data update is applied (aggregated) on the next run-loop passes.
-                        let until = Date().addingTimeInterval(0.25)
-                        while Date() < until && statusBar.subviews.first?.subviews.allSatisfy({ $0.subviews.isEmpty }) ?? true { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
-                        statusBar.layoutIfNeeded()
-                    }
+                    let statusBar = preview.layout.kind.isDevice && job.statusBar != false ? SystemChrome.statusBar(over: window, root: vc, size: geo.size) : nil
+                    let homeIndicator = preview.layout.kind.isDevice && job.statusBar != false ? SystemChrome.homeIndicator(over: window, size: geo.size) : nil
+                    defer { homeIndicator?.removeFromSuperview() }
                     defer { statusBar?.removeFromSuperview() }
                     let format = UIGraphicsImageRendererFormat()
                     format.scale = device.scale
@@ -532,12 +527,127 @@ enum SystemChrome {
 
     typealias MakeSpec = @convention(c) (NSDictionary, CGRect, UIScreen) -> UIView?
     static let makeSpec: MakeSpec? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_make_status_bar_spec").map { unsafeBitCast($0, to: MakeSpec.self) }
-    static let spec: NSDictionary? = ProcessInfo.processInfo.environment["SWIFTSHOT_STATUSBAR"].flatMap { try? JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: $0))) as? NSDictionary }
 
-    static func statusBar(width: CGFloat, height: CGFloat) -> UIView? {
-        guard NoBoot.enabled, let spec, let makeSpec else { return nil }
-        let h = (spec["height"] as? CGFloat) ?? height
-        return makeSpec(spec, CGRect(x: 0, y: 0, width: width, height: h), UIScreen.main)
+    /// SpringBoard's own status bar (SystemStatusUI), with what `simctl status_bar override`
+    /// shows in --mode device: 9:41, full Wi-Fi and cellular bars, a charged battery. Its visual
+    /// provider is picked for the screen like on a device and lays out around the island.
+    static var spec: NSDictionary { [
+        "framework": "/System/Library/PrivateFrameworks/SystemStatusUI.framework/SystemStatusUI",
+        "barClass": "STUIStatusBar", "dataClass": "STMutableStatusBarData", "avoidExclusionArea": true,
+        "entries": [
+            "timeEntry": ["class": "STStatusBarDataStringEntry", "stringValue": clock.time],
+            "shortTimeEntry": ["class": "STStatusBarDataStringEntry", "stringValue": clock.time],
+            "dateEntry": ["class": "STStatusBarDataStringEntry", "stringValue": clock.date],
+            "cellularEntry": ["class": "STStatusBarDataCellularEntry", "status": 5, "rawValue": 4, "displayValue": 4, "type": 5],
+            "wifiEntry": ["class": "STStatusBarDataWifiEntry", "status": 5, "rawValue": 3, "displayValue": 3, "type": 0],
+            "mainBatteryEntry": ["class": "STStatusBarDataBatteryEntry", "capacity": 100, "state": 2],
+        ] as NSDictionary,
+    ] }
+
+    /// 9:41 on Tuesday 9 January 2007 (what --mode device overrides the simulator to), formatted
+    /// like SpringBoard does with the Mac's locale (a simulator's): "9:41" or "09:41", no AM/PM.
+    static var job: Job?
+    static var clock: (time: String, date: String) {
+        let locale = Locale(identifier: job?.statusBarLocale ?? "en_US")
+        let zone = job?.statusBarTimeZone.flatMap(TimeZone.init(identifier:)) ?? .current
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = zone
+        let date = cal.date(from: DateComponents(year: 2007, month: 1, day: 9, hour: 9, minute: 41))!
+        let f = DateFormatter(); f.locale = locale; f.timeZone = zone
+        let pattern = DateFormatter.dateFormat(fromTemplate: "jmm", options: 0, locale: locale) ?? "h:mm"
+        f.dateFormat = pattern.replacingOccurrences(of: "a", with: "").trimmingCharacters(in: .whitespaces)
+        let time = f.string(from: date)
+        f.dateFormat = DateFormatter.dateFormat(fromTemplate: "EEEdMMM", options: 0, locale: locale) ?? "EEE d MMM"
+        return (time, f.string(from: date).replacingOccurrences(of: ",", with: ""))
+    }
+
+    /// The spec with the visual provider SpringBoard picks for the rendered screen (island,
+    /// notch…), asked for each device: a bar would keep the first one it saw in this process.
+    static func specForScreen() -> NSDictionary {
+        dlopen(spec["framework"] as! String, RTLD_NOW)
+        guard let cls = NSClassFromString("STUIStatusBarVisualProvider_iOS") else { return spec }
+        let sel = NSSelectorFromString("visualProviderSubclassForScreen:visualProviderInfo:")
+        guard let m = class_getClassMethod(cls, sel) else { return spec }
+        typealias Pick = @convention(c) (AnyClass, Selector, UIScreen, NSDictionary?) -> AnyClass?
+        guard let picked = unsafeBitCast(method_getImplementation(m), to: Pick.self)(cls, sel, UIScreen.main, nil) else { return spec }
+        let result = spec.mutableCopy() as! NSMutableDictionary
+        result["provider"] = NSStringFromClass(picked)
+        return result
+    }
+
+    /// The status bar a device shows over this window, laid out and styled; nil where none shows
+    /// (landscape iPhones) or the runtime has no SpringBoard status bar.
+    static func statusBar(over window: UIWindow, root: UIViewController, size: CGSize) -> UIView? {
+        // iPhones only for now: an iPad's bar also shows the date and the app's menu bar.
+        guard NoBoot.enabled, let makeSpec, NoBoot.screen?.idiom == "phone", size.width < size.height,
+              let bar = makeSpec(specForScreen(), CGRect(origin: .zero, size: CGSize(width: size.width, height: window.safeAreaInsets.top)), UIScreen.main) else { return nil }
+        bar.isHidden = true
+        window.addSubview(bar)
+        apply?(bar)
+        // Its data update is applied (aggregated) on the next run-loop passes.
+        let until = Date().addingTimeInterval(0.25)
+        while Date() < until && bar.subviews.first?.subviews.allSatisfy({ $0.subviews.isEmpty }) ?? true { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
+        bar.layoutIfNeeded()
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar provider \(bar.value(forKey: "visualProviderClassName") ?? "-") \(type(of: bar.value(forKey: "visualProvider") as AnyObject))") }
+        if let style = style(for: bar, over: window, root: root) { bar.setValue(style, forKey: "style"); bar.layoutIfNeeded() }
+        bar.isHidden = false
+        return bar
+    }
+
+    /// SpringBoard's home indicator (MaterialKit's luma-dodge pill) on screens that have one.
+    static func homeIndicator(over window: UIWindow, size: CGSize) -> UIView? {
+        guard NoBoot.enabled, NoBoot.screen?.idiom == "phone", window.safeAreaInsets.bottom > 0 else { return nil }
+        dlopen("/System/Library/PrivateFrameworks/MaterialKit.framework/MaterialKit", RTLD_NOW)
+        guard let cls = NSClassFromString("MTLumaDodgePillView") as? UIView.Type else { return nil }
+        let pill = cls.init(frame: .zero)
+        typealias SizeFor = @convention(c) (AnyObject, Selector, CGFloat, UIScreen) -> CGSize
+        typealias Spacing = @convention(c) (AnyObject, Selector, UIScreen) -> CGFloat
+        let sizeSel = NSSelectorFromString("suggestedSizeForContentWidth:screen:"), spaceSel = NSSelectorFromString("suggestedEdgeSpacingForScreen:")
+        let pillSize = unsafeBitCast(class_getMethodImplementation(cls, sizeSel), to: SizeFor.self)(pill, sizeSel, size.width, UIScreen.main)
+        let spacing = unsafeBitCast(class_getMethodImplementation(cls, spaceSel), to: Spacing.self)(pill, spaceSel, UIScreen.main)
+        let scale = UIScreen.main.scale   // centred on a whole pixel, like SpringBoard's
+        pill.frame = CGRect(x: ((size.width - pillSize.width) / 2 * scale).rounded() / scale, y: size.height - spacing - pillSize.height, width: pillSize.width, height: pillSize.height)
+        pill.setValue(3, forKey: "style")   // adaptive: the luma-dodge filter lightens or darkens what's under it
+        window.addSubview(pill)
+        return pill
+    }
+
+    /// The app's explicit status bar style, else SpringBoard's automatic one: light glyphs over
+    /// dark content and dark over light, judged by the average luma under the bar's luma regions
+    /// with the bar's own transition boundaries (between them the style stays the default).
+    static func style(for bar: UIView, over window: UIWindow, root: UIViewController) -> Int? {
+        var vc = root
+        while let next = vc.presentedViewController.flatMap({ $0.modalPresentationCapturesStatusBarAppearance ? $0 : nil }) ?? vc.childForStatusBarStyle { vc = next }
+        switch vc.preferredStatusBarStyle {
+        case .lightContent: return 1
+        case .darkContent: return 3
+        default: break
+        }
+        guard let provider = bar.value(forKey: "visualProvider") as AnyObject? else { return nil }
+        let views = ["leadingBackgroundLumaView", "centerBackgroundLumaView", "trailingBackgroundLumaView"]
+            .compactMap { provider.responds(to: NSSelectorFromString($0)) ? provider.value(forKey: $0) as? UIView : nil }
+        guard !views.isEmpty else { return nil }
+        var lower = 0.4, upper = 0.7
+        if let bounds = views[0].value(forKey: "transitionBoundaries") as? NSValue {
+            var pair = (0.0, 0.0); bounds.getValue(&pair, size: MemoryLayout<(Double, Double)>.size); (lower, upper) = pair
+        }
+        let luma = views.map { luminance(of: window, in: $0.convert($0.bounds, to: window)) }.reduce(0, +) / Double(views.count)
+        if luma < lower { return 1 }
+        if luma > upper { return 3 }
+        return nil
+    }
+
+    /// Average Rec. 709 luma (0…1) of what the window shows in `rect`.
+    static func luminance(of window: UIWindow, in rect: CGRect) -> Double {
+        let w = max(1, Int(rect.width)), h = max(1, Int(rect.height))
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return 1 }
+        ctx.translateBy(x: 0, y: CGFloat(h)); ctx.scaleBy(x: 1, y: -1)
+        ctx.translateBy(x: -rect.minX, y: -rect.minY)
+        window.layer.render(in: ctx)
+        var sum = 0.0
+        for i in stride(from: 0, to: pixels.count, by: 4) { sum += 0.2126 * Double(pixels[i]) + 0.7152 * Double(pixels[i + 1]) + 0.0722 * Double(pixels[i + 2]) }
+        return sum / Double(w * h) / 255
     }
 }
 
@@ -659,7 +769,7 @@ enum ServerCapture {
             _ = fit(width: w, height: h - 2, scale: scale); _ = fit(width: w, height: h, scale: scale)
         }
         guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
-        if h > w, NoBoot.screen?.idiom == "phone" { addCornerMark(&bytes, width: w) }
+        if h > w, NoBoot.screen?.idiom == "phone", let area = NoBoot.screen?.display?.exclusionArea, area.count == 4, area[1] > 0 { addCornerMark(&bytes, width: w) }
         guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
               let raw = ctx.makeImage() else { return nil }
         // The framebuffer's bytes as they are: what `simctl io screenshot` saves.
@@ -676,8 +786,9 @@ enum ServerCapture {
         return last
     }
 
-    /// A portrait iPhone's screen (simulator screenshots, any app or the home screen) has a
-    /// black 3¼ px square over its top-left pixels, blended in sRGB.
+    /// A portrait iPhone with a Dynamic Island (or the Duo's camera cut-out) has a black 3¼ px
+    /// square over its top-left pixels in every simulator screenshot (home screen too; the system
+    /// aperture's), blended in sRGB. Notch phones don't.
     static func addCornerMark(_ bytes: inout [UInt8], width w: Int) {
         for y in 0...3 { for x in 0...3 {
             let factor = x < 3 && y < 3 ? 0 : x == 3 && y == 3 ? 239 : 191
