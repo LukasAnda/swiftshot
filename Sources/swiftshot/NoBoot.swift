@@ -147,6 +147,9 @@ extension Runner {
             "SWIFTSHOT_NOBOOT_SHIM": (insert as NSString).components(separatedBy: ":")[0], "SWIFTSHOT_NOBOOT_INSERT": insert,
         ]
         if let dyldCache { env["SWIFTSHOT_NOBOOT_DYLD_CACHE"] = dyldCache }
+        // Remote contexts (windows) connect to the window server the agent runs in-process.
+        if job.platform == "ios" && ProcessInfo.processInfo.environment["SWIFTSHOT_CARENDERER"] == nil { env["CA_FORCE_LOCAL_SERVER"] = "1" }
+        for (k, v) in ProcessInfo.processInfo.environment where k == "SWIFTSHOT_DEBUG" || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
         // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
         let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil
         if osLog { env["OS_ACTIVITY_DT_MODE"] = "1" }

@@ -34,13 +34,16 @@ bin/SwiftshotAgent-watchOS.dylib: $(AGENT_SRC) Agent/Loader.m Agent/SwiftCall.s 
 	rm -f $@ && cp $(BUILD)/agent-watch.dylib $@
 
 # No-boot rendering (experimental): shim injected into simulator processes + the macOS host for them.
-bin/SwiftshotNoBoot.dylib: Agent/NoBoot.c
-	mkdir -p bin
-	xcrun -sdk iphonesimulator clang -target arm64-apple-ios17.0-simulator -O2 -dynamiclib Agent/NoBoot.c -o $@
+NOBOOT_SRC := Agent/NoBoot.c Agent/FakeDisplay.c Agent/SimFramebufferClient.tbd
+NOBOOT_LINK := -framework CoreFoundation
 
-bin/SwiftshotNoBoot-watchOS.dylib: Agent/NoBoot.c
+bin/SwiftshotNoBoot.dylib: $(NOBOOT_SRC)
 	mkdir -p bin
-	xcrun -sdk watchsimulator clang -target arm64-apple-watchos10.0-simulator -O2 -dynamiclib Agent/NoBoot.c -o $@
+	xcrun -sdk iphonesimulator clang -target arm64-apple-ios17.0-simulator -O2 -dynamiclib $(NOBOOT_SRC) $(NOBOOT_LINK) -o $@
+
+bin/SwiftshotNoBoot-watchOS.dylib: $(NOBOOT_SRC)
+	mkdir -p bin
+	xcrun -sdk watchsimulator clang -target arm64-apple-watchos10.0-simulator -O2 -dynamiclib $(NOBOOT_SRC) $(NOBOOT_LINK) -o $@
 
 bin/swiftshot-simhost: Agent/SimHost.m
 	mkdir -p bin

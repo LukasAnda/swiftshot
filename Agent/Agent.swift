@@ -9,6 +9,7 @@ import UIKit
 import SwiftUI
 import ObjectiveC
 import Metal
+import IOSurface
 
 
 @_cdecl("SwiftshotAgentStart")
@@ -251,6 +252,7 @@ final class AgentRunner {
                     }
                     settle(frames: job.settleFrames, delay: job.delay(for: preview.name))
                     if NoBoot.enabled { NoBoot.finishPresentations(of: vc, in: window, settle: { self.settle(frames: 2, delay: 0) }) }
+                    if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { dumpPresentation(vc, window) }
                     if preview.layout.kind.isDevice && job.fullLength(for: preview.name) {
                         geo.size = growToContent(of: vc, in: window, size: geo.size, scale: device.scale, name: preview.name)
                     }
@@ -258,7 +260,7 @@ final class AgentRunner {
                     format.scale = device.scale
                     format.opaque = preview.layout.kind.isDevice
                     let bounds = CGRect(origin: .zero, size: geo.size)
-                    let rendered = capture == "carenderer" ? GPUCapture.shared.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque) : nil
+                    let rendered = capture == "carenderer" ? (ServerCapture.enabled ? ServerCapture.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque) : GPUCapture.shared.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque)) : nil
                     let image = rendered ?? UIGraphicsImageRenderer(size: geo.size, format: format).image { ctx in
                         if capture == "layer" {
                             window.layer.render(in: ctx.cgContext)
@@ -272,7 +274,7 @@ final class AgentRunner {
                         // Like the real "mini" phones: lay out at @3x, then downsample to the panel.
                         let landscape = geo.size.width > geo.size.height && preview.layout.kind.isDevice
                         let target = CGSize(width: landscape ? h : w, height: landscape ? w : h)
-                        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
+                        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true; format.preferredRange = .standard
                         return UIGraphicsImageRenderer(size: target, format: format).image { ctx in
                             ctx.cgContext.interpolationQuality = .high
                             image.draw(in: CGRect(origin: .zero, size: target))
@@ -289,6 +291,16 @@ final class AgentRunner {
                   }
                 }
             }
+        }
+    }
+
+    func dumpPresentation(_ root: UIViewController, _ window: UIWindow) {
+        func tree(_ c: UIViewController) -> [UIViewController] { [c] + c.children.flatMap(tree) }
+        log("window \(window.frame) safe \(window.safeAreaInsets) screen \(window.screen.bounds) subviews \(window.subviews.map { "\(type(of: $0)) \($0.frame) safe \($0.safeAreaInsets)" })")
+        for c in tree(root) { guard let p = c.presentedViewController else { continue }
+            var v: UIView? = p.view
+            while let view = v { log("  \(type(of: view)) frame \(view.frame) safe \(view.safeAreaInsets)"); v = view.superview }
+            if let sheet = p.sheetPresentationController { log("  sheet detents \(sheet.detents) container \(sheet.containerView?.bounds ?? .zero) safe \(sheet.containerView?.safeAreaInsets ?? .zero) frameOfPresented \(sheet.frameOfPresentedViewInContainerView)") }
         }
     }
 
@@ -348,6 +360,9 @@ final class AgentRunner {
         }
         let landscape = previews.filter { $0.layout.landscape }
         if !landscape.isEmpty { renderVirtual(landscape) }
+        // End states, like the virtual renderer: a sheet's spring is still moving when the
+        // framebuffer is grabbed otherwise.
+        UIView.setAnimationsEnabled(false)
         for (index, (preview, appearance)) in combos.filter({ !$0.0.layout.landscape }).enumerated() {
             showAndHandOver(preview: preview, appearance: appearance, index: index, device: device, controlDir: controlDir)
         }
@@ -371,6 +386,7 @@ final class AgentRunner {
         window.isHidden = false
         window.layoutIfNeeded()
         settle(frames: job.settleFrames, delay: job.delay(for: preview.name))
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { dumpPresentation(vc, window) }
 
         let file = fileName(preview: preview.name, device: device.name, appearance: appearance)
         let out = outputURL(file)
@@ -424,8 +440,9 @@ final class GPUCapture {
             layer.setAffineTransform(saved.3); layer.anchorPoint = saved.1; layer.position = saved.2
             saved.0?.addSublayer(layer)
         }
-        // Composite in 8-bit sRGB like the render server (a colorspace option or a float target
-        // changes the result), convert to 16-bit Display P3 when writing like drawHierarchy.
+        // Composite in 8-bit sRGB like the render server: the simulator framebuffer is 8-bit BGRA
+        // and that is what `simctl io screenshot` saves (a colorspace option or a float target
+        // changes the result).
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let renderer = CARenderer(mtlTexture: texture, options: [kCARendererMetalCommandQueue: queue])
         renderer.layer = root
@@ -439,15 +456,151 @@ final class GPUCapture {
 
         var bytes = [UInt8](repeating: 0, count: w * h * 4)
         texture.getBytes(&bytes, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        // The flipped root renders bottom-up: reverse the rows (lossless).
+        bytes.withUnsafeMutableBytes { buf in
+            let row = w * 4; var tmp = [UInt8](repeating: 0, count: row)
+            for y in 0..<(h / 2) {
+                let a = buf.baseAddress! + y * row, b = buf.baseAddress! + (h - 1 - y) * row
+                memcpy(&tmp, a, row); memcpy(a, b, row); memcpy(b, tmp, row)
+            }
+        }
         let info = (opaque ? CGImageAlphaInfo.noneSkipFirst : .premultipliedFirst).rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space, bitmapInfo: info),
               let raw = ctx.makeImage() else { return nil }
-        // Metal rows are top-down; draw into a UIKit context to get an upright image. Like
-        // drawHierarchy on a P3 screen, the result is a 16-bit Display P3 image.
-        let format = UIGraphicsImageRendererFormat(); format.scale = scale; format.opaque = opaque; format.preferredRange = .extended
-        return UIGraphicsImageRenderer(size: size, format: format).image { c in
-            c.cgContext.draw(raw, in: CGRect(origin: .zero, size: size))
+        // Written as is (8-bit sRGB): a conversion to another space or depth would round
+        // the framebuffer's values.
+        return UIImage(cgImage: raw, scale: scale, orientation: .up)
+    }
+}
+
+/// Captures like a device: Core Animation's window server (the code backboardd composites the
+/// screen with) runs inside this process on a display Agent/FakeDisplay.c provides, the window's
+/// layer tree reaches it through a remote context like an app's windows do, and the frame it
+/// presents is the framebuffer `simctl io screenshot` would save. The swiftshot CLI sets
+/// CA_FORCE_LOCAL_SERVER so remote contexts connect to this in-process server.
+@MainActor
+enum ServerCapture {
+    static let enabled = NoBoot.enabled && getenv("CA_FORCE_LOCAL_SERVER") != nil
+    typealias Wait = @convention(c) (Int32, UInt64, Double, UnsafeMutablePointer<UInt64>?) -> Unmanaged<IOSurfaceRef>?
+    typealias Resize = @convention(c) (Int32, UInt32, UInt32) -> Bool
+    static let wait: Wait? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_wait").map { unsafeBitCast($0, to: Wait.self) }
+    static let resize: Resize? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_resize").map { unsafeBitCast($0, to: Resize.self) }
+    static var context: NSObject?
+    static var display: NSObject?
+    static var started = false
+
+    static func constant(_ name: String) -> NSString? {
+        dlsym(UnsafeMutableRawPointer(bitPattern: -2), name).map { $0.assumingMemoryBound(to: NSString.self).pointee }
+    }
+
+    static func start(width: Int, height: Int) -> NSObject? {
+        if started { return context }
+        started = true
+        setenv("SWIFTSHOT_DISPLAYS", "\(width)x\(height)@460", 1)
+        guard let cls = NSClassFromString("CAWindowServer") as? NSObject.Type,
+              let server = cls.perform(NSSelectorFromString("server"))?.takeUnretainedValue() as? NSObject,
+              let display = (server.value(forKey: "displays") as? [NSObject])?.first,
+              let id = display.value(forKey: "displayId") as? NSNumber,
+              let contextClass = NSClassFromString("CAContext") as? NSObject.Type else { log("server capture: no window server"); return nil }
+        let options: NSDictionary = [constant("kCAContextDisplayId") ?? "displayId": id, constant("kCAContextDisplayable") ?? "displayable": true]
+        context = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: options)?.takeUnretainedValue() as? NSObject
+        if context == nil { log("server capture: no context") }
+        self.display = display
+        return context
+    }
+
+    /// Sizes the display to the capture, like a device's panel (blurs and shadows clamp at its edges).
+    static func fit(width: Int, height: Int) -> Bool {
+        guard let display, let resize, resize(0, UInt32(width), UInt32(height)) else { return false }
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if let b = (display.value(forKey: "bounds") as? NSValue)?.cgRectValue, Int(b.width) == width, Int(b.height) == height { return true }
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.001))
         }
+        log("server capture: display did not resize to \(width)x\(height)")
+        return false
+    }
+
+    /// The next presented frame of the capture's size, or nil after `timeout`.
+    static func frame(after: inout UInt64, width: Int, height: Int, timeout: Double) -> IOSurfaceRef? {
+        guard let wait else { return nil }
+        var frame: UInt64 = 0
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let s = wait(0, after, 0.004, &frame) {
+                after = frame
+                let surface = s.takeRetainedValue()
+                if IOSurfaceGetWidth(surface) == width && IOSurfaceGetHeight(surface) == height { return surface }
+            }
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.001))
+        } while Date() < deadline
+        return nil
+    }
+
+    static func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
+        let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
+        guard start(width: w, height: h) != nil, fit(width: w, height: h) else { return nil }
+        let info = CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        guard opaque else {
+            // The framebuffer has no alpha: composite over black and over white, and take
+            // coverage from the difference (out = colour + (1 - alpha) * background).
+            guard var black = pixels(of: window, w, h, scale, background: .black), let white = pixels(of: window, w, h, scale, background: .white) else { return nil }
+            for i in stride(from: 0, to: black.count, by: 4) {
+                let alpha = 255 - min(255, max(0, Int(white[i + 1]) - Int(black[i + 1])))
+                black[i + 3] = UInt8(alpha)
+                if alpha == 0 { black[i] = 0; black[i + 1] = 0; black[i + 2] = 0 } else {
+                    for k in 0..<3 { black[i + k] = min(black[i + k], UInt8(alpha)) }
+                }
+            }
+            let premultiplied = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+            guard let ctx = CGContext(data: &black, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: premultiplied),
+                  let raw = ctx.makeImage() else { return nil }
+            return UIImage(cgImage: raw, scale: scale, orientation: .up)
+        }
+        guard var bytes = pixels(of: window, w, h, scale, background: nil),
+              let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
+              let raw = ctx.makeImage() else { return nil }
+        // The framebuffer's bytes as they are: what `simctl io screenshot` saves.
+        return UIImage(cgImage: raw, scale: scale, orientation: .up)
+    }
+
+    /// One composited frame of the window (BGRA rows, w × h).
+    static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
+        guard let context, let wait else { return nil }
+        // The window's layer under a pixel-sized root, at the device's scale, for the capture.
+        let layer = window.layer
+        let saved = (layer.superlayer, layer.anchorPoint, layer.position, layer.affineTransform())
+        let root = CALayer()
+        root.frame = CGRect(x: 0, y: 0, width: w, height: h)
+        root.backgroundColor = background?.cgColor
+        root.addSublayer(layer)
+        layer.anchorPoint = .zero; layer.position = .zero
+        layer.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
+        defer {
+            context.setValue(nil, forKey: "layer")
+            CATransaction.flush()
+            layer.removeFromSuperlayer()
+            layer.setAffineTransform(saved.3); layer.anchorPoint = saved.1; layer.position = saved.2
+            saved.0?.addSublayer(layer)
+        }
+        var seen: UInt64 = 0
+        _ = wait(0, UInt64.max - 1, 0, &seen)
+        context.setValue(root, forKey: "layer")
+        CATransaction.flush()
+        // The first frame with the commit, then the last one before the server goes idle
+        // (implicit animations, materials settling), as a device would show it.
+        guard var surface = frame(after: &seen, width: w, height: h, timeout: 2) else { log("server capture: no frame"); return nil }
+        var quiet = 0
+        let idle = Date().addingTimeInterval(1)
+        while quiet < 3 && Date() < idle {
+            if let next = frame(after: &seen, width: w, height: h, timeout: 0.016) { surface = next; quiet = 0 } else { quiet += 1 }
+        }
+        IOSurfaceLock(surface, .readOnly, nil)
+        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
+        let stride = IOSurfaceGetBytesPerRow(surface), base = IOSurfaceGetBaseAddress(surface)
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        bytes.withUnsafeMutableBytes { buf in for y in 0..<h { memcpy(buf.baseAddress! + y * w * 4, base + y * stride, w * 4) } }
+        return bytes
     }
 }
 
@@ -620,7 +773,8 @@ enum NoBoot {
         if let m = class_getInstanceMethod(UIApplication.self, NSSelectorFromString("_performAfterCATransactionCommitsWithLegacyRunloopObserverBasedTiming:block:")) {
             method_setImplementation(m, imp_implementationWithBlock(legacy))
         }
-        swiftshot_flip_layer_drawing()
+        // CARenderer draws into a bottom-up texture; the window server doesn't.
+        if getenv("CA_FORCE_LOCAL_SERVER") == nil { swiftshot_flip_layer_drawing() }
         guard let global = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "UIApp")?.assumingMemoryBound(to: UnsafeMutableRawPointer?.self),
               global.pointee == nil, let app = class_createInstance(UIApplication.self, 0) as? NSObject else { return }
         global.pointee = Unmanaged.passRetained(app).toOpaque()
