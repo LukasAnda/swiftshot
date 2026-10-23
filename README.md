@@ -161,6 +161,10 @@ status bar. `swift test` runs this comparison (see [Tests](#tests)).
   **byte-identical** (0/255) to the booted framebuffer, including sheets, alerts, confirmation
   dialogs, Liquid Glass, gradients and blurs. That includes the dimmed, blurred backdrop behind
   sheets and alerts, because it's composited by the same window server code as on a device.
+* **A real iPhone 14 Pro (iOS 26.5)**, DemoApp launched on the phone and captured with
+  `devicectl device capture screenshot`: Welcome, Stats and Settings within 2/255 of swiftshot's
+  no-boot output below the status bar (GPU rounding of a real A16 versus the simulator), Habit list
+  within 10/255 (the glass "+" under the real status bar).
 * **System chrome is not drawn.** A device shows SpringBoard's status bar (and sometimes the home
   indicator) over the app; swiftshot's output has neither, like Xcode previews. Glass controls
   that sit right under them blur them in on a device, so those few hundred pixels differ (up to

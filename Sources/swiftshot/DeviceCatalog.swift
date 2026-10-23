@@ -123,6 +123,14 @@ enum DeviceCatalog {
             return (withPanel(DeviceProfile(name: type.name, idiom: idiom, width: screen.width, height: screen.height, scale: screen.scale,
                                   safeArea: known.0, landscapeSafeArea: known.1, cornerRadius: screen.corner)), "built-in")
         }
+        // The measured display data has the portrait safe area (in portrait coordinates for every
+        // orientation); a landscape window gets the sensor housing on both sides.
+        if idiom != "watch", let display = builtInDisplay(type.name, runtime: runtime), display.statusBarAxis == nil {
+            let p = display.safeAreaPortrait
+            let landscape = idiom == "pad" ? p : (p.top > 24 ? Insets(top: 0, left: p.top, bottom: min(p.bottom, 21), right: p.top) : .zero)
+            return (withPanel(DeviceProfile(name: type.name, idiom: idiom, width: screen.width, height: screen.height, scale: screen.scale,
+                                  safeArea: p, landscapeSafeArea: landscape, cornerRadius: screen.corner)), "built-in display")
+        }
         let (portrait, landscape) = idiom == "watch" ? (BuiltInDisplays.watchSafeArea[type.name] ?? .zero, Insets.zero) : heuristicSafeArea(idiom: idiom, screen: screen)
         return (withPanel(DeviceProfile(name: type.name, idiom: idiom, width: screen.width, height: screen.height, scale: screen.scale,
                               safeArea: portrait, landscapeSafeArea: landscape, cornerRadius: screen.corner)), "heuristic")

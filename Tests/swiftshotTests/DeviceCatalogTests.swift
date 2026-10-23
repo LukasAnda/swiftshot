@@ -56,6 +56,20 @@ final class DeviceCatalogTests: XCTestCase {
         XCTAssertEqual(display.barPosition?.count, 8)
     }
 
+    /// A device missing from the safe-area table but present in the measured display table uses
+    /// the measured safe area (iPhone 14 Pro: 59 pt, not the heuristic's 62 — checked against a
+    /// real iPhone 14 Pro).
+    func testDisplayTableSafeAreaBeatsHeuristic() throws {
+        let type = try deviceType(name: "iPhone 14 Pro", capabilities: [
+            "DeviceCornerRadius": 55,
+            "displays": [["deviceName": "primary", "width": 1179, "height": 2556, "scale": 3]],
+        ])
+        let (profile, source) = try XCTUnwrap(DeviceCatalog.profile(for: type, runtime: "26.5", cache: [:]))
+        XCTAssertEqual(source, "built-in display")
+        XCTAssertEqual(profile.safeArea, Insets(top: 59, left: 0, bottom: 34, right: 0))
+        XCTAssertEqual(profile.landscapeSafeArea, Insets(top: 0, left: 59, bottom: 21, right: 59))
+    }
+
     func testHeuristicForUnknownDevice() throws {
         let type = try deviceType(name: "iPhone 99 Ultra", capabilities: [
             "DeviceCornerRadius": 62,
