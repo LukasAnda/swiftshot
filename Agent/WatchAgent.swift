@@ -148,10 +148,13 @@ extension WatchAgent {
                 swiftshot_watch_show(window, vc)
                 RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3 + job.delay(for: preview.name)))
                 dumpLayers(window, suffix: "-\(index)"); index += 1
-                let server = getenv("CA_FORCE_LOCAL_SERVER") != nil
+                let server = WatchNoBoot.serverCapture
                 guard let image = (server ? swiftshot_watch_server_capture(window, size.width, size.height, device.scale) : swiftshot_watch_capture(window, size.width, size.height, device.scale))?.takeRetainedValue() else {
                     result.errors.append("\(preview.name) \(device.name): capture failed"); continue
                 }
+                // Shown windows get their own context on the window server's display too: take
+                // this one off it before the next preview.
+                if server { window.setValue(true, forKey: "hidden") }
                 let file = job.fileName(preview: preview.name, device: device.name, appearance: "", textSize: textSize)
                 let out = URL(fileURLWithPath: job.outputDir).appendingPathComponent(job.language).appendingPathComponent(file)
                 try? FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -234,6 +237,9 @@ enum WatchNoBoot {
     static let enabled = ProcessInfo.processInfo.environment["SWIFTSHOT_NOBOOT"] == "1"
     nonisolated(unsafe) static var screen: DeviceProfile?
 
+    /// Window-server capture (as on iOS; the CLI sets CA_FORCE_LOCAL_SERVER).
+    static let serverCapture = getenv("CA_FORCE_LOCAL_SERVER") != nil
+
     static func install() {
         if let cls = NSClassFromString("CADisplay"), let m = class_getClassMethod(cls, NSSelectorFromString("displays")) {
             let none: @convention(block) (AnyObject) -> NSArray = { _ in NSArray() }
@@ -267,7 +273,7 @@ enum WatchNoBoot {
         let app = swiftshot_watch_make_application().map { $0.takeUnretainedValue() as String } ?? "not created"
         log("no-boot: application \(app)")
         // CARenderer draws into a bottom-up texture; the window server doesn't.
-        if getenv("CA_FORCE_LOCAL_SERVER") == nil { swiftshot_flip_layer_drawing() }
+        if serverCapture { _ = swiftshot_watch_start_server(416, 496) } else { swiftshot_flip_layer_drawing() }
         // See the iOS agent: after-commit bookkeeping asserts without an app; it draws nothing.
         if let cls = NSClassFromString("_UIAppCACommitFuture"), let m = class_getInstanceMethod(cls, NSSelectorFromString("_invoke")) {
             let skip: @convention(block) (AnyObject) -> Void = { _ in }
@@ -282,6 +288,7 @@ enum WatchNoBoot {
 @_silgen_name("swiftshot_watch_set_safe_area") func swiftshot_watch_set_safe_area(_ controller: AnyObject, _ top: Double, _ left: Double, _ bottom: Double, _ right: Double)
 @_silgen_name("swiftshot_watch_make_window") func swiftshot_watch_make_window(_ width: Double, _ height: Double) -> AnyObject?
 @_silgen_name("swiftshot_watch_show") func swiftshot_watch_show(_ window: AnyObject, _ controller: AnyObject)
+@_silgen_name("swiftshot_watch_start_server") func swiftshot_watch_start_server(_ width: Double, _ height: Double) -> Bool
 @_silgen_name("swiftshot_watch_server_capture") func swiftshot_watch_server_capture(_ window: AnyObject, _ width: Double, _ height: Double, _ scale: Double) -> Unmanaged<CGImage>?
 @_silgen_name("swiftshot_watch_capture") func swiftshot_watch_capture(_ window: AnyObject, _ width: Double, _ height: Double, _ scale: Double) -> Unmanaged<CGImage>?
 

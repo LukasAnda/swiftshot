@@ -176,24 +176,33 @@ static SSSurface next_frame(uint64_t *seen, NSUInteger w, NSUInteger h, double t
     return NULL;
 }
 
+/// Starts the window server and the context windows are captured through (before any UI exists:
+/// with CA_FORCE_LOCAL_SERVER set, SwiftUI's display timing expects the local server to run).
+BOOL swiftshot_watch_start_server(double width, double height) {
+    if (server_context) return YES;
+    if (!load_iosurface()) return NO;
+    setenv("SWIFTSHOT_DISPLAYS", [NSString stringWithFormat:@"%lux%lu@326", (unsigned long)llround(width), (unsigned long)llround(height)].UTF8String, 1);
+    id server = [NSClassFromString(@"CAWindowServer") performSelector:@selector(server)];
+    server_display = [[server valueForKey:@"displays"] firstObject];
+    id displayId = [server_display valueForKey:@"displayId"];
+    if (!displayId) { fprintf(stderr, "[swiftshot] watch capture: no window server display\n"); return NO; }
+    NSString *idKey = *(__unsafe_unretained NSString **)dlsym(RTLD_DEFAULT, "kCAContextDisplayId");
+    NSString *displayableKey = *(__unsafe_unretained NSString **)dlsym(RTLD_DEFAULT, "kCAContextDisplayable");
+    server_context = [NSClassFromString(@"CAContext") performSelector:@selector(remoteContextWithOptions:) withObject:@{idKey: displayId, displayableKey: @YES}];
+    if (!server_context) { fprintf(stderr, "[swiftshot] watch capture: no remote context\n"); return NO; }
+    // Shown watch windows get contexts on this display too; the capture context goes above them.
+    [server_context setValue:@(1e6) forKey:@"level"];
+    return YES;
+}
+
 /// The window composited by Core Animation's window server in this process (CA_FORCE_LOCAL_SERVER),
 /// as backboardd composites a watch's screen: a CGImage (+1) of the presented framebuffer, or NULL.
 CGImageRef swiftshot_watch_server_capture(id window, double width, double height, double scale) {
     NSUInteger w = (NSUInteger)llround(width * scale), h = (NSUInteger)llround(height * scale);
-    if (!load_iosurface()) return NULL;
-    if (!server_context) {
-        setenv("SWIFTSHOT_DISPLAYS", [NSString stringWithFormat:@"%lux%lu@326", (unsigned long)w, (unsigned long)h].UTF8String, 1);
-        id server = [NSClassFromString(@"CAWindowServer") performSelector:@selector(server)];
-        server_display = [[server valueForKey:@"displays"] firstObject];
-        id displayId = [server_display valueForKey:@"displayId"];
-        if (!displayId) return NULL;
-        NSString *idKey = *(__unsafe_unretained NSString **)dlsym(RTLD_DEFAULT, "kCAContextDisplayId");
-        NSString *displayableKey = *(__unsafe_unretained NSString **)dlsym(RTLD_DEFAULT, "kCAContextDisplayable");
-        server_context = [NSClassFromString(@"CAContext") performSelector:@selector(remoteContextWithOptions:) withObject:@{idKey: displayId, displayableKey: @YES}];
-        if (!server_context) return NULL;
-    }
+    if (!load_iosurface()) { fprintf(stderr, "[swiftshot] watch capture: no IOSurface\n"); return NULL; }
+    if (!swiftshot_watch_start_server(w, h)) return NULL;
     bool (*resize)(int, unsigned, unsigned) = dlsym(RTLD_DEFAULT, "swiftshot_fb_resize");
-    if (!resize || !resize(0, (unsigned)w, (unsigned)h)) return NULL;
+    if (!resize || !resize(0, (unsigned)w, (unsigned)h)) { fprintf(stderr, "[swiftshot] watch capture: cannot resize the display\n"); return NULL; }
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
     while ([deadline timeIntervalSinceNow] > 0) {
         CGRect b = CGRectZero;
@@ -206,6 +215,9 @@ CGImageRef swiftshot_watch_server_capture(id window, double width, double height
     CGAffineTransform transform = [layer affineTransform];
     id root = [NSClassFromString(@"CALayer") new];
     [root setFrame:CGRectMake(0, 0, w, h)];
+    CGColorRef black = CGColorCreateGenericGray(0, 1);
+    [root setValue:(__bridge id)black forKey:@"backgroundColor"];   // the watch's own backdrop
+    CGColorRelease(black);
     [root addSublayer:layer];
     [layer setAnchorPoint:CGPointZero]; [layer setPosition:CGPointZero];
     [layer setAffineTransform:CGAffineTransformMakeScale(scale, scale)];
@@ -233,7 +245,7 @@ CGImageRef swiftshot_watch_server_capture(id window, double width, double height
     [layer removeFromSuperlayer];
     [layer setAffineTransform:transform]; [layer setAnchorPoint:anchor]; [layer setPosition:position];
     if (superlayer) [superlayer addSublayer:layer];
-    if (!surface) return NULL;
+    if (!surface) { fprintf(stderr, "[swiftshot] watch capture: no frame\n"); return NULL; }
     IOSurfaceLock(surface, 1, NULL);
     size_t stride = IOSurfaceGetBytesPerRow(surface);
     void *bytes = malloc(w * h * 4);

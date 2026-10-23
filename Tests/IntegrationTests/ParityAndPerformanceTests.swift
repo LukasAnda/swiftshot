@@ -86,6 +86,23 @@ final class ParityAndPerformanceTests: XCTestCase {
         print(report.joined(separator: "\n"))
     }
 
+    /// Apple Watch: no-boot against a booted watch's framebuffer, below the clock (80 px).
+    func testWatchMatchesBootedFramebuffer() throws {
+        let watch = Self.env["SWIFTSHOT_IT_WATCH"] ?? "Apple Watch Series 11 (46mm)"
+        let previews = "Watch list,Watch progress,Watch week"
+        let virtual = Self.work.appendingPathComponent("watch-virtual"), device = Self.work.appendingPathComponent("watch-device")
+        try swiftshot(["--watch-scheme", "DemoWatch", "--devices", watch, "--previews", previews, "--output", virtual.path])
+        try swiftshot(["--watch-scheme", "DemoWatch", "--devices", watch, "--previews", previews, "--mode", "device", "--output", device.path])
+        for name in previews.split(separator: ",") {
+            let file = "en-US/\(watch)-\(name).png"
+            let d = try diff(virtual.appendingPathComponent(file), device.appendingPathComponent(file), skipTop: 80, scale: 0)
+            print("\(watch)-\(name): max \(d.max)/255, \(d.pixels) px")
+            // The booted watch itself varies by 1/255 on a few pixels of the week chart between
+            // runs; everything else must be equal.
+            XCTAssertLessThanOrEqual(d.max, name == "Watch week" ? 1 : 0, "\(file)")
+        }
+    }
+
     /// Two no-boot runs give the same bytes.
     func testDeterministic() throws {
         let a = Self.work.appendingPathComponent("det-a"), b = Self.work.appendingPathComponent("det-b")
@@ -110,8 +127,11 @@ final class ParityAndPerformanceTests: XCTestCase {
         let inApp = run.output.range(of: #"in-app (\d+) ms"#, options: .regularExpression).flatMap { Double(run.output[$0].dropFirst(7).dropLast(3)) } ?? .infinity
         for line in run.output.split(separator: "\n") where line.contains("slow capture") { print(line) }
         print("perf: \(shots) shots in \(String(format: "%.1f", run.seconds)) s wall, \(Int(inApp)) ms in-app (\(Int(inApp) / max(shots, 1)) ms/shot)")
-        XCTAssertLessThan(run.seconds, 30, "wall time for \(shots) shots (incl. the incremental build)")
-        XCTAssertLessThan(inApp / Double(shots), 400, "in-app ms per screenshot")
+        // Budgets for a Mac; a CI VM (paravirtual GPU) is several times slower, and the bar there
+        // is fastlane on the same runner: ~80 s per screenshot (bench/, README).
+        let ci = Self.env["CI"] != nil
+        XCTAssertLessThan(run.seconds, ci ? 300 : 30, "wall time for \(shots) shots (incl. the incremental build)")
+        XCTAssertLessThan(inApp / Double(shots), ci ? 5000 : 400, "in-app ms per screenshot")
     }
 
     func testNoSimulatorIsBooted() throws {

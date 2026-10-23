@@ -148,7 +148,8 @@ renders.
 
 The same approach, with the watchOS runtime and a watchOS build of the agent. watchOS has no public
 window API, so the agent creates the hosting controllers through SwiftUI's exported metadata
-accessors (with a small arm64 trampoline) and renders PepperUICore windows with `CARenderer`.
+accessors (with a small arm64 trampoline) and captures PepperUICore windows through the same
+in-process window server as iOS (started before any UI, so SwiftUI's display timing finds it).
 watchOS reads some screen answers once per process, so each watch model gets its own short process.
 Text size defaults follow the model (L on small cases, XL from 44 mm up), like a real watch.
 
@@ -177,8 +178,9 @@ status bar. `swift test` runs this comparison (see [Tests](#tests)).
 * **Landscape** previews render the landscape window like a booted host does (its scene stays
   portrait); `--mode device` doesn't rotate the simulator, so there's no framebuffer reference for
   them yet.
-* **Apple Watch** (Series 11, 46 mm): all screens within 1–2/255 of a booted watch below the clock
-  (watchOS still captures with `CARenderer`).
+* **Apple Watch** (Series 11 42 mm and 46 mm, Ultra 4): byte-identical to a booted watch below the
+  clock, except a few pixels of the week chart at 1/255, where the booted watch itself differs by
+  as much between two of its own runs.
 * **Dynamic Type:** each `--text-sizes` value is pixel-identical (0/255) to a process started at
   that system text size, on iOS and watchOS.
 * **Determinism:** repeated runs produce byte-identical files (tested).
@@ -265,6 +267,7 @@ The integration tests run on `Example/DemoApp` with the built tool:
 * **Parity:** renders 8 screens on iPhone 18 Pro and iPhone 17 without a simulator, renders the
   same screens on booted simulators (`--mode device`), and requires every pixel outside the system
   status bar and home indicator to be equal.
+* **Watch parity:** the same against a booted Apple Watch.
 * **Determinism:** two runs give byte-identical files.
 * **Performance:** all 22 DemoApp screenshots (two iPhones, warm) in under 30 s wall time and
   under 400 ms per screenshot inside the app (currently ~10 s and ~260 ms).

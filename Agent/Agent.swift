@@ -592,8 +592,7 @@ enum ServerCapture {
         guard opaque else {
             // The framebuffer has no alpha: composite over black and over white, and take
             // coverage from the difference (out = colour + (1 - alpha) * background).
-            _ = pixels(of: window, w, h, scale, background: .black, prime: true)
-            guard var black = pixels(of: window, w, h, scale, background: .black), let white = pixels(of: window, w, h, scale, background: .white) else { return nil }
+            guard var black = settled(window, w, h, scale, background: .black), let white = pixels(of: window, w, h, scale, background: .white) else { return nil }
             for i in stride(from: 0, to: black.count, by: 4) {
                 let alpha = 255 - min(255, max(0, Int(white[i + 1]) - Int(black[i + 1])))
                 black[i + 3] = UInt8(alpha)
@@ -606,18 +605,28 @@ enum ServerCapture {
                   let raw = ctx.makeImage() else { return nil }
             return UIImage(cgImage: raw, scale: scale, orientation: .up)
         }
-        // Shown once first: materials (Liquid Glass) adapt to what the server composited under
-        // them, as on a device where the screen has been visible for a moment.
-        _ = pixels(of: window, w, h, scale, background: nil, prime: true)
-        guard var bytes = pixels(of: window, w, h, scale, background: nil),
+        // Shown until two consecutive frames agree: materials (Liquid Glass) adapt to what the
+        // server composited under them, as on a device where the screen has been visible for a
+        // moment (one extra pass on a fast Mac, more on a slow CI GPU).
+        guard var bytes = settled(window, w, h, scale, background: nil),
               let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
               let raw = ctx.makeImage() else { return nil }
         // The framebuffer's bytes as they are: what `simctl io screenshot` saves.
         return UIImage(cgImage: raw, scale: scale, orientation: .up)
     }
 
+    static func settled(_ window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
+        guard var last = pixels(of: window, w, h, scale, background: background) else { return nil }
+        for _ in 0..<4 {
+            guard let next = pixels(of: window, w, h, scale, background: background) else { return nil }
+            if next == last { return next }
+            last = next
+        }
+        return last
+    }
+
     /// One composited frame of the window (BGRA rows, w × h).
-    static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?, prime: Bool = false) -> [UInt8]? {
+    static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
         guard let context, let wait else { return nil }
         // The window's layer under a pixel-sized root, at the device's scale, for the capture.
         let layer = window.layer
@@ -650,8 +659,7 @@ enum ServerCapture {
         while quiet < 3 && Date() < idle {
             if let next = frame(after: &seen, width: w, height: h, timeout: 0.016) { surface = next; quiet = 0; frames += 1 } else { quiet += 1 }
         }
-        timings.append("\(prime ? "prime" : "capture"): first frame \(Int(first.timeIntervalSince(shown) * 1000)) ms, idle after \(Int(Date().timeIntervalSince(first) * 1000)) ms, \(frames) frames")
-        if prime { return [] }
+        timings.append("pass: first frame \(Int(first.timeIntervalSince(shown) * 1000)) ms, idle after \(Int(Date().timeIntervalSince(first) * 1000)) ms, \(frames) frames")
         IOSurfaceLock(surface, .readOnly, nil)
         defer { IOSurfaceUnlock(surface, .readOnly, nil) }
         let stride = IOSurfaceGetBytesPerRow(surface), base = IOSurfaceGetBaseAddress(surface)
