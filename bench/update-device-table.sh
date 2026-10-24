@@ -22,7 +22,9 @@ import json, sys
 print(",".join(t["name"] for t in json.load(sys.stdin)["devicetypes"] if t.get("productFamily") == "Apple Watch"))')
 echo "runtimes: $RUNTIMES"
 echo "devices:  $DEVICES"
-make -s
+# Calibration boots simulators: the no-boot libraries aren't needed (and older SDKs, like macos-15's
+# Xcode 26.3 watchOS simulator SDK, lack the headers they build against).
+make -s bin/swiftshot bin/SwiftshotAgent.dylib bin/SwiftshotAgent-watchOS.dylib
 cd Example/DemoApp
 SWIFTSHOT_CALIBRATION_CACHE="$WORK/calibration.json" "$ROOT/bin/swiftshot" calibrate \
     --devices "$DEVICES" --ios "$RUNTIMES" \
