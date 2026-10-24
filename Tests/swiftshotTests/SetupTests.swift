@@ -15,10 +15,10 @@ final class SetupTests: XCTestCase {
         		);
         """
         XCTAssertEqual(Setup.knownRegions(pbx), ["en", "Base", "ar", "de", "zh-Hans"], "development region first")
-        XCTAssertEqual(Setup.languages(fromRegions: Setup.knownRegions(pbx)), ["en-US", "ar", "de", "zh-Hans"])
+        XCTAssertEqual(Setup.languages(fromRegions: Setup.knownRegions(pbx)), ["en-US", "ar-SA", "de-DE", "zh-Hans"])
         XCTAssertEqual(Setup.knownRegions("knownRegions = (en, Base, );"), ["en", "Base"])
         XCTAssertEqual(Setup.languages(fromRegions: ["Base"]), ["en-US"])
-        XCTAssertEqual(Setup.languages(fromRegions: ["en", "Base", "en", "fr"]), ["en-US", "fr"])
+        XCTAssertEqual(Setup.languages(fromRegions: ["en", "Base", "en", "fr"]), ["en-US", "fr-FR"])
     }
 
     func testCatalogLanguages() {

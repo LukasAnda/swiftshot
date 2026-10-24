@@ -182,11 +182,16 @@ enum Setup {
         return regions
     }
 
-    /// Regions to fastlane language names: no Base, "en" is "en-US", the rest as found.
+    /// App Store Connect names for the bare codes it only knows with a region (fastlane deliver's
+    /// folder names); codes it uses bare (ja, sk, zh-Hans…) stay as they are.
+    static let appStoreLocales = ["ar": "ar-SA", "de": "de-DE", "en": "en-US", "es": "es-ES", "fr": "fr-FR",
+                                  "nl": "nl-NL", "pt": "pt-PT", "nb": "no"]
+
+    /// Regions to fastlane language names: no Base, App Store Connect names, the rest as found.
     static func languages(fromRegions regions: [String]) -> [String] {
         var seen = Set<String>(), result: [String] = []
         for r in regions where r != "Base" && !r.isEmpty {
-            let name = r == "en" ? "en-US" : r
+            let name = appStoreLocales[r] ?? r
             if seen.insert(name).inserted { result.append(name) }
         }
         return result.isEmpty ? ["en-US"] : result
