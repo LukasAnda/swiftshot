@@ -145,6 +145,10 @@ enum Simctl {
         try await sh(Simctl.cmd(["shutdown", udid]), allowFailure: true)
     }
 
+    static func delete(_ udid: String) async throws {
+        try await sh(Simctl.cmd(["delete", udid]), allowFailure: true)
+    }
+
     static func install(_ udid: String, app: String) async throws {
         try await sh(Simctl.cmd(["install", udid, app]))
     }

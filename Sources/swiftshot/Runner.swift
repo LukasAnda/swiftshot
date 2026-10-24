@@ -626,11 +626,17 @@ final class Runner {
                     group.addTask {
                       do { try await slots.run {
                         let device = try await self.prepare(type: type, runtime: runtime, suffix: "", app: app)
-                        defer { Task { try? await Simctl.shutdown(device.udid) } }   // also when the launch fails
-                        let base = DeviceCatalog.profile(for: type, runtime: runtime.version, cache: [:])?.0
-                        let result = try await self.launch(self.makeJob(mode: .calibrate, language: "en-US", runtime: runtime,
-                                                                       devices: base.map { [$0] } ?? [], target: target),
-                                                          tag: "calibrate-\(runtime.version)-\(type.name)", udid: device.udid, app: app)
+                        // Shut down (and, in a throwaway device set like CI's full sweep, deleted:
+                        // every booted device keeps gigabytes, and all types × runtimes fill a hosted
+                        // runner's disk) before the slot goes to the next device, also when the launch fails.
+                        let result: JobResult
+                        do {
+                            let base = DeviceCatalog.profile(for: type, runtime: runtime.version, cache: [:])?.0
+                            result = try await self.launch(self.makeJob(mode: .calibrate, language: "en-US", runtime: runtime,
+                                                                        devices: base.map { [$0] } ?? [], target: target),
+                                                           tag: "calibrate-\(runtime.version)-\(type.name)", udid: device.udid, app: app)
+                        } catch { await self.discard(device.udid); throw error }
+                        await self.discard(device.udid)
                         if var profile = result.calibration {
                             profile.name = type.name
                             cacheLock.lock()
@@ -651,6 +657,11 @@ final class Runner {
         DeviceCatalog.saveCache(cache)
         Log.success("Calibration saved to \(DeviceCatalog.cacheURL.path)")
         if let table = options.emitTable { try writeDisplayTable(cache, to: table) }
+    }
+
+    private func discard(_ udid: String) async {
+        try? await Simctl.shutdown(udid)
+        if Simctl.deviceSet != nil { try? await Simctl.delete(udid) }
     }
 
     /// `swiftshot emit-table --emit-table <file> a.json b.json …`: merges calibration files (e.g.
