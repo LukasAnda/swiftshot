@@ -91,13 +91,14 @@ struct Options: Codable {
     swiftshot — App Store screenshots straight from your SwiftUI #Previews.
 
     USAGE
-      swiftshot [run|list|devices|calibrate] [options]
+      swiftshot [run|list|devices|calibrate|emit-table] [options]
 
     COMMANDS
       run         Build, render every preview for every device × iOS × language × appearance (default)
       list        Build and print the previews that were discovered
       devices     Show installed iOS runtimes and the geometry used for each device
       calibrate   Boot the given devices once and measure their real safe areas (cached)
+      emit-table  Merge calibration.json files into the built-in device table (maintainers)
 
     BUILD
       --project <path> | --workspace <path>   Xcode project or workspace
@@ -133,9 +134,9 @@ struct Options: Codable {
                                               drawn like on a device by default
 
     RENDERING
-      --mode virtual|device                   virtual (default): one simulator per iOS version renders every device
-                                              off-screen. device: real simulator per device, framebuffer capture
-                                              incl. status bar (9:41, full battery).
+      --mode virtual|device                   virtual (default): every device rendered without booting a simulator.
+                                              device: a booted simulator per device, framebuffer capture (the
+                                              reference virtual is checked against).
       --content-size <size>                   Change the default text size itself (no file name suffix)
       --delay <seconds>                       Extra settle time before each capture (async images, animations)
       --settle-frames <n>                     Run-loop frames to wait before capture (default 3)

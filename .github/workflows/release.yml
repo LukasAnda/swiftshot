@@ -34,5 +34,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag=v${{ steps.v.outputs.version }}
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "swiftshot $tag" --generate-notes
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "swiftshot $tag" $([ -f "docs/releases/$tag.md" ] && echo "--notes-file docs/releases/$tag.md" || echo "--generate-notes")
           gh release upload "$tag" dist/swiftshot-macos-arm64.tar.gz dist/swiftshot-macos-arm64.tar.gz.sha256 --clobber
