@@ -13,9 +13,16 @@ on:
         default: xcode-27
 
 jobs:
+  # One runner per integration test: the device-mode parity tests boot simulators and take most of
+  # an hour, so in parallel the suite takes as long as its slowest test.
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        test: [testNoBootMatchesBootedFramebuffer, testDuoMatchesBootedFramebuffer, testWatchMatchesBootedFramebuffer, testDeterministic, testNoBootPerformanceBudget, testNoSimulatorIsBooted]
+    name: ${{ matrix.test }}
     runs-on: ${{ inputs.runner || 'xcode-27' }}
-    timeout-minutes: 150
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Machine
@@ -30,7 +37,7 @@ jobs:
           SWIFTSHOT_IT_OUT: ${{ runner.temp }}
         run: |
           set -o pipefail
-          swift test --skip-build --filter IntegrationTests 2>&1 | tee "$RUNNER_TEMP/integration.log"
+          swift test --skip-build --filter "IntegrationTests.ParityAndPerformanceTests/${{ matrix.test }}" 2>&1 | tee "$RUNNER_TEMP/integration.log"
       - name: Summary
         if: always()
         run: |
@@ -38,6 +45,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: integration-screenshots
+          name: integration-screenshots-${{ matrix.test }}
           path: ${{ runner.temp }}/swiftshot-it-*
           if-no-files-found: ignore
