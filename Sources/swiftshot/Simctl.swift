@@ -217,7 +217,13 @@ enum Simctl {
     }
 
     static func screenshot(_ udid: String, to path: String) async throws {
-        try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", path]), timeout: 60)
+        do {
+            try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", path]), timeout: 60)
+        } catch where "\(error)".contains("Cannot choose between") {
+            // A device with a second display (iPhone Duo's inner screen) on some simctl builds;
+            // iOS 26.5 rejects --display, so it's only passed when simctl asks for it.
+            try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", "--display=primary", path]), timeout: 60)
+        }
     }
 }
 
