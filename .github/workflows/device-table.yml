@@ -28,6 +28,11 @@ jobs:
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
+      # macos-15 defaults to Xcode 16, which can't build swiftshot; its newest Xcode 26 still
+      # sees that image's older runtimes.
+      - name: Xcode 26 or later
+        if: matrix.runner == 'macos-15'
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_2[6-9]*.app | sort -V | tail -1)" && xcodebuild -version
       - name: Re-measure all iOS device types on this image's runtimes
         run: WORK="$RUNNER_TEMP/table.noindex" EMIT=0 bench/update-device-table.sh
       - uses: actions/upload-artifact@v4
