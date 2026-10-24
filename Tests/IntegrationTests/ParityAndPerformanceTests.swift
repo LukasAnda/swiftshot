@@ -134,9 +134,9 @@ final class ParityAndPerformanceTests: XCTestCase {
             let file = "en-US/\(watch)-\(name).png"
             let d = try diff(virtual.appendingPathComponent(file), [device.appendingPathComponent(file)], skipTop: 80)
             print("\(watch)-\(name): max \(d.max)/255, \(d.pixels) px")
-            // The booted watch itself varies by 1/255 on a few pixels of the week chart between
-            // runs; everything else must be equal.
-            XCTAssertLessThanOrEqual(d.max, name == "Watch week" ? 1 : 0, "\(file)")
+            // Both servers draw with the same renderer settings (NoBoot.swift, WatchAgent's
+            // pinServerRendering), so the booted watch gives the same bytes every run.
+            XCTAssertEqual(d.max, 0, "\(file) differs from the booted watch: max \(d.max)/255 on \(d.pixels) px")
         }
     }
 

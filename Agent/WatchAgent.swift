@@ -20,6 +20,7 @@ public func SwiftshotAgentStart() {
         MainActor.assumeIsolated { WatchAgent.startOnce(jobPath: jobPath) }
         return
     }
+    WatchAgent.pinServerRendering()
     _ = NotificationCenter.default.addObserver(forName: WKApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
         // Start outside SwiftUI's launch transaction: swapping the root view mid-update asserts.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -35,6 +36,35 @@ final class WatchAgent {
         guard !started else { return }
         started = true
         WatchAgent().run(jobPath: jobPath)
+    }
+
+    /// Booted watch: the simulator's render server (backboardd) draws with the renderer settings
+    /// the CLI gives the no-boot server (NoBoot.swift), set through its debug-option interface
+    /// (env variables are read only at the server's launch). With the defaults, Watch week's
+    /// gradient capsules came out 1/255 off on 1–3 edge pixels from run to run, two ways, each
+    /// reproduced in no-boot: occlusion culling made a frame depend on what earlier frames left in
+    /// the reused display buffers (the third bar's right edge differed between a run's first
+    /// preview and one shown after others), and a frame drawn with the generic shaders while the
+    /// specialized pipeline compiled, never redrawn, had the fourth bar's left edge off. With both
+    /// pinned every device run gave the same bytes, equal to no-boot's. Only how the server gets
+    /// to the pixels changes (a warm device draws with the specialized shaders). The options stay
+    /// set in the booted simulator's server until it restarts.
+    nonisolated static func pinServerRendering() {
+        typealias OptionName = @convention(c) (Int32) -> UnsafePointer<CChar>?
+        typealias SetOption = @convention(c) (UInt32, Int32, Bool) -> Void
+        let handle = UnsafeMutableRawPointer(bitPattern: -2)
+        guard let nameSym = dlsym(handle, "CAGetDebugOptionEnvVariableName"), let setSym = dlsym(handle, "CARenderServerSetDebugOption") else {
+            log("render server debug options not found"); return
+        }
+        let name = unsafeBitCast(nameSym, to: OptionName.self), set = unsafeBitCast(setSym, to: SetOption.self)
+        // Numbered by an enum that changes between releases (names end with a nil): look them up.
+        var wanted: Swift.Set<String> = ["CA_DISABLE_GENERIC_SHADERS", "CA_DISABLE_OCCLUSION_CULLING"]
+        var option: Int32 = 0
+        while !wanted.isEmpty, let n = name(option).map({ String(cString: $0) }) {
+            if wanted.remove(n) != nil { set(0, option, true) }   // port 0: the default render server
+            option += 1
+        }
+        if !wanted.isEmpty { log("render server options not found: \(wanted.sorted())") }
     }
 
     let started = now()

@@ -226,8 +226,8 @@ test` runs this comparison (see [Tests](#tests)).
 * **Landscape** previews render the landscape window like a booted host does (its scene stays
   portrait).
 * **Apple Watch** (Series 11 42 mm and 46 mm, Ultra 4): byte-identical to a booted watch below the
-  clock, except a few pixels of the week chart at 1/255, where the booted watch itself differs by
-  as much between two of its own runs.
+  clock. `--mode device` on a watch draws with the same renderer settings as no-boot (specialized
+  shaders, no occlusion culling), so its runs are byte-identical too.
 * **Dynamic Type:** each `--text-sizes` value is pixel-identical (0/255) to a process started at
   that system text size, on iOS and watchOS.
 * **Determinism:** repeated runs produce byte-identical files (tested).

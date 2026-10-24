@@ -171,7 +171,12 @@ extension Runner {
         // load a list icon's edge pixel 1/255 off (iPhone 18 Pro Habit list) and a component
         // preview's edge alpha 254 vs 255. Without it, every frame is the same; device-mode
         // screens are identical either way.
-        if job.platform == "ios" { env["CA_DISABLE_GENERIC_SHADERS"] = "1"; env["CA_DISABLE_SDF_CACHE"] = "1"; env["CA_DISABLE_OCCLUSION_CULLING"] = "1" }
+        // watchOS: the shaders and the culling too (Watch week's gradient capsules: one edge
+        // pixel 1/255 off whether the preview came first or after others, and two with the
+        // generic shaders); there the booted watch's server is given the same two settings
+        // (WatchAgent.pinServerRendering), since its own defaults varied the same pixels by run.
+        env["CA_DISABLE_GENERIC_SHADERS"] = "1"; env["CA_DISABLE_OCCLUSION_CULLING"] = "1"
+        if job.platform == "ios" { env["CA_DISABLE_SDF_CACHE"] = "1" }
         for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
         // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
         let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil
