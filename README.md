@@ -85,6 +85,15 @@ The release archive is `swiftshot-macos-arm64.tar.gz` on the
 [releases page](https://github.com/LukasAnda/swiftshot/releases); the installer checks its SHA-256.
 The exit code is non-zero if any screenshot failed.
 
+### Visual review tools
+
+The output is plain PNGs with stable names, so screenshot review services can take it as is:
+
+```
+npx @argos-ci/cli upload fastlane/screenshots   # Argos, needs ARGOS_TOKEN
+npx @percy/cli upload fastlane/screenshots      # Percy, needs PERCY_TOKEN
+```
+
 ## Configuration
 
 Put a `swiftshot.json` next to your project. Keys follow fastlane's `Snapfile`, and every key is
