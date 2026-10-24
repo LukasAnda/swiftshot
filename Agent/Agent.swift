@@ -434,13 +434,45 @@ final class AgentRunner {
         // framebuffer is grabbed otherwise.
         UIView.setAnimationsEnabled(false)
         for (index, (preview, appearance)) in combos.filter({ !$0.0.layout.landscape }).enumerated() {
+            if index == 0 {
+                // The first preview is shown while SpringBoard still brings the app in, kept on
+                // screen through the launch (the render server's frames, then the host's word that
+                // SpringBoard's home grabber has come and gone, where it follows it), and shown
+                // anew for the shot.
+                show(preview: preview, appearance: appearance)
+                waitForLaunchTransition()
+                waitForHost(request: "launch", controlDir: controlDir)
+            }
             showAndHandOver(preview: preview, appearance: appearance, index: index, device: device, controlDir: controlDir)
         }
     }
 
-    func showAndHandOver(preview: DiscoveredPreview, appearance: String, index: Int, device: DeviceProfile, controlDir: String) {
-        let t0 = now()
+    /// The agent takes over as the app becomes active, while SpringBoard is still bringing the
+    /// app in: the render server draws every frame for ~0.4–0.6 s, then another short run of
+    /// frames around 1 s (the app's notifications show none of it). A first preview shown then
+    /// kept some of it in its glass: an RTL Habit list's "+" 1/255 off for its first ~0.5 s,
+    /// Root's tab bar rim 1/255 off for good — the device's first shot depended on how far the
+    /// launch had got, and matched the no-boot render once shown after it. Waits until the server
+    /// has drawn no frame for 30 display refreshes (its own frame counter, not a fixed delay).
+    func waitForLaunchTransition() {
+        typealias Counter = @convention(c) (UInt32) -> UInt32
+        guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CARenderServerGetFrameCounter") else { return }
+        let frames = unsafeBitCast(sym, to: Counter.self)
+        let refresh = 1.0 / Double(max(scene.screen.maximumFramesPerSecond, 1))
+        var last = frames(0), quiet = 0
+        let deadline = Date().addingTimeInterval(10)
+        while quiet < 30 && Date() < deadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: refresh))
+            let now = frames(0)
+            quiet = now == last ? quiet + 1 : 0
+            last = now
+        }
+        if quiet < 30 { log("warning: the render server kept drawing after the app's launch") }
+    }
 
+    /// The preview in the app's window, laid out and settled; nil if its body can't be built.
+    @discardableResult
+    func show(preview: DiscoveredPreview, appearance: String) -> UIWindow? {
         // Take over the app's own window, so none of the app's UI (or system chrome attached to it,
         // like a tab bar rail) shows around the preview.
         if deviceWindow == nil {
@@ -448,15 +480,34 @@ final class AgentRunner {
         }
         let window = deviceWindow!
         window.overrideUserInterfaceStyle = appearance == "dark" ? .dark : .light
-        guard let vc = controller(fromBody: preview.body()) else {
-            result.errors.append("\(preview.name): could not build preview body"); return
-        }
+        guard let vc = controller(fromBody: preview.body()) else { return nil }
         window.frame = scene.coordinateSpace.bounds
         window.rootViewController = vc
         window.isHidden = false
         window.layoutIfNeeded()
         settle(frames: job.settleFrames, delay: job.delay(for: preview.name))
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { dumpPresentation(vc, window) }
+        return window
+    }
+
+    /// Asks the host (an empty <name>.ready) and runs the run loop until it answers (<name>.done).
+    func waitForHost(request name: String, controlDir: String) {
+        let ready = URL(fileURLWithPath: controlDir).appendingPathComponent("\(name).ready")
+        let done = URL(fileURLWithPath: controlDir).appendingPathComponent("\(name).done")
+        try? FileManager.default.removeItem(at: done)   // a relaunched app's (retry) asks again
+        try? Data().write(to: ready)
+        let deadline = Date(timeIntervalSinceNow: 120)
+        while !FileManager.default.fileExists(atPath: done.path) && Date() < deadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.005))
+        }
+    }
+
+    func showAndHandOver(preview: DiscoveredPreview, appearance: String, index: Int, device: DeviceProfile, controlDir: String) {
+        let t0 = now()
+
+        guard show(preview: preview, appearance: appearance) != nil else {
+            result.errors.append("\(preview.name): could not build preview body"); return
+        }
 
         let file = fileName(preview: preview.name, device: device.name, appearance: appearance)
         let out = outputURL(file)

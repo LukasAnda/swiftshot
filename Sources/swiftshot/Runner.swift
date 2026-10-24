@@ -498,17 +498,40 @@ final class Runner {
             try? FileManager.default.removeItem(atPath: control)
             try FileManager.default.createDirectory(atPath: control, withIntermediateDirectories: true)
             let job = makeJob(mode: .device, language: language, runtime: runtime, devices: [profile], controlDir: control, target: target)
-            // iPads on iOS 26+ show the home grabber when the app comes up and hide it once touches
-            // are idle; captures show the settled screen without it.
+            // On iOS 26+ SpringBoard shows the home grabber when the app comes up and hides it once
+            // touches are idle (iPads and iPhones alike, same HomeAffordance log); captures show the
+            // settled screen without it.
             let major = Int(runtime.version.split(separator: ".").first ?? "") ?? 0
-            let grabber = profile.idiom == "pad" && profile.safeArea.bottom > 0 && major >= 26 ? await HomeGrabberWatch(udid: device.udid) : nil
+            // Not with a status bar rail (iPhone Duo): its captures never show the grabber, and
+            // waiting for it made the Share dialog's popover come up at another anchor in ~1 of 5
+            // runs (_UITraitVerticalBarSuppressed 1 instead of 0); 12/12 identical without.
+            let rail = (profile.display?.verticalBarAllowed ?? 0) != 0
+            let grabber = profile.safeArea.bottom > 0 && major >= 26 && !rail ? await HomeGrabberWatch(udid: device.udid) : nil
             defer { grabber?.stop() }
+            @Sendable func waitForGrabber() async {
+                guard let grabber, !grabber.settled, !grabber.gaveUp else { return }
+                let deadline = Date().addingTimeInterval(30)
+                while !grabber.settled && Date() < deadline && !Task.isCancelled { try? await Task.sleep(nanoseconds: 5_000_000) }
+                if !grabber.settled {
+                    // (A long-running simulator's SpringBoard was seen to stop hiding it: no
+                    // "touch idleness changed" any more until a reboot.) Once per language.
+                    grabber.gaveUp = true
+                    Log.warn("\(type.name): the home grabber did not hide; capturing anyway (rebooting the simulator helps)")
+                }
+            }
 
             // Screenshot pump: whenever the agent signals N.ready, grab the framebuffer and ack. It
             // serves the lowest unanswered request, so a relaunched app (retry) starts over cleanly.
             let pump = Task {
                 while !Task.isCancelled {
                     let files = Set((try? FileManager.default.contentsOfDirectory(atPath: control)) ?? [])
+                    // The agent keeps its first preview up through the app's launch and asks for the
+                    // launch to be over (SpringBoard's grabber come and gone) before showing it anew.
+                    if files.contains("launch.ready") && !files.contains("launch.done") {
+                        await waitForGrabber()
+                        FileManager.default.createFile(atPath: (control as NSString).appendingPathComponent("launch.done"), contents: nil)
+                        continue
+                    }
                     let pending = files.compactMap { $0.hasSuffix(".ready") ? Int($0.dropLast(6)) : nil }.filter { !files.contains("\($0).done") }
                     guard let next = pending.min(),
                           let data = FileManager.default.contents(atPath: (control as NSString).appendingPathComponent("\(next).ready")),
@@ -516,11 +539,7 @@ final class Runner {
                           let path = info["path"] as? String else {
                         try? await Task.sleep(nanoseconds: 5_000_000); continue
                     }
-                    if let grabber, !grabber.settled {
-                        let deadline = Date().addingTimeInterval(30)
-                        while !grabber.settled && Date() < deadline && !Task.isCancelled { try? await Task.sleep(nanoseconds: 5_000_000) }
-                        if !grabber.settled { Log.warn("\(type.name): the home grabber did not hide; capturing anyway") }
-                    }
+                    await waitForGrabber()
                     // Until two grabs agree: SpringBoard is still animating its own chrome right
                     // after a launch (a cold boot's Wi-Fi).
                     var previous: Data?

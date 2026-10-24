@@ -250,7 +250,7 @@ final class HomeGrabberWatch: @unchecked Sendable {
     private let process = Process()
     private let lock = NSLock()
     private var pending = ""
-    private var streaming = false, shown = false, hidden = false
+    private var streaming = false, shown = false, hidden = false, current = ""
 
     /// Starts following and returns once the log stream is live (its header is printed).
     init(udid: String) async {
@@ -278,15 +278,22 @@ final class HomeGrabberWatch: @unchecked Sendable {
             let line = pending[..<r.lowerBound]
             pending.removeSubrange(..<r.upperBound)
             if line.hasPrefix("Filtering the log data") { streaming = true }
-            // A grabber's presence: "additive presence change to visible with …" / "… finished".
-            if line.contains("presence change to visible") { shown = true; hidden = false }
-            else if line.contains("presence change to hidden finished") { if shown { hidden = true } }
-            else if line.contains("presence change to hidden") { hidden = false }
+            if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil, line.contains("presence change") || line.contains("idleness") { Log.debug("home grabber: \(line.split(separator: "]").last ?? "")") }
+            // A grabber's presence: "grabber=0x… additive presence change to visible with …" /
+            // "… finished". Only the grabber shown last counts: an app launch from the home screen
+            // hides (and deallocates) the previous one just after the app's has started showing.
+            let id = line.range(of: "grabber=0x").map { r in String(line[r.upperBound...].prefix { $0.isHexDigit }) } ?? ""
+            if line.contains("presence change to visible") && !line.contains("finished") { current = id; shown = true; hidden = false }
+            else if line.contains("presence change to hidden finished") { if shown && id == current { hidden = true } }
+            else if line.contains("presence change to hidden") { if id == current { hidden = false } }
         }
     }
 
     /// True once a grabber has been shown and has finished hiding again (and not come back).
     var settled: Bool { lock.withLock { hidden } }
+    /// Set once a wait for it ran out: later shots of the job don't wait again.
+    var gaveUp: Bool { get { lock.withLock { _gaveUp } } set { lock.withLock { _gaveUp = newValue } } }
+    private var _gaveUp = false
 
     func stop() { if process.isRunning { process.terminate() } }
 }
