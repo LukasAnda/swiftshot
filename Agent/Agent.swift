@@ -1321,9 +1321,17 @@ enum ServerCapture {
         // that the server draws differently once it has drawn the tree before (iPad Habit row:
         // 2 px a step off in the first frame only — which of the two a capture got depended on
         // timing before).
+        // Three frames in a row must agree, five once any two differed: while other processes
+        // keep the GPU busy with long work, the GPU itself sometimes draws a frame of the same
+        // trees slightly differently — antialiased edges of rounded rects (the Habit list's icon
+        // edge, 1/255 on 1–5 px; unloaded never) — with the server's draw calls, vertex and
+        // index data, shader inputs and pipelines byte-identical to the frames around it
+        // (measured by hooking the encoder). Such a frame recurs (the same variant twice, two in
+        // a row), so two equal frames weren't proof (1 shot in ~660 under heavy load).
         var bytes = copy(surface, w, h)
-        var redraws = 0
-        while redraws < 6 {
+        var redraws = 0, agreeing = 1, mismatches = 0
+        let limit = 12
+        while redraws < limit {
             redraws += 1
             let last = frameCount()
             root.backgroundColor = root.backgroundColor == nil ? UIColor.clear.cgColor : nil
@@ -1332,10 +1340,14 @@ enum ServerCapture {
             guard let next = wait(0, last, 0, &frame)?.takeRetainedValue() else { log("server capture: no frame for a redraw"); break }
             surface = next
             let again = copy(next, w, h)
-            if again == bytes { break }
-            bytes = again
-            if redraws == 6 { log("warning: \(w)x\(h) frames still changing after \(redraws) redraws") }
+            if again == bytes {
+                agreeing += 1
+                if agreeing >= (mismatches > 0 ? 5 : 3) { break }
+                continue
+            }
+            bytes = again; agreeing = 1; mismatches += 1
         }
+        if agreeing < (mismatches > 0 ? 5 : 3) && redraws == limit { log("warning: \(w)x\(h) frames still changing after \(redraws) redraws") }
         if legacySettle { surface = quietFrame(gap: 0.016); bytes = copy(surface, w, h) }
         timings.append("pass: commit rendered after \(Int(rendered.timeIntervalSince(t0) * 1000)) ms\(attempts > 0 ? " (\(attempts) extra draws to reach the hosted contexts)" : ""), frame \(frame), \(redraws) redraws\(waits > 0 ? ", \(waits) animation waits" : "")")
         return bytes
