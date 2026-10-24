@@ -943,28 +943,28 @@ enum ServerCapture {
                   let raw = ctx.makeImage() else { return nil }
             return UIImage(cgImage: raw, scale: scale, orientation: .up)
         }
-        // Shown until two consecutive frames agree: materials (Liquid Glass) adapt to what the
-        // server composited under them, as on a device where the screen has been visible for a
-        // moment (one extra pass on a fast Mac, more on a slow CI GPU).
-        // The process's first frame compiles shaders (half a second, more on CI); glass that
-        // first saw the screen then settles a hair differently. Show the first window once
-        // and start over from fresh display state.
-        // On iOS 26, and on the Duo (vertical bars), glass only settles the same way every time
-        // once the screen has been shown a couple of times before the capture (measured: with
-        // fewer, some glass controls land a 1/255 step off at random, depending on what earlier
-        // previews left in the window server). iOS 27 iPhones are deterministic after one.
-        let needsExtra = runtimeMajor < 27 || (NoBoot.screen?.display?.verticalBarAllowed ?? 0) != 0
-        // Every capture starts from the render server's cold state (see purgeServer), like the
-        // process's first one, so each gets the first one's showing too.
-        if getenv("SWIFTSHOT_FB_NOPURGE") == nil { purgeServer() }
-        let showings = getenv("SWIFTSHOT_FB_SHOWINGS").flatMap { Int(String(cString: $0)) } ?? (needsExtra ? 2 : 1)
-        for _ in 0..<showings { _ = settled(window, w, h, scale, background: nil) }
-        guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
-        // A material seen for the first time compiles its shaders during the capture; glass that
-        // first appeared that slowly settles a hair differently. Capture it again, fresh.
-        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("capture first frame \(Int(lastFirstFrame * 1000)) ms") }
-        if lastFirstFrame > 0.2 && getenv("SWIFTSHOT_FB_NORECAP") == nil {
-            if let again = settled(window, w, h, scale, background: nil) { bytes = again }
+        // Every capture starts from the render server's cold state (see purgeServer).
+        purgeServer()
+        // iOS 27: one showing. Its frame is the one the server presented for this window's
+        // commits (pixels), every frame is drawn with the final shaders (the CLI sets
+        // CA_DISABLE_GENERIC_SHADERS), and the server has nothing left to draw: the same bytes
+        // whatever the machine's speed, with no warm-up showing.
+        // The warm-up showings and the slow-first-frame recapture made up for frames drawn with
+        // the generic shaders while the specialized ones compiled (a slow first frame, glass a
+        // step off on the first showing) — measured: without them, identical output.
+        var bytes: [UInt8]
+        if !legacySettle {
+            guard let shown = settled(window, w, h, scale, background: nil) else { return nil }
+            bytes = shown
+        } else {
+            // iOS 26: glass reaches its final look through a luma feedback loop between the
+            // server and UIKit (the server samples backdrop luma on its own schedule and UIKit
+            // re-lays out the glass), which only quiet time ends; shown a couple of times first
+            // (measured: with fewer, some glass controls land a 1/255 step off at random).
+            for _ in 0..<2 { _ = settled(window, w, h, scale, background: nil) }
+            guard let shown = settled(window, w, h, scale, background: nil) else { return nil }
+            bytes = shown
+            if lastFirstFrame > 0.2, let again = settled(window, w, h, scale, background: nil) { bytes = again }
         }
         if h > w, NoBoot.screen?.idiom == "phone", let area = NoBoot.screen?.display?.exclusionArea, area.count == 4, area[1] > 0 { addCornerMark(&bytes, width: w) }
         guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
@@ -997,8 +997,40 @@ enum ServerCapture {
         do {
             keepAttached = true
             defer { keepAttached = false; detach?(); detach = nil }
-            return pixels(of: window, w, h, scale, background: background)
+            guard var last = pixels(of: window, w, h, scale, background: background) else { return nil }
+            guard legacySettle else { return last }
+            // iOS 26: until two quiet-time results agree (see image(of:)).
+            for _ in 0..<4 {
+                let next = copy(quietFrame(gap: 0.03), w, h)
+                if next == last { return next }
+                last = next
+            }
+            return last
         }
+    }
+
+    /// iOS 26's glass settles through a server ↔ UIKit luma feedback loop (see image(of:)).
+    static var legacySettle: Bool { runtimeMajor < 27 }
+
+    /// iOS 26: the newest frame once the server has presented none for three gaps in a row,
+    /// with the main run loop running (UIKit's side of the luma feedback). Starts from the
+    /// newest frame, which is at least the one rendered for the capture's commits.
+    static func quietFrame(gap: Double) -> IOSurfaceRef {
+        var seen: UInt64 = 0
+        var surface = wait!(0, 0, 0, &seen)!.takeRetainedValue()
+        var quiet = 0
+        let idle = Date().addingTimeInterval(1)
+        while quiet < 3 && Date() < idle {
+            let deadline = Date().addingTimeInterval(gap)
+            var next: IOSurfaceRef?
+            repeat {
+                let after = seen
+                if let s = wait!(0, after, 0.004, &seen) { next = s.takeRetainedValue(); break }
+                RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.001))
+            } while Date() < deadline
+            if let next { surface = next; quiet = 0 } else { quiet += 1 }
+        }
+        return surface
     }
 
     /// A portrait iPhone with a Dynamic Island (or the Duo's camera cut-out) has a black 3¼ px
@@ -1031,7 +1063,14 @@ enum ServerCapture {
         // …hosted at the device's scale on the display.
         let root = CALayer()
         root.frame = CGRect(x: 0, y: 0, width: w, height: h)
-        root.backgroundColor = background?.cgColor
+        // (The background on a layer of its own: the root's own background is the switch that
+        // has the server draw the same tree again, see below.)
+        if let background {
+            let fill = CALayer()
+            fill.frame = root.bounds
+            fill.backgroundColor = background.cgColor
+            root.addSublayer(fill)
+        }
         let host = hostClass.init()
         host.setValue(windowContext.value(forKey: "contextId"), forKey: "contextId")
         host.anchorPoint = .zero; host.position = .zero
@@ -1070,20 +1109,32 @@ enum ServerCapture {
         }
         defer { if keepAttached { detach = teardown } else { teardown() } }
         let t0 = Date()
-        // The window's and the chrome's trees reach the server first, while nothing shows them
-        // (a hidden context's synchronize returns once the server has applied the commit)…
-        CATransaction.flush()
-        for hidden in [windowContext, chromeContext].compactMap({ $0 }) { _ = synchronize(hidden, timeout: 20) }
-        // …then the display's root that hosts them: once the server has rendered that commit,
-        // the frame it presented for it (or a later one) is the newest frame on the display.
-        // The server presents a frame (SimDisplay::finish_update → swap submit) before it marks
-        // the commit rendered (~Update) and answers. A frame still in flight from the previous
-        // tree can't pass for this one. The first frame can take seconds on a CI VM's
-        // paravirtual GPU (shaders compiling).
+        // The display's root, the window's tree and the chrome's in one transaction, as an app
+        // commits into a context SpringBoard already hosts (committed while nothing showed
+        // them, iOS 26 glass came out a step off).
         let before = frameCount()
         context.setValue(root, forKey: "layer")
         CATransaction.flush()
-        guard synchronize(context, timeout: 20) else { log("server capture: commit \(commitId(context)) not rendered"); return nil }
+        // Then wait for the server to have rendered all three commits: the root's first (from
+        // then on the hosted contexts are visible, so theirs wait for a render too). The server
+        // presents a frame (SimDisplay::finish_update → swap submit) before it marks the commit
+        // rendered (Render::Update::~Update) and answers, so the newest frame on the display then
+        // has everything this capture committed; a frame still in flight from the previous tree
+        // can't pass for it. The first one can take seconds on a CI VM's paravirtual GPU
+        // (shaders compiling).
+        let shown = [context, windowContext] + (chromeLayer != nil ? [chromeContext].compactMap { $0 } : [])
+        // A hosted context the server doesn't count as visible yet is answered at once, not
+        // rendered: it becomes visible when an update draws its host (LayerHost::
+        // retain_hosted_context). Right after a display resize the server marked the root's
+        // commit rendered for an update that didn't draw (no frame with the window): then the
+        // server is made to draw the trees again (the root's background, see below).
+        var attempts = 0
+        while let c = shown.first(where: { !synchronize($0, timeout: 20) }) {
+            attempts += 1
+            guard attempts < 6 else { log("server capture: commit \(commitId(c)) of context \(c.value(forKey: "contextId") ?? "?") not rendered"); return nil }
+            root.backgroundColor = root.backgroundColor == nil ? UIColor.clear.cgColor : nil
+            CATransaction.flush()
+        }
         let rendered = Date()
         lastFirstFrame = rendered.timeIntervalSince(t0)
         var frame: UInt64 = 0
@@ -1104,12 +1155,36 @@ enum ServerCapture {
             waits += 1
             if end > now { Thread.sleep(forTimeInterval: end - now) }
             CATransaction.flush()
-            for c in [windowContext, chromeContext, context].compactMap({ $0 }) { _ = synchronize(c, timeout: 20) }
+            for c in shown { _ = synchronize(c, timeout: 20) }
             guard let next = wait(0, 0, 0, &frame)?.takeRetainedValue() else { break }
             surface = next
         }
-        timings.append("pass: commit rendered after \(Int(rendered.timeIntervalSince(t0) * 1000)) ms, frame \(frame)\(waits > 0 ? ", \(waits) animation waits" : "")")
-        return copy(surface, w, h)
+        // Verified: the server draws the same committed trees once more (the root's background
+        // goes from none to clear: damage, no pixel changes) and the two frames must agree. A
+        // presented frame that wasn't of these trees — the server can mark a commit rendered for
+        // an update it then didn't draw (seen right after a display resize, under load: a frame
+        // without the window) — fails this and the next one is checked; so does a first frame
+        // that the server draws differently once it has drawn the tree before (iPad Habit row:
+        // 2 px a step off in the first frame only — which of the two a capture got depended on
+        // timing before).
+        var bytes = copy(surface, w, h)
+        var redraws = 0
+        while redraws < 6 {
+            redraws += 1
+            let last = frameCount()
+            root.backgroundColor = root.backgroundColor == nil ? UIColor.clear.cgColor : nil
+            CATransaction.flush()
+            for c in shown { _ = synchronize(c, timeout: 20) }
+            guard let next = wait(0, last, 0, &frame)?.takeRetainedValue() else { log("server capture: no frame for a redraw"); break }
+            surface = next
+            let again = copy(next, w, h)
+            if again == bytes { break }
+            bytes = again
+            if redraws == 6 { log("warning: \(w)x\(h) frames still changing after \(redraws) redraws") }
+        }
+        if legacySettle { surface = quietFrame(gap: 0.016); bytes = copy(surface, w, h) }
+        timings.append("pass: commit rendered after \(Int(rendered.timeIntervalSince(t0) * 1000)) ms\(attempts > 0 ? " (\(attempts) extra draws to reach the hosted contexts)" : ""), frame \(frame), \(redraws) redraws\(waits > 0 ? ", \(waits) animation waits" : "")")
+        return bytes
     }
 
     static func commitId(_ c: NSObject) -> UInt32 { (c.value(forKey: "commitId") as? NSNumber)?.uint32Value ?? 0 }

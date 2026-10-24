@@ -154,6 +154,11 @@ extension Runner {
         if let dyldCache { env["SWIFTSHOT_NOBOOT_DYLD_CACHE"] = dyldCache }
         // Remote contexts (windows) connect to the window server the agent runs in-process.
         if ProcessInfo.processInfo.environment["SWIFTSHOT_CARENDERER"] == nil { env["CA_FORCE_LOCAL_SERVER"] = "1" }
+        // Every frame drawn with the shaders a warm device has: by default the renderer
+        // (CA::OGL::MetalContext::draw) draws with a generic pipeline while the specialized one
+        // compiles asynchronously, and doesn't redraw when that finishes, so a frame's pixels
+        // depended on how fast this machine compiles shaders (glass off by up to 30/255).
+        if job.platform == "ios" { env["CA_DISABLE_GENERIC_SHADERS"] = "1" }
         for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
         // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
         let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil
