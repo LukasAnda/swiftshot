@@ -279,12 +279,25 @@ final class AgentRunner {
                     format.scale = device.scale
                     format.opaque = preview.layout.kind.isDevice
                     let bounds = CGRect(origin: .zero, size: geo.size)
-                    let rendered = capture == "carenderer" ? (ServerCapture.enabled ? ServerCapture.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque) : GPUCapture.shared.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque)) : nil
-                    let image = rendered ?? UIGraphicsImageRenderer(size: geo.size, format: format).image { ctx in
-                        if capture == "layer" {
-                            window.layer.render(in: ctx.cgContext)
+                    let image: UIImage?
+                    if capture == "carenderer" {
+                        // Core Animation's renderer or nothing: drawHierarchy without a display
+                        // draws an empty (transparent) image, which must not pass for the screen.
+                        if ServerCapture.enabled {
+                            image = ServerCapture.capture(of: window, size: geo.size, scale: device.scale, opaque: format.opaque)
                         } else {
-                            window.drawHierarchy(in: bounds, afterScreenUpdates: true)
+                            image = GPUCapture.shared.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque)
+                        }
+                        if image == nil {
+                            result.errors.append("\(preview.name) (\(device.name), \(appearance)): no image from the render server (\(ServerCapture.enabled ? ServerCapture.failure ?? "no image" : "CARenderer drew nothing"))")
+                        }
+                    } else {
+                        image = UIGraphicsImageRenderer(size: geo.size, format: format).image { ctx in
+                            if capture == "layer" {
+                                window.layer.render(in: ctx.cgContext)
+                            } else {
+                                window.drawHierarchy(in: bounds, afterScreenUpdates: true)
+                            }
                         }
                     }
                     // A presentation's teardown finishes on later run-loop passes; until then the
@@ -300,6 +313,7 @@ final class AgentRunner {
                     }
                     window.isHidden = true
                     window.rootViewController = nil
+                    guard let image else { return }
                     let output = device.panelWidth.flatMap { w in device.panelHeight.map { h in
                         // Like the real "mini" phones: lay out at @3x, then downsample to the panel.
                         let landscape = geo.size.width > geo.size.height && preview.layout.kind.isDevice
@@ -710,9 +724,12 @@ enum SystemChrome {
         // The style before the data, which builds the items in it.
         if style != 0 { bar.setValue(style, forKey: "style"); bar.layoutIfNeeded() }
         apply?(bar)
-        // Its data update is applied (aggregated) on the next run-loop passes.
+        // Its data update may be applied (aggregated) on the next run-loop passes: until the
+        // foreground shows item views (the time, signal, battery). iOS 26's item views have no
+        // subviews of their own, which the previous check (any item view with subviews) waited
+        // its whole 0.25 s for, twice per screen.
         let until = Date().addingTimeInterval(0.25)
-        while Date() < until && bar.subviews.first?.subviews.allSatisfy({ $0.subviews.isEmpty }) ?? true { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
+        while Date() < until && !(bar.subviews.first?.subviews.contains { !$0.isHidden } ?? false) { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
         bar.layoutIfNeeded()
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("status bar provider \(bar.value(forKey: "visualProviderClassName") ?? "-")") }
         return bar
@@ -871,8 +888,6 @@ enum ServerCapture {
     static var chromeContext: NSObject?
     static var display: NSObject?
     static var started = false
-    /// How long the last capture pass waited for its first frame (long: shaders compiled).
-    static var lastFirstFrame: TimeInterval = 0
     static var timings: [String] = []
 
     static func constant(_ name: String) -> NSString? {
@@ -887,7 +902,7 @@ enum ServerCapture {
               let server = cls.perform(NSSelectorFromString("server"))?.takeUnretainedValue() as? NSObject,
               let display = (server.value(forKey: "displays") as? [NSObject])?.first,
               let id = display.value(forKey: "displayId") as? NSNumber,
-              let contextClass = NSClassFromString("CAContext") as? NSObject.Type else { log("server capture: no window server"); return nil }
+              let contextClass = NSClassFromString("CAContext") as? NSObject.Type else { note("no window server"); return nil }
         let options: NSDictionary = [constant("kCAContextDisplayId") ?? "displayId": id, constant("kCAContextDisplayable") ?? "displayable": true]
         context = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: options)?.takeUnretainedValue() as? NSObject
         // The window's own layer tree goes into a context that isn't shown; the shown one hosts
@@ -895,7 +910,7 @@ enum ServerCapture {
         // the window's layer itself would reach UIKit's coordinate conversions.
         windowContext = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: NSDictionary())?.takeUnretainedValue() as? NSObject
         chromeContext = contextClass.perform(NSSelectorFromString("remoteContextWithOptions:"), with: NSDictionary())?.takeUnretainedValue() as? NSObject
-        if context == nil || windowContext == nil { log("server capture: no context") }
+        if context == nil || windowContext == nil { note("no context") }
         self.display = display
         return context
     }
@@ -911,14 +926,41 @@ enum ServerCapture {
             }
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.001))
         }
-        log("server capture: display did not resize to \(width)x\(height)")
+        note("display did not resize to \(width)x\(height)")
         return false
+    }
+
+    /// Why the last capture pass returned no image.
+    static var failure: String?
+
+    static func note(_ reason: String) {
+        failure = reason
+        log("server capture: \(reason)")
+    }
+
+    /// The window's pixels from the render server, or nil with `failure` saying why. A pass that
+    /// gets no image (a frame of another size right after a display resize, a commit the server
+    /// marked rendered without drawing it) is done again from the start: purged server, display
+    /// fitted, the window shown anew. Never another renderer's image in its place:
+    /// drawHierarchy without a display draws nothing (a transparent PNG).
+    static func capture(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
+        var reasons: [String] = []
+        for _ in 0..<3 {
+            failure = nil
+            if let image = image(of: window, size: size, scale: scale, opaque: opaque) { return image }
+            reasons.append(failure ?? "no image")
+            // Without a window server or its contexts, another pass can't do better.
+            guard context != nil, windowContext != nil else { break }
+        }
+        failure = reasons.joined(separator: "; ")
+        return nil
     }
 
     static func image(of window: UIWindow, size: CGSize, scale: CGFloat, opaque: Bool) -> UIImage? {
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
         let t0 = Date()
-        guard start(width: w, height: h) != nil, fit(width: w, height: h, scale: scale) else { return nil }
+        guard start(width: w, height: h) != nil else { if failure == nil { note("no window server") }; return nil }
+        guard fit(width: w, height: h, scale: scale) else { return nil }
         let tFit = Date()
         defer {
             // Slow captures point at the machine's GPU / window server (CI VMs): say where.
@@ -940,35 +982,26 @@ enum ServerCapture {
             }
             let premultiplied = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
             guard let ctx = CGContext(data: &black, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: premultiplied),
-                  let raw = ctx.makeImage() else { return nil }
+                  let raw = ctx.makeImage() else { note("no image from the frame"); return nil }
             return UIImage(cgImage: raw, scale: scale, orientation: .up)
         }
         // Every capture starts from the render server's cold state (see purgeServer).
         purgeServer()
-        // iOS 27: one showing. Its frame is the one the server presented for this window's
-        // commits (pixels), every frame is drawn with the final shaders (the CLI sets
-        // CA_DISABLE_GENERIC_SHADERS), and the server has nothing left to draw: the same bytes
-        // whatever the machine's speed, with no warm-up showing.
+        // One showing, like a device shows the window once. Its frame is the one the server
+        // presented for this window's commits (pixels), every frame is drawn with the final
+        // shaders (the CLI sets CA_DISABLE_GENERIC_SHADERS), and the server has nothing left to
+        // draw: the same bytes whatever the machine's speed, with no warm-up showing.
         // The warm-up showings and the slow-first-frame recapture made up for frames drawn with
         // the generic shaders while the specialized ones compiled (a slow first frame, glass a
         // step off on the first showing) — measured: without them, identical output.
-        var bytes: [UInt8]
-        if !legacySettle {
-            guard let shown = settled(window, w, h, scale, background: nil) else { return nil }
-            bytes = shown
-        } else {
-            // iOS 26: glass reaches its final look through a luma feedback loop between the
-            // server and UIKit (the server samples backdrop luma on its own schedule and UIKit
-            // re-lays out the glass), which only quiet time ends; shown a couple of times first
-            // (measured: with fewer, some glass controls land a 1/255 step off at random).
-            for _ in 0..<2 { _ = settled(window, w, h, scale, background: nil) }
-            guard let shown = settled(window, w, h, scale, background: nil) else { return nil }
-            bytes = shown
-            if lastFirstFrame > 0.2, let again = settled(window, w, h, scale, background: nil) { bytes = again }
-        }
+        // iOS 26 too: its glass gets its final look while shown, as on a device (settled). Shown
+        // again, the glass came out drawn from scratch with the final luma (iPhone 17 Root: the
+        // tab bar's selection lens 2/255 off at its bottom edge): a device keeps what the first
+        // showing drew where a backdrop's content didn't change, see settled(_:).
+        guard var bytes = settled(window, w, h, scale, background: nil) else { return nil }
         if h > w, NoBoot.screen?.idiom == "phone", let area = NoBoot.screen?.display?.exclusionArea, area.count == 4, area[1] > 0 { addCornerMark(&bytes, width: w) }
         guard let ctx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info),
-              let raw = ctx.makeImage() else { return nil }
+              let raw = ctx.makeImage() else { note("no image from the frame"); return nil }
         // The framebuffer's bytes as they are: what `simctl io screenshot` saves.
         return UIImage(cgImage: raw, scale: scale, orientation: .up)
     }
@@ -999,7 +1032,15 @@ enum ServerCapture {
             defer { keepAttached = false; detach?(); detach = nil }
             guard var last = pixels(of: window, w, h, scale, background: background) else { return nil }
             guard legacySettle else { return last }
-            // iOS 26: until two quiet-time results agree (see image(of:)).
+            // iOS 26: until two quiet-time results agree. Its glass reaches its final look
+            // through a luma feedback loop: the server samples backdrop luma on its own schedule
+            // (CA::OGL::update_backdrop_luma, on a quarter-second grid), UIKit re-lays out the
+            // glass with it (glassBackground's inputFaceColorMatrixBlack 0.8 → 0.77 on iPhone
+            // 17's bars), and the server draws the change into the window it already shows —
+            // as on a device, where the backdrops whose content didn't change keep what they
+            // captured (CABackdropLayer's capture cache: the tab bar's selection lens keeps the
+            // tab bar it saw first). The SDF shapes are drawn anew each frame (the CLI sets
+            // CA_DISABLE_SDF_CACHE, see NoBoot.swift).
             for _ in 0..<4 {
                 let next = copy(quietFrame(gap: 0.03), w, h)
                 if next == last { return next }
@@ -1009,7 +1050,7 @@ enum ServerCapture {
         }
     }
 
-    /// iOS 26's glass settles through a server ↔ UIKit luma feedback loop (see image(of:)).
+    /// iOS 26's glass settles through a server ↔ UIKit luma feedback loop (see settled(_:)).
     static var legacySettle: Bool { runtimeMajor < 27 }
 
     /// iOS 26: the newest frame once the server has presented none for three gaps in a row,
@@ -1051,7 +1092,7 @@ enum ServerCapture {
 
     /// One composited frame of the window (BGRA rows, w × h).
     static func pixels(of window: UIWindow, _ w: Int, _ h: Int, _ scale: CGFloat, background: UIColor?) -> [UInt8]? {
-        guard let context, let windowContext, let wait, let hostClass = NSClassFromString("CALayerHost") as? CALayer.Type else { return nil }
+        guard let context, let windowContext, let wait, let hostClass = NSClassFromString("CALayerHost") as? CALayer.Type else { note("no window server"); return nil }
         let layer = window.layer
         let saved = (layer.superlayer, layer.anchorPoint, layer.position)
         // The window's layer as the root of its own context, at its own geometry (points)…
@@ -1131,16 +1172,15 @@ enum ServerCapture {
         var attempts = 0
         while let c = shown.first(where: { !synchronize($0, timeout: 20) }) {
             attempts += 1
-            guard attempts < 6 else { log("server capture: commit \(commitId(c)) of context \(c.value(forKey: "contextId") ?? "?") not rendered"); return nil }
+            guard attempts < 6 else { note("commit \(commitId(c)) of context \(c.value(forKey: "contextId") ?? "?") not rendered"); return nil }
             root.backgroundColor = root.backgroundColor == nil ? UIColor.clear.cgColor : nil
             CATransaction.flush()
         }
         let rendered = Date()
-        lastFirstFrame = rendered.timeIntervalSince(t0)
         var frame: UInt64 = 0
-        guard let presented = wait(0, before, 0, &frame)?.takeRetainedValue() else { log("server capture: no frame for commit \(commitId(context))"); return nil }
+        guard let presented = wait(0, before, 0, &frame)?.takeRetainedValue() else { note("no frame for commit \(commitId(context))"); return nil }
         guard IOSurfaceGetWidth(presented) == w && IOSurfaceGetHeight(presented) == h else {
-            log("server capture: frame is \(IOSurfaceGetWidth(presented))x\(IOSurfaceGetHeight(presented)), not \(w)x\(h)"); return nil
+            note("frame is \(IOSurfaceGetWidth(presented))x\(IOSurfaceGetHeight(presented)), not \(w)x\(h)"); return nil
         }
         var surface = presented
         // Settled: the server draws again only for a new commit or for content it evaluates over
