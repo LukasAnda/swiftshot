@@ -506,7 +506,7 @@ final class Runner {
             // waiting for it made the Share dialog's popover come up at another anchor in ~1 of 5
             // runs (_UITraitVerticalBarSuppressed 1 instead of 0); 12/12 identical without.
             let rail = (profile.display?.verticalBarAllowed ?? 0) != 0
-            let grabber = profile.safeArea.bottom > 0 && major >= 26 && !rail ? await HomeGrabberWatch(udid: device.udid) : nil
+            let grabber = profile.idiom != "watch" && profile.safeArea.bottom > 0 && major >= 26 && !rail ? await HomeGrabberWatch(udid: device.udid) : nil
             defer { grabber?.stop() }
             @Sendable func waitForGrabber() async {
                 guard let grabber, !grabber.settled, !grabber.gaveUp else { return }

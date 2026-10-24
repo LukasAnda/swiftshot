@@ -218,8 +218,9 @@ extension WatchAgent {
             let ready = URL(fileURLWithPath: controlDir).appendingPathComponent("\(index).ready")
             let done = URL(fileURLWithPath: controlDir).appendingPathComponent("\(index).done")
             try? JSONSerialization.data(withJSONObject: ["path": out.path, "landscape": false]).write(to: ready)
-            let deadline = Date(timeIntervalSinceNow: 30)
-            while !FileManager.default.fileExists(atPath: done.path) && Date() < deadline {
+            // Until the host has grabbed it: moving on early would put the next screen in this
+            // file; the job's timeout covers a host that never answers.
+            while !FileManager.default.fileExists(atPath: done.path) {
                 RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.005))
             }
             result.shots.append(ShotRecord(
