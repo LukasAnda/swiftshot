@@ -25,6 +25,14 @@ final class ParityAndPerformanceTests: XCTestCase {
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: Self.tool), "run `make` first")
     }
 
+    /// The reference simulators stay booted after a device run; on a CI runner the next test's
+    /// boot then fails on the user process limit ("insufficient system resources").
+    override func tearDown() {
+        guard Self.env["SWIFTSHOT_INTEGRATION"] == "1" else { return }
+        let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun"); p.arguments = ["simctl", "shutdown", "all"]
+        try? p.run(); p.waitUntilExit()
+    }
+
     @discardableResult
     func swiftshot(_ args: [String], extraEnv: [String: String] = [:]) throws -> (output: String, seconds: Double) {
         let p = Process()
@@ -83,9 +91,10 @@ final class ParityAndPerformanceTests: XCTestCase {
         let virtual = Self.work.appendingPathComponent("\(tag)virtual")
         let refs = (1...2).map { Self.work.appendingPathComponent("\(tag)device\($0)") }
         try swiftshot(["--devices", devices, "--ios", ios, "--previews", list, "--output", virtual.path])
-        for ref in refs { try swiftshot(["--devices", devices, "--ios", ios, "--previews", list, "--mode", "device", "--output", ref.path]) }
-        let files = try FileManager.default.contentsOfDirectory(atPath: refs[0].appendingPathComponent("en-US").path).filter { $0.hasSuffix(".png") }.sorted()
-        XCTAssertEqual(files.count, previews.count * devices.split(separator: ",").count)
+        var logs: [String] = []
+        for ref in refs { logs.append(try swiftshot(["--devices", devices, "--ios", ios, "--previews", list, "--mode", "device", "--output", ref.path]).output) }
+        let files = ((try? FileManager.default.contentsOfDirectory(atPath: refs[0].appendingPathComponent("en-US").path)) ?? []).filter { $0.hasSuffix(".png") }.sorted()
+        XCTAssertEqual(files.count, previews.count * devices.split(separator: ",").count, "device run wrote \(files.count) files:\n\(logs[0].suffix(4000))")
         var report: [String] = []
         for file in files {
             let d = try diff(virtual.appendingPathComponent("en-US/\(file)"), refs.map { $0.appendingPathComponent("en-US/\(file)") }, skipTop: skipTop, skip: skip)

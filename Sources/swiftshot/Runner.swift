@@ -547,9 +547,15 @@ final class Runner {
                 continue
             }
             pump.cancel()
-            collect(result)
+            // The host writes the files; a shot whose grab failed is an error, not a screenshot.
+            var checked = result
+            checked.shots = result.shots.filter { FileManager.default.fileExists(atPath: (outputDir as NSString).appendingPathComponent($0.file)) }
+            for missing in result.shots where !checked.shots.contains(where: { $0.file == missing.file }) {
+                checked.errors.append("\(runtime.name) · \(language) · \(type.name): no framebuffer grab for \(missing.file)")
+            }
+            collect(checked)
             record("render \(type.name) \(runtime.name) \(language)", t)
-            Log.success("\(runtime.name) · \(language) · \(type.name): \(result.shots.count) shots in \(ms(since: t))")
+            Log.success("\(runtime.name) · \(language) · \(type.name): \(checked.shots.count) shots in \(ms(since: t))")
         }
         if options.shutdownAfter { try? await Simctl.shutdown(device.udid) }
     }
