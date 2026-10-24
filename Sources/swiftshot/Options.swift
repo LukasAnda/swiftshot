@@ -50,6 +50,7 @@ struct Options: Codable {
     var emitTable: String?
     var inputFiles: [String] = []   // emit-table: calibration.json files to merge
     var templateCache: String?
+    var force = false     // init: overwrite an existing swiftshot.json
     var verbose = false
 
     enum CodingKeys: String, CodingKey {
@@ -91,7 +92,7 @@ struct Options: Codable {
     swiftshot — App Store screenshots straight from your SwiftUI #Previews.
 
     USAGE
-      swiftshot [run|list|devices|calibrate|emit-table] [options]
+      swiftshot [run|list|devices|calibrate|emit-table|init] [options]
 
     COMMANDS
       run         Build, render every preview for every device × iOS × language × appearance (default)
@@ -99,6 +100,8 @@ struct Options: Codable {
       devices     Show installed iOS runtimes and the geometry used for each device
       calibrate   Boot the given devices once and measure their real safe areas (cached)
       emit-table  Merge calibration.json files into the built-in device table (maintainers)
+      init        Write a swiftshot.json for the project here: scheme, watch scheme, languages and
+                  App Store devices detected (alias auto-setup; --force overwrites an existing one)
 
     BUILD
       --project <path> | --workspace <path>   Xcode project or workspace
@@ -174,21 +177,22 @@ struct Options: Codable {
         var args = argv
         var options = Options()
 
-        // Config file first, then CLI overrides.
+        // Config file first, then CLI overrides. `init` writes the config, so it never reads one.
+        let setup = ["init", "auto-setup"].contains(args.first ?? "")
         var configPath: String?
         if let i = args.firstIndex(of: "--config"), i + 1 < args.count {
             configPath = args[i + 1]; args.removeSubrange(i...(i + 1))
         } else if FileManager.default.fileExists(atPath: "swiftshot.json") {
             configPath = "swiftshot.json"
         }
-        if let configPath {
+        if let configPath, !setup {
             let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
             options = try JSONDecoder().decode(Options.self, from: data)
         }
 
         if let first = args.first, !first.hasPrefix("-") {
-            guard ["run", "list", "devices", "calibrate", "emit-table"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
-            options.command = first
+            guard ["run", "list", "devices", "calibrate", "emit-table", "init", "auto-setup"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
+            options.command = setup ? "init" : first
             args.removeFirst()
         }
 
@@ -241,6 +245,7 @@ struct Options: Codable {
             case "--download-missing-runtimes": options.downloadRuntimes = true
             case "--no-html": options.html = false
             case "--no-status-bar": options.statusBar = false
+            case "--force", "-f": options.force = true
             case "--verbose", "-v": options.verbose = true
             case "--help", "-h": print(usage); exit(0)
             case "--version": print("swiftshot \(swiftshotVersion)"); exit(0)

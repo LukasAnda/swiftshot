@@ -22,6 +22,13 @@ To build from source instead: `git clone https://github.com/LukasAnda/swiftshot 
 
 ## Quick start
 
+Run `swiftshot init` in your project to generate `swiftshot.json`. It detects the project or
+workspace, the app scheme (and a watchOS app scheme), the languages from the project's known
+regions, and App Store devices installed on this Mac (the newest Pro Max iPhone, the 13-inch iPad
+if the app runs on iPad, an Apple Watch Ultra for a watch app). Then run `swiftshot`.
+
+Or pass everything on the command line:
+
 ```
 swiftshot --project MyApp.xcodeproj --scheme MyApp \
   --devices "iPhone 17 Pro Max,iPad Pro 13-inch (M5)" \
