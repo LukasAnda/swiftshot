@@ -7,6 +7,7 @@
 #import <dlfcn.h>
 
 void swiftshot_apply_status_bar_data(UIView *bar);
+UIView *swiftshot_make_status_bar_spec(NSDictionary *spec, CGRect frame, UIScreen *screen);
 
 /// UIScreen._exclusionArea (the Dynamic Island's rect, which the status bar lays out around), as
 /// the rendered device's booted screen reports it. CGRectNull: none.
@@ -20,6 +21,15 @@ void swiftshot_apply_status_bar_data(UIView *bar) {
     id data = objc_getAssociatedObject(bar, @selector(swiftshot_apply_status_bar_data));
     if (data) ((void (*)(id, SEL, id))objc_msgSend)(bar, NSSelectorFromString(@"updateWithData:"), data);
     [bar layoutIfNeeded];
+    // The avoidance frame after the data, as SpringBoard's long-lived bar gets it: its visual
+    // provider (made with the items) only then turns it into the cutout guide. Set before, the
+    // cutout came from the screen's exclusion area, mirrored in a right-to-left bar (iPhone 17
+    // on an Arabic simulator: the cutout, and with it the battery, Wi-Fi and signal, 1/3 pt off).
+    NSValue *avoidance = objc_getAssociatedObject(bar, @selector(swiftshot_make_status_bar_spec));
+    if (avoidance) {
+        ((void (*)(id, SEL, CGRect))objc_msgSend)(bar, NSSelectorFromString(@"setAvoidanceFrame:"), avoidance.CGRectValue);
+        [bar layoutIfNeeded];
+    }
 }
 
 /// _UIStatusBarData from a description: {entryKey: {"class": entry class, property: value…}}.
@@ -51,9 +61,9 @@ UIView *swiftshot_make_status_bar_spec(NSDictionary *spec, CGRect frame, UIScree
     bar.frame = frame;
     for (NSString *k in spec[@"barProperties"]) [bar setValue:spec[@"barProperties"][k] forKey:k];
     // The island (not a notch, which starts at the top edge), which SpringBoard's bar lays its
-    // items out around.
+    // items out around: set once the data has built the items (swiftshot_apply_status_bar_data).
     if ([spec[@"avoidExclusionArea"] boolValue] && !CGRectIsNull(swiftshot_avoidance) && swiftshot_avoidance.origin.y > 0 && [bar respondsToSelector:NSSelectorFromString(@"setAvoidanceFrame:")])
-        ((void (*)(id, SEL, CGRect))objc_msgSend)(bar, NSSelectorFromString(@"setAvoidanceFrame:"), swiftshot_avoidance);
+        objc_setAssociatedObject(bar, @selector(swiftshot_make_status_bar_spec), [NSValue valueWithCGRect:swiftshot_avoidance], OBJC_ASSOCIATION_RETAIN);
     objc_setAssociatedObject(bar, @selector(swiftshot_apply_status_bar_data), data, OBJC_ASSOCIATION_RETAIN);
     return bar;
 }

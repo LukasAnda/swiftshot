@@ -163,7 +163,15 @@ extension Runner {
         // kept the glass rims as first drawn when iOS 26's luma loop changed the glass while it
         // was shown (see ServerCapture.settled): iPhone 17 Root's bars 1/255 off along their
         // rims, the device drew them with the change. Identical output otherwise (iOS 26, 27).
-        if job.platform == "ios" { env["CA_DISABLE_GENERIC_SHADERS"] = "1"; env["CA_DISABLE_SDF_CACHE"] = "1" }
+        // And no occlusion culling: with it, a frame's antialiased edges depended on what the
+        // display buffer it was drawn into (one of three, reused) held from earlier frames — the
+        // first frame into each fresh buffer differed from later ones (measured per swapped
+        // frame: iPad Habit row's icon edges 143 vs 144 from the fourth frame on). Which state a
+        // capture got depended on how many frames the server had drawn, so on timing: under
+        // load a list icon's edge pixel 1/255 off (iPhone 18 Pro Habit list) and a component
+        // preview's edge alpha 254 vs 255. Without it, every frame is the same; device-mode
+        // screens are identical either way.
+        if job.platform == "ios" { env["CA_DISABLE_GENERIC_SHADERS"] = "1"; env["CA_DISABLE_SDF_CACHE"] = "1"; env["CA_DISABLE_OCCLUSION_CULLING"] = "1" }
         for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
         // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
         let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil

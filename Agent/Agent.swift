@@ -698,8 +698,66 @@ enum SystemChrome {
         let direction: UISemanticContentAttribute = springBoardRTL ? .forceRightToLeft : .forceLeftToRight
         func force(_ v: UIView) { v.semanticContentAttribute = direction; v.setNeedsLayout(); v.subviews.forEach(force) }
         container.subviews.forEach(force)
+        if matchSpringBoardPunctuation(in: container) { for bar in container.subviews { bar.setNeedsLayout() } }
         for bar in container.subviews { bar.layoutIfNeeded() }
         return container
+    }
+
+    /// Whether Core Text in a process with this locale draws some punctuation from SF Arabic:
+    /// when the locale counts in Arabic-Indic digits (ar_SA, ar_EG, fa, ckb, ps; not ar, ar_AE,
+    /// ar_MA, ur), the system font's ':' " ' ( ) come from SF Arabic (the time's colon 5.77 pt
+    /// wide instead of 5.40, without the 9–: kerning). Process-wide: neither the text's language
+    /// attribute nor a font's cascade list changes it.
+    static func drawsArabicPunctuation(_ locale: Locale) -> Bool { ["arab", "arabext"].contains(locale.numberingSystem.identifier) }
+    static let arabicPunctuation: Set<unichar> = [0x3A, 0x22, 0x27, 0x28, 0x29]
+
+    /// SpringBoard's status bar text is laid out in SpringBoard's locale, ours in the app's: an
+    /// Arabic (ar_SA) simulator's time "9:41" has SF Arabic's colon whatever the app's language,
+    /// and its label is 2/3 pt wider (the time 1 px off otherwise). Where the two locales differ,
+    /// the labels get SpringBoard's fonts explicitly; true if any changed.
+    static func matchSpringBoardPunctuation(in view: UIView) -> Bool {
+        let springBoard = drawsArabicPunctuation(Locale(identifier: job?.statusBarLanguage ?? job?.statusBarLocale ?? "en_US"))
+        guard springBoard != drawsArabicPunctuation(.current) else { return false }
+        func runFont(_ string: String, _ font: UIFont) -> CTFont? {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [.font: font]) as CFAttributedString)
+            guard let run = (CTLineGetGlyphRuns(line) as? [CTRun])?.first else { return nil }
+            return (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName].map { $0 as! CTFont }
+        }
+        var changed = false
+        func visit(_ v: UIView) {
+            defer { v.subviews.forEach(visit) }
+            guard let label = v as? UILabel, let text = label.attributedText, let font = label.font else { return }
+            let string = text.string as NSString
+            let ranges = (0..<string.length).filter { arabicPunctuation.contains(string.character(at: $0)) }
+            guard !ranges.isEmpty else { return }
+            let m = NSMutableAttributedString(attributedString: text)
+            if springBoard {
+                // SF Arabic as Core Text picks it for Arabic punctuation (the Arabic comma).
+                guard let arabic = runFont("\u{060C}", font) else { return }
+                for i in ranges { m.addAttribute(.font, value: arabic as UIFont, range: NSRange(location: i, length: 1)) }
+            } else {
+                // The system font's face (same outlines, variation and kerning) as a plain font,
+                // which Core Text doesn't substitute from SF Arabic.
+                guard let primary = runFont("9", font) else { return }
+                var face = CTFontCopyGraphicsFont(primary, nil)
+                if let variation = CTFontCopyVariation(primary), let varied = face.copy(withVariations: variation) { face = varied }
+                m.addAttribute(.font, value: CTFontCreateWithGraphicsFont(face, CTFontGetSize(primary), nil, nil) as UIFont, range: NSRange(location: 0, length: string.length))
+            }
+            // The line as tall as the label's own font makes it (a substituted glyph doesn't
+            // change it; SF Arabic's own run would: the label 1 pt taller, the time off)…
+            let style = ((text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+            let lineHeight = CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
+            style.minimumLineHeight = lineHeight; style.maximumLineHeight = lineHeight
+            // …and aligned in SpringBoard's direction: a label given an attributed string resolves
+            // natural alignment by this process's language (an English app: the time 2 pt left).
+            if style.alignment == .natural { style.alignment = springBoardRTL ? .right : .left }
+            m.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: string.length))
+            label.attributedText = m
+            label.invalidateIntrinsicContentSize()
+            changed = true
+        }
+        visit(view)
+        return changed
     }
 
     /// One SpringBoard status bar in a style, with its data applied, hidden, in the window.
@@ -1106,6 +1164,11 @@ enum ServerCapture {
         root.frame = CGRect(x: 0, y: 0, width: w, height: h)
         // (The background on a layer of its own: the root's own background is the switch that
         // has the server draw the same tree again, see below.)
+        // Switched without an implicit animation: a plain layer's backgroundColor change animates
+        // for 0.25 s, and the server drew ~15 frames of it (none → clear, no visible change) while
+        // a capture copied the newest one. Which frames a capture then got (and so the display
+        // buffers' history the next drew on) depended on the machine's speed.
+        root.actions = ["backgroundColor": NSNull()]
         if let background {
             let fill = CALayer()
             fill.frame = root.bounds
