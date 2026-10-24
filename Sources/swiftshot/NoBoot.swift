@@ -158,7 +158,12 @@ extension Runner {
         // (CA::OGL::MetalContext::draw) draws with a generic pipeline while the specialized one
         // compiles asynchronously, and doesn't redraw when that finishes, so a frame's pixels
         // depended on how fast this machine compiles shaders (glass off by up to 30/255).
-        if job.platform == "ios" { env["CA_DISABLE_GENERIC_SHADERS"] = "1" }
+        // And every frame draws the glass shapes (CASDFLayer) anew: the renderer's SDF cache
+        // (whose eligibility goes by frame times, CA::Render::SDFState::update_cache_eligible)
+        // kept the glass rims as first drawn when iOS 26's luma loop changed the glass while it
+        // was shown (see ServerCapture.settled): iPhone 17 Root's bars 1/255 off along their
+        // rims, the device drew them with the change. Identical output otherwise (iOS 26, 27).
+        if job.platform == "ios" { env["CA_DISABLE_GENERIC_SHADERS"] = "1"; env["CA_DISABLE_SDF_CACHE"] = "1" }
         for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
         // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
         let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil
