@@ -1,0 +1,10 @@
+--- !tapi-tbd
+# Link stub for the simulator runtime's private SimFramebufferClient (not in the SDKs); only the
+# symbols Agent/FakeDisplay.c interposes.
+tbd-version:     4
+targets:         [ arm64-ios-simulator, x86_64-ios-simulator, arm64-watchos-simulator, x86_64-watchos-simulator ]
+install-name:    '/System/Library/PrivateFrameworks/SimFramebufferClient.framework/SimFramebufferClient'
+exports:
+  - targets:     [ arm64-ios-simulator, x86_64-ios-simulator, arm64-watchos-simulator, x86_64-watchos-simulator ]
+    symbols:     [ _SFBConnectionCreate, _SFBConnectionConnect, _SFBConnectionCopyDisplays, _SFBConnectionCopyDisplayByUID, _SFBConnectionSetDisplayUpdatedHandler, _SFBDisplayGetType, _SFBDisplayGetName, _SFBDisplayGetDeviceName, _SFBDisplayGetDisplayUID, _SFBDisplayGetDotPitch, _SFBDisplayGetModeCount, _SFBDisplayGetMode, _SFBDisplayGetCurrentMode, _SFBDisplayGetDeviceSize, _SFBDisplayGetCurrentCanvasSize, _SFBDisplayCreateSwapchain, _SFBSwapchainSwapBegin, _SFBSwapchainSwapAddSurface, _SFBSwapchainSwapSetCallback, _SFBSwapchainSwapSubmit, _SFBSwapchainSwapCancel ]
+...

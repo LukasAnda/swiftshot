@@ -1,0 +1,12 @@
+{
+  "project": "DemoApp.xcodeproj",
+  "scheme": "DemoApp",
+  "devices": ["iPhone 17 Pro Max", "iPad Pro 13-inch (M5)"],
+  "ios_versions": ["26.5"],
+  "languages": ["en-US", "de-DE", "sk", "ar", "ja"],
+  "appearances": ["light", "dark"],
+  "previews": ["Welcome", "Habit list", "Stats", "Settings", "Root"],
+  "output_directory": "screenshots",
+  "clear_previous_screenshots": true,
+  "parallel_languages": 2
+}

@@ -1,0 +1,31 @@
+name: swiftshot
+description: Screenshots of your SwiftUI and UIKit previews for every device, iOS version, language and appearance, without booting a simulator.
+branding:
+  icon: camera
+  color: blue
+inputs:
+  version:
+    description: swiftshot release to install (e.g. 0.1.0), or "latest"
+    default: latest
+  args:
+    description: Arguments for `swiftshot run` (project, scheme, devices, languages…), or empty to use swiftshot.json
+    default: ""
+  working-directory:
+    description: Where to run (the folder with your project / swiftshot.json)
+    default: "."
+runs:
+  using: composite
+  steps:
+    - name: Install swiftshot
+      shell: bash
+      env:
+        SWIFTSHOT_VERSION: ${{ inputs.version }}
+        SWIFTSHOT_PREFIX: ${{ runner.temp }}/swiftshot
+      run: |
+        sh "${{ github.action_path }}/install.sh"
+        echo "${{ runner.temp }}/swiftshot/bin" >> "$GITHUB_PATH"
+    - name: Render screenshots
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        swiftshot run ${{ inputs.args }}

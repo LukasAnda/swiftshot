@@ -1,0 +1,83 @@
+# Performance on real, fresh GitHub-hosted macOS runners: every job starts with an empty
+# DerivedData and brand-new simulators, exactly like a CI screenshot job. Swiftshot and fastlane
+# run on separate runners so they don't compete for CPU.
+name: benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: macOS runner image
+        default: xcode-27
+      fastlane:
+        description: Benchmark fastlane snapshot (~80 min)
+        type: boolean
+        default: true
+      booted:
+        description: Also benchmark booted simulators (--boot)
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ["Sources/**", "Agent/**", "Shared/**", "bench/**", "Makefile", ".github/workflows/benchmark.yml"]
+
+jobs:
+  swiftshot:
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # noboot: the default (iOS without any simulator); booted: --boot (cold, cached templates,
+        # warm). The scheduling experiments (SWIFTSHOT_BOOT_AFTER_BUILD / SWIFTSHOT_STAGED) apply
+        # to booted runs and can be added back as variants.
+        variant: ${{ fromJSON(inputs.booted && '["noboot","booted"]' || '["noboot"]') }}
+    env:
+      SWIFTSHOT_BOOT_AFTER_BUILD: ${{ matrix.variant == 'boot-after-build' && '1' || '' }}
+      SWIFTSHOT_STAGED: ${{ matrix.variant == 'staged' && '1' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Machine
+        run: |
+          sw_vers; xcodebuild -version; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          xcrun simctl list runtimes
+          echo "::notice title=machine::$(sysctl -n machdep.cpu.brand_string), $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, $(xcodebuild -version | head -1), runtimes: $(xcrun simctl list runtimes | grep -oE '^(iOS|watchOS) [0-9.]+' | tr '\n' ' ')"
+      - name: Build swiftshot
+        run: make
+      - name: Benchmark (cold, cached templates, warm)
+        run: BENCH_DIR="$RUNNER_TEMP/bench.noindex" bench/run.sh ${{ matrix.variant == 'noboot' && 'noboot' || 'swiftshot' }}
+      - name: Summary
+        if: always()
+        run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" "swiftshot ${{ matrix.variant }}" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftshot-bench-${{ matrix.variant }}
+          path: |
+            ${{ runner.temp }}/bench.noindex/results.tsv
+            ${{ runner.temp }}/bench.noindex/*/log.txt
+            ${{ runner.temp }}/bench.noindex/*/screenshots
+
+  fastlane:
+    # ~80 min on a hosted runner; the reference the default (no-boot) is measured against.
+    if: ${{ github.event_name == 'push' || inputs.fastlane }}
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Machine
+        run: |
+          sw_vers; xcodebuild -version; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          command -v fastlane || brew install fastlane
+          fastlane --version
+      - name: Benchmark (cold)
+        run: BENCH_DIR="$RUNNER_TEMP/bench.noindex" bench/run.sh fastlane
+      - name: Summary
+        if: always()
+        run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" fastlane >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fastlane-bench
+          path: |
+            ${{ runner.temp }}/bench.noindex/results.tsv
+            ${{ runner.temp }}/bench.noindex/fastlane/log.txt

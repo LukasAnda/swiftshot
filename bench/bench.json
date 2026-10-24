@@ -1,0 +1,65 @@
+{
+  "project": "DemoApp.xcodeproj",
+  "scheme": "DemoApp",
+  "watch_scheme": "DemoWatch",
+  "devices": [
+    "iPhone 17 Pro Max",
+    "iPhone SE (3rd generation)",
+    "iPad Pro 13-inch (M5)",
+    "Apple Watch Series 11 (46mm)"
+  ],
+  "languages": [
+    "en-US",
+    "de-DE",
+    "ar"
+  ],
+  "appearances": [
+    "light"
+  ],
+  "screens": [
+    {
+      "preview": "Welcome",
+      "appearances": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "preview": "Stats",
+      "languages": [
+        "de-DE"
+      ],
+      "devices": [
+        "iPad*"
+      ]
+    },
+    {
+      "preview": "Habit row",
+      "skip": true
+    },
+    {
+      "preview": "History",
+      "skip": true
+    },
+    {
+      "preview": "New habit sheet",
+      "skip": true
+    },
+    {
+      "preview": "Delete alert",
+      "skip": true
+    },
+    {
+      "preview": "Share dialog",
+      "skip": true
+    },
+    {
+      "preview": "Watch badge",
+      "skip": true
+    },
+    {
+      "preview": "Watch ring",
+      "skip": true
+    }
+  ]
+}

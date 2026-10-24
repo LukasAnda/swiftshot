@@ -1,0 +1,44 @@
+# Lists what a hosted macOS image offers for simulator work: installed Xcodes, simulator
+# runtimes per Xcode, and how long downloading a missing iOS runtime takes.
+name: runner-probe
+on:
+  workflow_dispatch:
+    inputs:
+      download:
+        description: iOS runtime build/version to try downloading (empty = skip)
+        default: ""
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [xcode-27, xcode-27-xlarge, macos-26, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - name: Xcodes and runtimes
+        run: |
+          sw_vers
+          echo "== selected: $(xcode-select -p)"
+          ls -d /Applications/Xcode*.app
+          for x in /Applications/Xcode*.app; do
+            [ -L "$x" ] && continue
+            v=$(DEVELOPER_DIR="$x/Contents/Developer" xcodebuild -version 2>/dev/null | tr '\n' ' ')
+            echo "::notice title=${{ matrix.runner }} $(basename "$x")::$v"
+          done
+          xcrun simctl runtime list || true
+          r=$(xcrun simctl list runtimes | grep -E '^(iOS|watchOS)' | sed 's/ - com.*//' | tr '\n' ';')
+          echo "::notice title=${{ matrix.runner }} runtimes::$r"
+          df -h / | tail -1
+          echo "::notice title=${{ matrix.runner }} machine::$(sysctl -n machdep.cpu.brand_string), $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, macOS $(sw_vers -productVersion)"
+      - name: Download a runtime
+        if: inputs.download != ''
+        run: |
+          start=$(date +%s)
+          for x in $(ls -d /Applications/Xcode*.app | sort -V | tail -1); do
+            echo "using $x"
+            sudo xcode-select -s "$x/Contents/Developer"
+          done
+          xcodebuild -downloadPlatform iOS -buildVersion "${{ inputs.download }}" || xcodebuild -downloadPlatform iOS || true
+          echo "::notice title=${{ matrix.runner }} download::$(( $(date +%s) - start )) s; now: $(xcrun simctl list runtimes | grep -E '^iOS' | sed 's/ - com.*//' | tr '\n' ';')"

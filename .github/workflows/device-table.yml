@@ -1,0 +1,65 @@
+# Keeps the built-in device display table (Sources/swiftshot/BuiltInDisplays.swift) in sync with
+# new Xcode / simulator runtime releases. Weekly, every hosted image (each carries different
+# runtimes: macos-15 iOS 18.x/26.0-26.2, macos-26 iOS 26.2-26.5, xcode-27 iOS 27.x) re-measures
+# every device type it can boot (bench/update-device-table.sh); a final job merges the results
+# into the table and opens a pull request when values changed.
+name: device-table
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Re-measure even if Xcode and runtimes are unchanged
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-26, xcode-27]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-measure all iOS device types on this image's runtimes
+        run: WORK="$RUNNER_TEMP/table.noindex" EMIT=0 bench/update-device-table.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calibration-${{ matrix.runner }}
+          path: ${{ runner.temp }}/table.noindex/calibration.json
+
+  merge:
+    needs: measure
+    if: always()
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/calibrations
+      - name: Merge into the table
+        run: |
+          make -s bin/swiftshot
+          bin/swiftshot emit-table --emit-table Sources/swiftshot/BuiltInDisplays.swift "$RUNNER_TEMP"/calibrations/*/calibration.json
+          git --no-pager diff --stat
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git diff --quiet Sources/swiftshot/BuiltInDisplays.swift && { echo "No value changes."; exit 0; }
+          branch="device-table/$(date +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add Sources/swiftshot/BuiltInDisplays.swift
+          git commit -m "Device display table: re-measured on hosted runners"
+          git push -u origin "$branch"
+          gh pr create --title "Device display table update" \
+            --body "Re-measured with \`bench/update-device-table.sh\` on macos-15, macos-26 and xcode-27. Changed values mean Apple changed device display data; review before merging."

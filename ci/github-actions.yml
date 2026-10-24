@@ -1,0 +1,48 @@
+# Example: App Store screenshots on a headless GitHub-hosted macOS runner.
+# Simulator.app is never opened; swiftshot talks to CoreSimulator through simctl only.
+name: screenshots
+on: workflow_dispatch
+
+jobs:
+  screenshots:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build swiftshot
+        run: make -C tools/swiftshot          # swiftshot checked out (e.g. as a submodule) at tools/swiftshot, or download a release tarball (bin/swiftshot + bin/SwiftshotAgent.dylib)
+
+      # Boot templates: the migrated data container of one first-booted simulator per runtime
+      # (~1.3 GB for iOS, ~0.4 GB for watchOS). Restoring them makes every simulator boot like a
+      # warm one (~8 s instead of ~30 s+). Worth it when restoring the cache is faster than one
+      # first boot on your runner — measure; without the cache swiftshot still pays the first boot
+      # only once per runtime and seeds the other simulators from it.
+      - id: runtimes
+        run: echo "hash=$(xcrun simctl list runtimes | shasum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/swiftshot-templates.noindex
+          key: swiftshot-templates-${{ runner.os }}-${{ steps.runtimes.outputs.hash }}
+
+      # One-time runtime install when the image lacks the iOS version you need.
+      # (Hosted images ship the current runtimes, so this is usually a no-op.)
+      - name: Render screenshots
+        run: |
+          tools/swiftshot/bin/swiftshot \
+            --project MyApp.xcodeproj --scheme MyApp --watch-scheme MyWatchApp \
+            --devices "iPhone 17 Pro Max,iPad Pro 13-inch (M5),Apple Watch Series 11 (46mm)" \
+            --ios "26.5" \
+            --languages "en-US,de-DE,fr-FR,ja" \
+            --appearances light,dark \
+            --screen "Welcome: appearances=light,dark" \
+            --device-set "$RUNNER_TEMP/simulators.noindex" \
+            --template-cache ~/swiftshot-templates.noindex \
+            --download-missing-runtimes --shutdown \
+            --output fastlane/screenshots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: fastlane/screenshots
+
+      # Upload as usual: `fastlane deliver --skip_binary_upload --skip_metadata` reads the same layout.
