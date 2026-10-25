@@ -41,7 +41,7 @@ final class Runner {
 
     init(options: Options) throws {
         self.options = options
-        _ = try Runner.locateAgent(.ios)
+        if options.command != "emit-table" { _ = try Runner.locateAgent(.ios) }   // emit-table only merges files
         if let set = options.deviceSet {
             let path = URL(fileURLWithPath: set).standardizedFileURL.path
             try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
