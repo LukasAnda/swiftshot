@@ -3,6 +3,7 @@
 enum BuiltInDisplays {
     static let table: [String: DisplayInfo] = [
         "iPad (10th generation)": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), periphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 20.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), screenDisplayPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 32.0, statusBarHeight: 32.0),
+        "iPad (7th generation)": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), periphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 0.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), screenDisplayPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 20.0, statusBarHeight: 20.0),
         "iPad (8th generation)": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), periphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 0.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), screenDisplayPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0)),
         "iPad (9th generation)": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), periphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 0.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), screenDisplayPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 32.0, statusBarHeight: 32.0),
         "iPad (A16)": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 25.0, right: 0.0), periphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 20.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), screenDisplayPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 32.0, statusBarHeight: 32.0),
@@ -70,9 +71,14 @@ enum BuiltInDisplays {
         "iPhone Duo": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 34.0, right: 0.0), periphery: Insets(top: 50.666666666666664, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 21.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 50.666666666666664, left: 0.0, bottom: 50.666666666666664, right: 0.0), screenDisplayPeriphery: Insets(top: 50.666666666666664, left: 0.0, bottom: 0.0, right: 0.0), statusBarAxis: 1, statusBarFrameHeight: 2.0, statusBarHeight: 2.0, verticalBarAllowed: 1, verticalBarEdge: 2, cornerInsets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 84.0, 174.0], barPosition: [48.0, 48.0, 48.0, 48.0, 2.0, 2.0, 2.0, 2.0], exclusionArea: [399.0, 30.0, 37.0, 37.0], cameraRegion: [399.6666666666667, 29.333333333333332, 37.0, 37.0]),
         "iPhone SE (2nd generation)": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), periphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 0.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), screenDisplayPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 20.0, statusBarHeight: 20.0),
         "iPhone SE (3rd generation)": DisplayInfo(safeAreaPortrait: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), periphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 0.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), screenDisplayPeriphery: Insets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 20.0, statusBarHeight: 20.0),
+        "iPhone Xs Max": DisplayInfo(safeAreaPortrait: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), periphery: Insets(top: 32.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 21.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 32.0, left: 0.0, bottom: 32.0, right: 0.0), screenDisplayPeriphery: Insets(top: 32.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 44.0, statusBarHeight: 44.0, exclusionArea: [102.33333333333333, 0.0, 209.33333333333334, 30.0]),
+        "iPhone Xs": DisplayInfo(safeAreaPortrait: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 44.0, left: 0.0, bottom: 34.0, right: 0.0), periphery: Insets(top: 32.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 21.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 32.0, left: 0.0, bottom: 32.0, right: 0.0), screenDisplayPeriphery: Insets(top: 32.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 44.0, statusBarHeight: 44.0, exclusionArea: [83.0, 0.0, 209.0, 30.0]),
+        "iPhone Xʀ": DisplayInfo(safeAreaPortrait: Insets(top: 48.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaPortraitUpsideDown: Insets(top: 48.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeLeft: Insets(top: 48.0, left: 0.0, bottom: 34.0, right: 0.0), safeAreaLandscapeRight: Insets(top: 48.0, left: 0.0, bottom: 34.0, right: 0.0), periphery: Insets(top: 32.0, left: 0.0, bottom: 0.0, right: 0.0), homeAffordanceOverlayAllowance: 21.0, systemMinimumMargin: 0.0, artworkSubtype: 0, screenPeriphery: Insets(top: 32.0, left: 0.0, bottom: 32.0, right: 0.0), screenDisplayPeriphery: Insets(top: 32.0, left: 0.0, bottom: 0.0, right: 0.0), statusBarFrameHeight: 48.0, statusBarHeight: 48.0, exclusionArea: [93.5, 0.0, 227.0, 32.0]),
     ]
     /// Default Dynamic Type size per model, where the system's default differs from L (watches).
     static let contentSizeCategory: [String: String] = [
+        "Apple Watch SE (40mm) (2nd generation)": "UICTContentSizeCategoryL",
+        "Apple Watch SE (44mm) (2nd generation)": "UICTContentSizeCategoryXL",
         "Apple Watch SE 3 (40mm)": "UICTContentSizeCategoryL",
         "Apple Watch SE 3 (44mm)": "UICTContentSizeCategoryXL",
         "Apple Watch Series 10 (42mm)": "UICTContentSizeCategoryL",
@@ -81,14 +87,23 @@ enum BuiltInDisplays {
         "Apple Watch Series 11 (46mm)": "UICTContentSizeCategoryXL",
         "Apple Watch Series 12 (42mm)": "UICTContentSizeCategoryL",
         "Apple Watch Series 12 (46mm)": "UICTContentSizeCategoryXL",
+        "Apple Watch Series 6 (40mm)": "UICTContentSizeCategoryL",
+        "Apple Watch Series 6 (44mm)": "UICTContentSizeCategoryXL",
+        "Apple Watch Series 7 (41mm)": "UICTContentSizeCategoryL",
+        "Apple Watch Series 7 (45mm)": "UICTContentSizeCategoryXL",
+        "Apple Watch Series 8 (41mm)": "UICTContentSizeCategoryL",
+        "Apple Watch Series 8 (45mm)": "UICTContentSizeCategoryXL",
         "Apple Watch Series 9 (41mm)": "UICTContentSizeCategoryL",
         "Apple Watch Series 9 (45mm)": "UICTContentSizeCategoryXL",
+        "Apple Watch Ultra (49mm)": "UICTContentSizeCategoryXL",
         "Apple Watch Ultra 2 (49mm)": "UICTContentSizeCategoryXL",
         "Apple Watch Ultra 3 (49mm)": "UICTContentSizeCategoryXL",
         "Apple Watch Ultra 4 (49mm)": "UICTContentSizeCategoryXL",
     ]
     /// Portrait safe area of watches (their status bar / clock row).
     static let watchSafeArea: [String: Insets] = [
+        "Apple Watch SE (40mm) (2nd generation)": Insets(top: 40.0, left: 2.0, bottom: 19.0, right: 2.0),
+        "Apple Watch SE (44mm) (2nd generation)": Insets(top: 46.5, left: 2.0, bottom: 22.0, right: 2.0),
         "Apple Watch SE 3 (40mm)": Insets(top: 40.0, left: 2.0, bottom: 19.0, right: 2.0),
         "Apple Watch SE 3 (44mm)": Insets(top: 46.5, left: 2.0, bottom: 22.0, right: 2.0),
         "Apple Watch Series 10 (42mm)": Insets(top: 48.0, left: 2.0, bottom: 31.0, right: 2.0),
@@ -97,8 +112,15 @@ enum BuiltInDisplays {
         "Apple Watch Series 11 (46mm)": Insets(top: 53.0, left: 2.0, bottom: 36.0, right: 2.0),
         "Apple Watch Series 12 (42mm)": Insets(top: 48.0, left: 2.0, bottom: 31.0, right: 2.0),
         "Apple Watch Series 12 (46mm)": Insets(top: 53.0, left: 2.0, bottom: 36.0, right: 2.0),
+        "Apple Watch Series 6 (40mm)": Insets(top: 40.0, left: 2.0, bottom: 19.0, right: 2.0),
+        "Apple Watch Series 6 (44mm)": Insets(top: 46.5, left: 2.0, bottom: 22.0, right: 2.0),
+        "Apple Watch Series 7 (41mm)": Insets(top: 46.0, left: 2.0, bottom: 26.0, right: 2.0),
+        "Apple Watch Series 7 (45mm)": Insets(top: 51.0, left: 2.0, bottom: 27.0, right: 2.0),
+        "Apple Watch Series 8 (41mm)": Insets(top: 46.0, left: 2.0, bottom: 26.0, right: 2.0),
+        "Apple Watch Series 8 (45mm)": Insets(top: 51.0, left: 2.0, bottom: 27.0, right: 2.0),
         "Apple Watch Series 9 (41mm)": Insets(top: 46.0, left: 2.0, bottom: 26.0, right: 2.0),
         "Apple Watch Series 9 (45mm)": Insets(top: 51.0, left: 2.0, bottom: 27.0, right: 2.0),
+        "Apple Watch Ultra (49mm)": Insets(top: 55.0, left: 2.0, bottom: 39.0, right: 2.0),
         "Apple Watch Ultra 2 (49mm)": Insets(top: 55.0, left: 2.0, bottom: 39.0, right: 2.0),
         "Apple Watch Ultra 3 (49mm)": Insets(top: 56.5, left: 2.0, bottom: 40.0, right: 2.0),
         "Apple Watch Ultra 4 (49mm)": Insets(top: 56.5, left: 2.0, bottom: 40.0, right: 2.0),
