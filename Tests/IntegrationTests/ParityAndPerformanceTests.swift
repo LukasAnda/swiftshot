@@ -102,6 +102,10 @@ final class ParityAndPerformanceTests: XCTestCase {
             XCTAssertEqual(d.max, 0, "\(file) differs from the booted simulator: max \(d.max)/255 on \(d.pixels) px")
         }
         print(report.joined(separator: "\n"))
+        // The device runs' warnings (a grabber that never hid, a retried launch) explain a mismatch.
+        if report.contains(where: { !$0.contains("max 0/255") }) {
+            for (i, log) in logs.enumerated() { print("device run \(i + 1) warnings:\n" + log.split(separator: "\n").filter { $0.contains("!") || $0.contains("✘") }.joined(separator: "\n")) }
+        }
     }
 
     func testNoBootMatchesBootedFramebuffer() throws {

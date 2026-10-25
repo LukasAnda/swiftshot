@@ -493,6 +493,9 @@ final class Runner {
         let app = target.app
         let device = try await prepare(type: type, runtime: runtime, suffix: "", app: app, statusBar: true)
         for language in options.languages {
+          // A second attempt after a reboot when SpringBoard never hid the home grabber: such
+          // captures show it (a long-running simulator was seen to stop reporting touch idleness).
+          for attempt in 0..<2 {
             let t = Date()
             let control = (workDir as NSString).appendingPathComponent("control/\(device.udid)-\(language)")
             try? FileManager.default.removeItem(atPath: control)
@@ -563,20 +566,45 @@ final class Runner {
             do { result = try await launch(job, tag: "device-\(runtime.version)-\(type.name)-\(language)", udid: device.udid, app: app) } catch {
                 pump.cancel()
                 lock.lock(); errors.append("\(runtime.name) · \(language) · \(type.name): \(error)"); lock.unlock()
-                continue
+                break
             }
             pump.cancel()
+            // Captures with the grabber in them are wrong: never left in the output.
+            let discardShots = { for shot in result.shots { try? FileManager.default.removeItem(atPath: (self.outputDir as NSString).appendingPathComponent(shot.file)) } }
+            if grabber?.gaveUp == true && attempt == 0 {
+                discardShots()
+                Log.warn("\(type.name): rebooting the simulator and capturing \(language) again")
+                try await reboot(device, app: app)
+                continue
+            }
             // The host writes the files; a shot whose grab failed is an error, not a screenshot.
             var checked = result
             checked.shots = result.shots.filter { FileManager.default.fileExists(atPath: (outputDir as NSString).appendingPathComponent($0.file)) }
             for missing in result.shots where !checked.shots.contains(where: { $0.file == missing.file }) {
                 checked.errors.append("\(runtime.name) · \(language) · \(type.name): no framebuffer grab for \(missing.file)")
             }
+            if grabber?.gaveUp == true {
+                checked.errors.append("\(runtime.name) · \(language) · \(type.name): SpringBoard never hid the home grabber, even after a reboot")
+                checked.shots = []
+                discardShots()
+            }
             collect(checked)
             record("render \(type.name) \(runtime.name) \(language)", t)
             Log.success("\(runtime.name) · \(language) · \(type.name): \(checked.shots.count) shots in \(ms(since: t))")
+            break
+          }
         }
         if options.shutdownAfter { try? await Simctl.shutdown(device.udid) }
+    }
+
+    /// Restarts a device-mode simulator the way `prepare` leaves it: status bar overridden and the
+    /// app launched once.
+    func reboot(_ device: SimDevice, app: BuiltApp) async throws {
+        try await Simctl.shutdown(device.udid)
+        try await Simctl.boot(device.udid)
+        try await Simctl.overrideStatusBar(device.udid)
+        try await sh(Simctl.cmd(["launch", "--terminate-running-process", device.udid, app.bundleID]), allowFailure: true)
+        try await sh(Simctl.cmd(["terminate", device.udid, app.bundleID]), allowFailure: true)
     }
 
     // MARK: list / devices / calibrate
