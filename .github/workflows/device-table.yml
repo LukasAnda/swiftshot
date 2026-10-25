@@ -1,8 +1,8 @@
 # Keeps the built-in device display table (Sources/swiftshot/BuiltInDisplays.swift) in sync with
-# new Xcode / simulator runtime releases. Weekly, every hosted image (each carries different
-# runtimes: macos-15 iOS 18.x/26.0-26.2, macos-26 iOS 26.2-26.5, xcode-27 iOS 27.x) re-measures
-# every device type it can boot (bench/update-device-table.sh); a final job merges the results
-# into the table and opens a pull request when values changed.
+# new Xcode / simulator releases. Weekly, every hosted image (each has different Xcodes and device
+# types) measures the device types the table lacks on its newest runtime
+# (bench/update-device-table.sh; `force` re-measures all); a final job merges the results into the
+# table and opens a pull request when it changed.
 name: device-table
 on:
   schedule:
@@ -25,7 +25,7 @@ jobs:
       matrix:
         runner: [macos-15, macos-26, xcode-27]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 360
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       # macos-15 defaults to Xcode 16, which can't build swiftshot; its newest Xcode 26 still
@@ -45,7 +45,7 @@ jobs:
         run: |
           # Free space as annotations every 15 min: they survive a runner that runs out of disk.
           ( while sleep 900; do echo "::notice title=disk::$(df -h / | awk 'NR==2{print $4}') free; sim caches $(du -sh /Library/Developer/CoreSimulator/Caches 2>/dev/null | cut -f1); devices $(du -sh "$RUNNER_TEMP/table.noindex/devices.noindex" 2>/dev/null | cut -f1)"; done ) &
-          WORK="$RUNNER_TEMP/table.noindex" EMIT=0 bench/update-device-table.sh
+          WORK="$RUNNER_TEMP/table.noindex" EMIT=0 FORCE=${{ inputs.force && 1 || 0 }} bench/update-device-table.sh
       - uses: actions/upload-artifact@v4
         with:
           name: calibration-${{ matrix.runner }}
@@ -62,8 +62,10 @@ jobs:
           path: ${{ runner.temp }}/calibrations
       - name: Merge into the table
         run: |
+          files=$(for f in "$RUNNER_TEMP"/calibrations/*/calibration.json; do [ -s "$f" ] && [ "$(tr -d ' \n' < "$f")" != "{}" ] && echo "$f"; done || true)
+          [ -n "$files" ] || { echo "Nothing new measured."; exit 0; }
           make -s bin/swiftshot
-          bin/swiftshot emit-table --emit-table Sources/swiftshot/BuiltInDisplays.swift "$RUNNER_TEMP"/calibrations/*/calibration.json
+          bin/swiftshot emit-table --emit-table Sources/swiftshot/BuiltInDisplays.swift $files
           git --no-pager diff --stat
       - name: Open pull request
         env:
