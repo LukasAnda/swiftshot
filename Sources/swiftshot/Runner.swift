@@ -41,7 +41,7 @@ final class Runner {
 
     init(options: Options) throws {
         self.options = options
-        _ = try Runner.locateAgent(.ios)
+        if options.command != "emit-table" { _ = try Runner.locateAgent(.ios) }   // emit-table only merges files
         if let set = options.deviceSet {
             let path = URL(fileURLWithPath: set).standardizedFileURL.path
             try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
@@ -409,6 +409,8 @@ final class Runner {
             let device = existing[runtime.identifier]?.first { $0.name == name && $0.isAvailable }
             if device == nil || device!.isPristine { await TemplateStore.shared.expect(runtime, pristine: 1) }
         }
+        // More than fit in memory: each boots when its turn comes (runDevice).
+        guard planned.count <= Simctl.simulatorSlots else { return }
         for (type, runtime, suffix) in planned { startBoot(type: type, runtime: runtime, suffix: suffix) }
     }
 
@@ -470,18 +472,28 @@ final class Runner {
     func runDevice(_ target: Target) async throws {
         let runtimes = target.runtimes, types = target.types
         let cache = DeviceCatalog.loadCache()
+        var jobs: [(SimDeviceType, DeviceProfile, SimRuntime)] = []
+        for runtime in runtimes {
+            let info = try await runtimeInfo(runtime)
+            for type in types {
+                guard supports(info, type) else {
+                    skipped.append("iOS \(runtime.version) cannot boot \(type.name) (device mode); virtual mode can still render it"); continue
+                }
+                guard let (profile, _) = DeviceCatalog.profile(for: type, runtime: runtime.version, cache: cache) else { continue }
+                jobs.append((type, profile, runtime))
+            }
+        }
+        // Taking turns when they don't all fit in memory: each shuts down for the next.
+        let takeTurns = jobs.count > Simctl.simulatorSlots
         try await withThrowingTaskGroup(of: Void.self) { group in
-            for runtime in runtimes {
-                let info = try await runtimeInfo(runtime)
-                for type in types {
-                    guard supports(info, type) else {
-                        skipped.append("iOS \(runtime.version) cannot boot \(type.name) (device mode); virtual mode can still render it"); continue
-                    }
-                    guard let (profile, _) = DeviceCatalog.profile(for: type, runtime: runtime.version, cache: cache) else { continue }
-                    group.addTask {
-                        do { try await self.runOnDevice(type: type, profile: profile, runtime: runtime, target: target) } catch {
-                            self.lock.lock(); self.errors.append("\(runtime.name) · \(type.name): \(error)"); self.lock.unlock()
+            for (type, profile, runtime) in jobs {
+                group.addTask {
+                    do {
+                        try await Simctl.simulatorLimiter.run {
+                            try await self.runOnDevice(type: type, profile: profile, runtime: runtime, target: target, shutdownAfter: takeTurns)
                         }
+                    } catch {
+                        self.lock.lock(); self.errors.append("\(runtime.name) · \(type.name): \(error)"); self.lock.unlock()
                     }
                 }
             }
@@ -489,10 +501,16 @@ final class Runner {
         }
     }
 
-    func runOnDevice(type: SimDeviceType, profile: DeviceProfile, runtime: SimRuntime, target: Target) async throws {
+    func runOnDevice(type: SimDeviceType, profile: DeviceProfile, runtime: SimRuntime, target: Target, shutdownAfter: Bool = false) async throws {
         let app = target.app
         let device = try await prepare(type: type, runtime: runtime, suffix: "", app: app, statusBar: true)
         for language in options.languages {
+          // A second attempt after a reboot when SpringBoard never hid the home grabber (such
+          // captures show it: a long-running simulator was seen to stop reporting touch idleness)
+          // or a framebuffer grab failed (`simctl io` was seen to hang on a hosted runner, again
+          // minutes after a reboot).
+          let attempts = 3
+          for attempt in 0..<attempts {
             let t = Date()
             let control = (workDir as NSString).appendingPathComponent("control/\(device.udid)-\(language)")
             try? FileManager.default.removeItem(atPath: control)
@@ -508,6 +526,7 @@ final class Runner {
             let rail = (profile.display?.verticalBarAllowed ?? 0) != 0
             let grabber = profile.idiom != "watch" && profile.safeArea.bottom > 0 && major >= 26 && !rail ? await HomeGrabberWatch(udid: device.udid) : nil
             defer { grabber?.stop() }
+            let grabFailed = Latch()
             @Sendable func waitForGrabber() async {
                 guard let grabber, !grabber.settled, !grabber.gaveUp else { return }
                 let deadline = Date().addingTimeInterval(30)
@@ -540,11 +559,19 @@ final class Runner {
                         try? await Task.sleep(nanoseconds: 5_000_000); continue
                     }
                     await waitForGrabber()
+                    // After a failed grab the simulator is rebooted anyway: let the app finish fast.
+                    if grabFailed.isSet {
+                        FileManager.default.createFile(atPath: (control as NSString).appendingPathComponent("\(next).done"), contents: nil)
+                        continue
+                    }
                     // Until two grabs agree: SpringBoard is still animating its own chrome right
                     // after a launch (a cold boot's Wi-Fi).
                     var previous: Data?
                     for _ in 0..<8 {
-                        do { try await Simctl.screenshot(device.udid, to: path) } catch { Log.warn("\(type.name): screenshot \(next) failed: \(error)") }
+                        do { try await Simctl.screenshot(device.udid, to: path) } catch {
+                            Log.warn("\(type.name): screenshot \(next) failed: \(error)")
+                            grabFailed.set(); try? FileManager.default.removeItem(atPath: path); break
+                        }
                         let grab = FileManager.default.contents(atPath: path)
                         if grab != nil && grab == previous { break }
                         previous = grab
@@ -562,21 +589,51 @@ final class Runner {
             let result: JobResult
             do { result = try await launch(job, tag: "device-\(runtime.version)-\(type.name)-\(language)", udid: device.udid, app: app) } catch {
                 pump.cancel()
+                if grabFailed.isSet && attempt < attempts - 1 {
+                    Log.warn("\(type.name): rebooting the simulator and capturing \(language) again")
+                    try await reboot(device, app: app)
+                    continue
+                }
                 lock.lock(); errors.append("\(runtime.name) · \(language) · \(type.name): \(error)"); lock.unlock()
-                continue
+                break
             }
             pump.cancel()
+            // Captures with the grabber in them are wrong: never left in the output.
+            let discardShots = { for shot in result.shots { try? FileManager.default.removeItem(atPath: (self.outputDir as NSString).appendingPathComponent(shot.file)) } }
+            if (grabber?.gaveUp == true || grabFailed.isSet) && attempt < attempts - 1 {
+                discardShots()
+                Log.warn("\(type.name): rebooting the simulator and capturing \(language) again")
+                try await reboot(device, app: app)
+                continue
+            }
             // The host writes the files; a shot whose grab failed is an error, not a screenshot.
             var checked = result
             checked.shots = result.shots.filter { FileManager.default.fileExists(atPath: (outputDir as NSString).appendingPathComponent($0.file)) }
             for missing in result.shots where !checked.shots.contains(where: { $0.file == missing.file }) {
                 checked.errors.append("\(runtime.name) · \(language) · \(type.name): no framebuffer grab for \(missing.file)")
             }
+            if grabber?.gaveUp == true {
+                checked.errors.append("\(runtime.name) · \(language) · \(type.name): SpringBoard never hid the home grabber, even after a reboot")
+                checked.shots = []
+                discardShots()
+            }
             collect(checked)
             record("render \(type.name) \(runtime.name) \(language)", t)
             Log.success("\(runtime.name) · \(language) · \(type.name): \(checked.shots.count) shots in \(ms(since: t))")
+            break
+          }
         }
-        if options.shutdownAfter { try? await Simctl.shutdown(device.udid) }
+        if options.shutdownAfter || shutdownAfter { try? await Simctl.shutdown(device.udid) }
+    }
+
+    /// Restarts a device-mode simulator the way `prepare` leaves it: status bar overridden and the
+    /// app launched once.
+    func reboot(_ device: SimDevice, app: BuiltApp) async throws {
+        try await Simctl.shutdown(device.udid)
+        try await Simctl.boot(device.udid)
+        try await Simctl.overrideStatusBar(device.udid)
+        try await sh(Simctl.cmd(["launch", "--terminate-running-process", device.udid, app.bundleID]), allowFailure: true)
+        try await sh(Simctl.cmd(["terminate", device.udid, app.bundleID]), allowFailure: true)
     }
 
     // MARK: list / devices / calibrate
@@ -626,11 +683,17 @@ final class Runner {
                     group.addTask {
                       do { try await slots.run {
                         let device = try await self.prepare(type: type, runtime: runtime, suffix: "", app: app)
-                        defer { Task { try? await Simctl.shutdown(device.udid) } }   // also when the launch fails
-                        let base = DeviceCatalog.profile(for: type, runtime: runtime.version, cache: [:])?.0
-                        let result = try await self.launch(self.makeJob(mode: .calibrate, language: "en-US", runtime: runtime,
-                                                                       devices: base.map { [$0] } ?? [], target: target),
-                                                          tag: "calibrate-\(runtime.version)-\(type.name)", udid: device.udid, app: app)
+                        // Shut down (and, in a throwaway device set like CI's full sweep, deleted:
+                        // every booted device keeps gigabytes, and all types × runtimes fill a hosted
+                        // runner's disk) before the slot goes to the next device, also when the launch fails.
+                        let result: JobResult
+                        do {
+                            let base = DeviceCatalog.profile(for: type, runtime: runtime.version, cache: [:])?.0
+                            result = try await self.launch(self.makeJob(mode: .calibrate, language: "en-US", runtime: runtime,
+                                                                        devices: base.map { [$0] } ?? [], target: target),
+                                                           tag: "calibrate-\(runtime.version)-\(type.name)", udid: device.udid, app: app)
+                        } catch { await self.discard(device.udid); throw error }
+                        await self.discard(device.udid)
                         if var profile = result.calibration {
                             profile.name = type.name
                             cacheLock.lock()
@@ -653,6 +716,11 @@ final class Runner {
         if let table = options.emitTable { try writeDisplayTable(cache, to: table) }
     }
 
+    private func discard(_ udid: String) async {
+        try? await Simctl.shutdown(udid)
+        if Simctl.deviceSet != nil { try? await Simctl.delete(udid) }
+    }
+
     /// `swiftshot emit-table --emit-table <file> a.json b.json …`: merges calibration files (e.g.
     /// from several CI images with different runtimes) into the built-in display table.
     func emitTable() async throws {
@@ -666,10 +734,8 @@ final class Runner {
     }
 
     func writeDisplayTable(_ cache: [String: DeviceProfile], to table: String) throws {
-        let runtimes = Set(cache.keys.compactMap { $0.split(separator: "@").last.map(String.init) })
-            .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
         let header = "// Generated by `swiftshot calibrate --emit-table` / `swiftshot emit-table` (see bench/update-device-table.sh); do not edit.\n" +
-            "// Display data measured on booted simulators, runtimes \(runtimes.joined(separator: ", ")).\n"
+            "// Display data measured on booted simulators.\n"
         try DeviceCatalog.displayTableSource(cache, existing: BuiltInDisplays.table, existingSizes: BuiltInDisplays.contentSizeCategory,
                                               existingSafeAreas: BuiltInDisplays.watchSafeArea, header: header).write(toFile: table, atomically: true, encoding: .utf8)
         Log.success("Display table written to \(table) (\(cache.count) measurements)")

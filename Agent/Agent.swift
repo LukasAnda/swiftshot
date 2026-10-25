@@ -74,7 +74,17 @@ final class AgentRunner {
         case .list: finish()
         case .calibrate: calibrate(); finish()
         case .virtual: renderVirtual(previews); finish()
-        case .device: renderOnDevice(previews); finish()
+        case .device:
+            // The booted simulator's server draws with no-boot's renderer settings (NoBoot.swift).
+            // With its defaults a capture depended on how the server's frames fell in time: the
+            // SDF cache takes a glass shape from a cached SDF once it was drawn unchanged in four
+            // updates each > 0.334 s after its last change (SDFState::update_cache_eligible) —
+            // the Duo's "+" glass behind Delete alert's dimming on a CI VM, 1/255 on 86 px all over
+            // its lens, the same pixels no-boot gives with the cache on and frames that far apart
+            // (both reference runs on that simulator agreeing, no-boot and every other run equal
+            // to the inline drawing). Generic shaders and occlusion culling, see the watch agent.
+            pinServerRendering(["CA_DISABLE_SDF_CACHE", "CA_DISABLE_GENERIC_SHADERS", "CA_DISABLE_OCCLUSION_CULLING"])
+            renderOnDevice(previews); finish()
         }
     }
 

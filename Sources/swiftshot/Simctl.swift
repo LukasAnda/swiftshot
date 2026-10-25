@@ -105,6 +105,13 @@ enum Simctl {
     /// At most this many simulators boot at the same time. Booting is the one phase that
     /// saturates the machine (a first boot runs data migration and launches every system app);
     /// unbounded parallel boots make everything slower and can crash system apps.
+    /// Simulators alive at once when a run boots more than this: a booted iOS simulator takes about
+    /// 3 GB, and a 7 GB hosted runner with three of them swapped until `simctl` calls, boots and
+    /// builds stalled for minutes. `SWIFTSHOT_SIMULATORS` overrides it.
+    static let simulatorSlots = Int(ProcessInfo.processInfo.environment["SWIFTSHOT_SIMULATORS"] ?? "")
+        ?? max(1, (Int(ProcessInfo.processInfo.physicalMemory >> 30) - 4) / 3)
+    static let simulatorLimiter = AsyncLimiter(limit: simulatorSlots)
+
     static let bootLimiter = AsyncLimiter(limit: max(2, ProcessInfo.processInfo.activeProcessorCount / 4))
 
     /// First boots (full data migration) are the heavy ones: concurrent first boots slow each
@@ -143,6 +150,10 @@ enum Simctl {
 
     static func shutdown(_ udid: String) async throws {
         try await sh(Simctl.cmd(["shutdown", udid]), allowFailure: true)
+    }
+
+    static func delete(_ udid: String) async throws {
+        try await sh(Simctl.cmd(["delete", udid]), allowFailure: true)
     }
 
     static func install(_ udid: String, app: String) async throws {
@@ -216,13 +227,49 @@ enum Simctl {
                             env: env, timeout: timeout, onLine: { line in if line.hasPrefix("[swiftshot]") { Log.debug(line) } })
     }
 
+    /// Devices whose screenshots name the primary display.
+    nonisolated(unsafe) static var primaryDisplay: Set<String> = []
+    static let displayLock = NSLock()
+
+    /// A grab takes well under 2 s; one that hangs (seen on hosted runners) does until a reboot.
+    static let grabTimeout: TimeInterval = 20
+
+    /// What a hung grab was doing, next to the output (`.swiftshot/hang-*.txt`).
+    static func hangReport(pid: Int32, grab path: String) {
+        func run(_ args: [String]) -> String {
+            let p = Process(), pipe = Pipe()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/env"); p.arguments = args
+            p.standardOutput = pipe; p.standardError = pipe
+            guard (try? p.run()) != nil else { return "" }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
+            return String(decoding: data, as: UTF8.self)
+        }
+        let report = ["$ ps", run(["ps", "-axo", "pid,ppid,etime,command"]).split(separator: "\n").filter { $0.contains("simctl") || $0.contains("Simulator") }.joined(separator: "\n"),
+                      "$ sample \(pid)", run(["sample", "\(pid)", "2"]),
+                      "$ log show", run(["log", "show", "--last", "1m", "--style", "compact", "--predicate", "process == \"simctl\" OR process == \"CoreSimulatorService\" OR process == \"backboardd\""]).suffix(60_000).description]
+        let dir = (((path as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent as NSString).appendingPathComponent(".swiftshot")
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let file = (dir as NSString).appendingPathComponent("hang-\(pid).txt")
+        FileManager.default.createFile(atPath: file, contents: Data(report.joined(separator: "\n\n").utf8))
+        Log.warn("grab hung; report in \(file)")
+    }
+
     static func screenshot(_ udid: String, to path: String) async throws {
+        // A device with a second display (iPhone Duo's inner screen): some simctl builds refuse to
+        // choose, others (CoreSimulator 1174) pick the other one ("Defaulting to display …
+        // LCD-1": a black 2007×2853 grab). iOS 26.5 rejects --display, so it's only passed then.
+        let primary = ["io", udid, "screenshot", "--type=png", "--display=primary", path]
+        displayLock.lock(); let known = primaryDisplay.contains(udid); displayLock.unlock()
+        if known { try await sh(Simctl.cmd(primary), timeout: grabTimeout, onTimeout: { hangReport(pid: $0, grab: path) }); return }
+        let out: String
         do {
-            try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", path]), timeout: 60)
+            out = try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", path]), timeout: grabTimeout, onTimeout: { hangReport(pid: $0, grab: path) })
         } catch where "\(error)".contains("Cannot choose between") {
-            // A device with a second display (iPhone Duo's inner screen) on some simctl builds;
-            // iOS 26.5 rejects --display, so it's only passed when simctl asks for it.
-            try await sh(Simctl.cmd(["io", udid, "screenshot", "--type=png", "--display=primary", path]), timeout: 60)
+            out = "Defaulting to display"
+        }
+        if out.contains("Defaulting to display") {
+            displayLock.lock(); primaryDisplay.insert(udid); displayLock.unlock()
+            try await sh(Simctl.cmd(primary), timeout: grabTimeout, onTimeout: { hangReport(pid: $0, grab: path) })
         }
     }
 }
@@ -240,6 +287,14 @@ actor AsyncLimiter {
         defer { if waiters.isEmpty { running -= 1 } else { waiters.removeFirst().resume() } }
         return try await work()
     }
+}
+
+/// A flag set once from any task.
+final class Latch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var isSet: Bool { lock.withLock { value } }
+    func set() { lock.withLock { value = true } }
 }
 
 /// Follows SpringBoard's home grabber on a booted simulator through its HomeAffordance log. With

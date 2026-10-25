@@ -61,9 +61,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - uses: LukasAnda/swiftshot@v0.1.1
+      - uses: LukasAnda/swiftshot@v0.1.2
         with:
-          version: 0.1.1      # or "latest"
+          version: 0.1.2      # or "latest"
           # args: --devices "iPhone 17 Pro Max" --languages en-US,de-DE
       - uses: actions/upload-artifact@v4
         with:
@@ -77,13 +77,22 @@ Use `working-directory` if the project is not at the repo root.
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.1.1 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.1.2 sh
 ~/.swiftshot/bin/swiftshot run --download-missing-runtimes
 ```
 
 The release archive is `swiftshot-macos-arm64.tar.gz` on the
 [releases page](https://github.com/LukasAnda/swiftshot/releases); the installer checks its SHA-256.
 The exit code is non-zero if any screenshot failed.
+
+### Visual review tools
+
+The output is plain PNGs with stable names, so screenshot review services can take it as is:
+
+```
+npx @argos-ci/cli upload fastlane/screenshots   # Argos, needs ARGOS_TOKEN
+npx @percy/cli upload fastlane/screenshots      # Percy, needs PERCY_TOKEN
+```
 
 ## Configuration
 

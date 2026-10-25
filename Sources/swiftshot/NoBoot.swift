@@ -175,6 +175,8 @@ extension Runner {
         // pixel 1/255 off whether the preview came first or after others, and two with the
         // generic shaders); there the booted watch's server is given the same two settings
         // (WatchAgent.pinServerRendering), since its own defaults varied the same pixels by run.
+        // iOS device mode gives a booted simulator's server all three (AgentRunner.run): with the
+        // SDF cache on, its glass depended on how far apart its frames fell (a CI VM's Duo "+").
         env["CA_DISABLE_GENERIC_SHADERS"] = "1"; env["CA_DISABLE_OCCLUSION_CULLING"] = "1"
         if job.platform == "ios" { env["CA_DISABLE_SDF_CACHE"] = "1" }
         for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }

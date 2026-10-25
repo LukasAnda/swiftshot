@@ -28,7 +28,7 @@ enum Log {
 /// Runs a process to completion off the cooperative pool and returns its combined output.
 @discardableResult
 func sh(_ args: [String], env: [String: String] = [:], cwd: String? = nil, allowFailure: Bool = false, stdoutOnly: Bool = false,
-        timeout: TimeInterval? = nil,
+        timeout: TimeInterval? = nil, onTimeout: (@Sendable (Int32) -> Void)? = nil,
         onLine: (@Sendable (String) -> Void)? = nil) async throws -> String {
     let display = args.joined(separator: " ")
     Log.debug("$ \(display)")
@@ -46,25 +46,35 @@ func sh(_ args: [String], env: [String: String] = [:], cwd: String? = nil, allow
         process.standardInput = FileHandle.nullDevice
 
         let buffer = OutputBuffer(onLine: onLine)
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty { buffer.append(data) }
+        // Done once the output reached EOF and the process exited, in either order. (A
+        // readabilityHandler could still be appending its last chunk when the termination handler
+        // took the output: a large `simctl list -j` came back cut short.)
+        let done = DispatchGroup()
+        done.enter(); done.enter()
+        process.terminationHandler = { _ in done.leave() }
+        do { try process.run() } catch { continuation.resume(throwing: error); return }
+        Thread.detachNewThread {
+            let handle = pipe.fileHandleForReading
+            while case let data = handle.availableData, !data.isEmpty { buffer.append(data) }
+            done.leave()
         }
-        process.terminationHandler = { p in
-            pipe.fileHandleForReading.readabilityHandler = nil
-            buffer.append(pipe.fileHandleForReading.readDataToEndOfFile())
+        done.notify(queue: .global()) {
             let output = buffer.string
-            if p.terminationStatus != 0 && !allowFailure {
-                continuation.resume(throwing: ShellError(command: display, status: p.terminationStatus, output: output))
+            if process.terminationStatus != 0 && !allowFailure {
+                continuation.resume(throwing: ShellError(command: display, status: process.terminationStatus, output: output))
             } else {
                 continuation.resume(returning: output)
             }
         }
-        do { try process.run() } catch { continuation.resume(throwing: error); return }
+        // A command that should be quick but isn't shows up in the log (a stall is otherwise silent).
+        DispatchQueue.global().asyncAfter(deadline: .now() + 300) {
+            if process.isRunning && timeout == nil { Log.warn("still running after 300s: \(display)") }
+        }
         if let timeout {
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
                 if process.isRunning {
                     buffer.append(Data("\n[swiftshot] timed out after \(Int(timeout))s\n".utf8))
+                    onTimeout?(process.processIdentifier)
                     process.terminate()
                 }
             }

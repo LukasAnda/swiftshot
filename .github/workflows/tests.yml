@@ -11,18 +11,20 @@ on:
       runner:
         description: macOS runner image
         default: xcode-27
+      tests:
+        description: Integration tests to run, as a matrix (JSON {"include":[{key,test,devices}]}); empty runs all
+        default: ""
 
 jobs:
-  # One runner per integration test: the device-mode parity tests boot simulators and take most of
-  # an hour, so in parallel the suite takes as long as its slowest test.
+  # One runner per integration test, and per device for the iPhone/iPad parity test: device-mode
+  # references boot simulators, so in parallel the suite takes as long as its slowest job.
   test:
     strategy:
       fail-fast: false
-      matrix:
-        test: [testNoBootMatchesBootedFramebuffer, testDuoMatchesBootedFramebuffer, testWatchMatchesBootedFramebuffer, testDeterministic, testNoBootPerformanceBudget, testNoSimulatorIsBooted]
-    name: ${{ matrix.test }}
+      matrix: ${{ fromJSON(inputs.tests || '{"include":[{"key":"iPhone 18 Pro","test":"testNoBootMatchesBootedFramebuffer","devices":"iPhone 18 Pro"},{"key":"iPhone 17","test":"testNoBootMatchesBootedFramebuffer","devices":"iPhone 17"},{"key":"iPad Pro 13-inch","test":"testNoBootMatchesBootedFramebuffer","devices":"iPad Pro 13-inch (M5)"},{"key":"iPhone Duo","test":"testDuoMatchesBootedFramebuffer","devices":""},{"key":"Apple Watch","test":"testWatchMatchesBootedFramebuffer","devices":""},{"key":"Deterministic","test":"testDeterministic","devices":""},{"key":"Performance budget","test":"testNoBootPerformanceBudget","devices":""},{"key":"No simulator booted","test":"testNoSimulatorIsBooted","devices":""}]}') }}
+    name: ${{ matrix.key }}
     runs-on: ${{ inputs.runner || 'xcode-27' }}
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Machine
@@ -35,16 +37,23 @@ jobs:
         env:
           SWIFTSHOT_INTEGRATION: "1"
           SWIFTSHOT_IT_OUT: ${{ runner.temp }}
+          SWIFTSHOT_IT_DEVICES: ${{ matrix.devices }}
         run: |
           set -o pipefail
+          # swift test prints the test's output only at the end: follow swiftshot's own logs.
+          ( while sleep 20; do for f in "$RUNNER_TEMP"/swiftshot-it-*/*.log; do [ -f "$f" ] || continue
+              n=$(wc -l < "$f"); s=$(cat "$f.seen" 2>/dev/null || echo 0)
+              [ "$n" -gt "$s" ] && { sed -n "$((s+1)),${n}p" "$f" | sed "s|^|[$(basename "$f" .log)] |"; echo "$n" > "$f.seen"; }
+            done; done ) &
           swift test --skip-build --filter "IntegrationTests.ParityAndPerformanceTests/${{ matrix.test }}" 2>&1 | tee "$RUNNER_TEMP/integration.log"
       - name: Summary
         if: always()
         run: |
           { echo '### Integration'; echo '```'; grep -E "max [0-9]+/255|perf:|passed \(|failed \(" "$RUNNER_TEMP/integration.log" || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: failure() || cancelled()
         with:
-          name: integration-screenshots-${{ matrix.test }}
+          name: integration-screenshots-${{ matrix.key }}
           path: ${{ runner.temp }}/swiftshot-it-*
           if-no-files-found: ignore
+          include-hidden-files: true

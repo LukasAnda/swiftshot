@@ -50,21 +50,7 @@ final class WatchAgent {
     /// to the pixels changes (a warm device draws with the specialized shaders). The options stay
     /// set in the booted simulator's server until it restarts.
     nonisolated static func pinServerRendering() {
-        typealias OptionName = @convention(c) (Int32) -> UnsafePointer<CChar>?
-        typealias SetOption = @convention(c) (UInt32, Int32, Bool) -> Void
-        let handle = UnsafeMutableRawPointer(bitPattern: -2)
-        guard let nameSym = dlsym(handle, "CAGetDebugOptionEnvVariableName"), let setSym = dlsym(handle, "CARenderServerSetDebugOption") else {
-            log("render server debug options not found"); return
-        }
-        let name = unsafeBitCast(nameSym, to: OptionName.self), set = unsafeBitCast(setSym, to: SetOption.self)
-        // Numbered by an enum that changes between releases (names end with a nil): look them up.
-        var wanted: Swift.Set<String> = ["CA_DISABLE_GENERIC_SHADERS", "CA_DISABLE_OCCLUSION_CULLING"]
-        var option: Int32 = 0
-        while !wanted.isEmpty, let n = name(option).map({ String(cString: $0) }) {
-            if wanted.remove(n) != nil { set(0, option, true) }   // port 0: the default render server
-            option += 1
-        }
-        if !wanted.isEmpty { log("render server options not found: \(wanted.sorted())") }
+        SwiftshotAgent.pinServerRendering(["CA_DISABLE_GENERIC_SHADERS", "CA_DISABLE_OCCLUSION_CULLING"])
     }
 
     let started = now()

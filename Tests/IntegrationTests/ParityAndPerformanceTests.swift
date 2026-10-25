@@ -11,7 +11,7 @@ final class ParityAndPerformanceTests: XCTestCase {
     static let tool = root.appendingPathComponent("bin/swiftshot").path
     static let app = root.appendingPathComponent("Example/DemoApp")
     static let env = ProcessInfo.processInfo.environment
-    static let devices = env["SWIFTSHOT_IT_DEVICES"] ?? "iPhone 18 Pro,iPhone 17,iPad Pro 13-inch (M5)"
+    static let devices = env["SWIFTSHOT_IT_DEVICES"].flatMap { $0.isEmpty ? nil : $0 } ?? "iPhone 18 Pro,iPhone 17,iPad Pro 13-inch (M5)"
     static let ios = env["SWIFTSHOT_IT_IOS"] ?? "27.0"
     static var work = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SWIFTSHOT_IT_OUT"] ?? FileManager.default.temporaryDirectory.path)
         .appendingPathComponent("swiftshot-it-\(ProcessInfo.processInfo.processIdentifier)")
@@ -43,10 +43,19 @@ final class ParityAndPerformanceTests: XCTestCase {
         try "{}".write(to: config, atomically: true, encoding: .utf8)
         p.arguments = ["run", "--config", config.path, "--project", "DemoApp.xcodeproj", "--scheme", "DemoApp", "--no-html", "--clear"] + args
         p.environment = Self.env.merging(extraEnv) { $1 }
+        // Also to a log next to the output (uploaded with it), in case the job runs out of time.
+        let output = args.firstIndex(of: "--output").map { args[$0 + 1] } ?? Self.work.path
+        let logPath = output + ".log"
+        FileManager.default.createFile(atPath: logPath, contents: nil)
+        let log = FileHandle(forWritingAtPath: logPath)
+        defer { try? log?.close() }
         let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
         let t = Date()
         try p.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        var data = Data()
+        while case let chunk = pipe.fileHandleForReading.availableData, !chunk.isEmpty {
+            data.append(chunk); log?.write(chunk)
+        }
         p.waitUntilExit()
         let out = String(decoding: data, as: UTF8.self)
         XCTAssertEqual(p.terminationStatus, 0, "swiftshot \(args.joined(separator: " ")) failed:\n\(out.suffix(4000))")
@@ -102,6 +111,10 @@ final class ParityAndPerformanceTests: XCTestCase {
             XCTAssertEqual(d.max, 0, "\(file) differs from the booted simulator: max \(d.max)/255 on \(d.pixels) px")
         }
         print(report.joined(separator: "\n"))
+        // The device runs' warnings (a grabber that never hid, a retried launch) explain a mismatch.
+        if report.contains(where: { !$0.contains("max 0/255") }) {
+            for (i, log) in logs.enumerated() { print("device run \(i + 1) warnings:\n" + log.split(separator: "\n").filter { $0.contains("!") || $0.contains("✘") }.joined(separator: "\n")) }
+        }
     }
 
     func testNoBootMatchesBootedFramebuffer() throws {

@@ -1,8 +1,8 @@
 # Keeps the built-in device display table (Sources/swiftshot/BuiltInDisplays.swift) in sync with
-# new Xcode / simulator runtime releases. Weekly, every hosted image (each carries different
-# runtimes: macos-15 iOS 18.x/26.0-26.2, macos-26 iOS 26.2-26.5, xcode-27 iOS 27.x) re-measures
-# every device type it can boot (bench/update-device-table.sh); a final job merges the results
-# into the table and opens a pull request when values changed.
+# new Xcode / simulator releases. Weekly, every hosted image (each has different Xcodes and device
+# types) measures the device types the table lacks on its newest runtime
+# (bench/update-device-table.sh; `force` re-measures all); a final job merges the results into the
+# table and opens a pull request when it changed.
 name: device-table
 on:
   schedule:
@@ -25,11 +25,27 @@ jobs:
       matrix:
         runner: [macos-15, macos-26, xcode-27]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 360
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
+      # macos-15 defaults to Xcode 16, which can't build swiftshot; its newest Xcode 26 still
+      # sees that image's older runtimes.
+      - name: Xcode 26 or later
+        if: matrix.runner == 'macos-15'
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_2[6-9]*.app | sort -V | tail -1)" && xcodebuild -version
+      # Each runtime's first boot writes a ~3 GB dyld cache and every device a few GB until it is
+      # deleted; the images ship several Xcodes we don't use.
+      - name: Free disk
+        run: |
+          df -h /
+          keep=$(cd "$(xcode-select -p)/../.." && pwd -P)
+          for x in /Applications/Xcode*.app; do [ "$(cd "$x" && pwd -P)" = "$keep" ] || sudo rm -rf "$x"; done
+          df -h /
       - name: Re-measure all iOS device types on this image's runtimes
-        run: WORK="$RUNNER_TEMP/table.noindex" EMIT=0 bench/update-device-table.sh
+        run: |
+          # Free space as annotations every 15 min: they survive a runner that runs out of disk.
+          ( while sleep 900; do echo "::notice title=disk::$(df -h / | awk 'NR==2{print $4}') free; sim caches $(du -sh /Library/Developer/CoreSimulator/Caches 2>/dev/null | cut -f1); devices $(du -sh "$RUNNER_TEMP/table.noindex/devices.noindex" 2>/dev/null | cut -f1)"; done ) &
+          WORK="$RUNNER_TEMP/table.noindex" EMIT=0 FORCE=${{ inputs.force && 1 || 0 }} bench/update-device-table.sh
       - uses: actions/upload-artifact@v4
         with:
           name: calibration-${{ matrix.runner }}
@@ -46,9 +62,14 @@ jobs:
           path: ${{ runner.temp }}/calibrations
       - name: Merge into the table
         run: |
+          files=$(for f in "$RUNNER_TEMP"/calibrations/*/calibration.json; do [ -s "$f" ] && [ "$(tr -d ' \n' < "$f")" != "{}" ] && echo "$f"; done || true)
+          [ -n "$files" ] || { echo "Nothing new measured."; exit 0; }
           make -s bin/swiftshot
-          bin/swiftshot emit-table --emit-table Sources/swiftshot/BuiltInDisplays.swift "$RUNNER_TEMP"/calibrations/*/calibration.json
+          bin/swiftshot emit-table --emit-table Sources/swiftshot/BuiltInDisplays.swift $files
           git --no-pager diff --stat
+      # Pull requests opened with the workflow token don't run the tests workflow: check here.
+      - name: Unit tests on the new table
+        run: git diff --quiet Sources/swiftshot/BuiltInDisplays.swift || swift test --filter swiftshotTests
       - name: Open pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -62,4 +83,4 @@ jobs:
           git commit -m "Device display table: re-measured on hosted runners"
           git push -u origin "$branch"
           gh pr create --title "Device display table update" \
-            --body "Re-measured with \`bench/update-device-table.sh\` on macos-15, macos-26 and xcode-27. Changed values mean Apple changed device display data; review before merging."
+            --body "Re-measured with \`bench/update-device-table.sh\` on macos-15, macos-26 and xcode-27. Changed values mean Apple changed device display data; review before merging. Built and unit-tested by the workflow (pull requests opened with its token don't run the tests workflow)."
