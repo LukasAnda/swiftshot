@@ -1514,34 +1514,6 @@
         }
       }
     },
-    "Habits": {
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "العادات"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gewohnheiten"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "習慣"
-          }
-        },
-        "sk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Návyky"
-          }
-        }
-      }
-    },
     "Habits Plus · since 2024": {
       "localizations": {
         "ar": {
