@@ -53,4 +53,9 @@ enum History {
         (2, 20, 30, "12 pages to go"),
         (4, 21, 30, "Three lines are enough"),
     ]
+
+    /// A time of day on `Theme.today`, in UTC (format it with `.utc`).
+    static func time(hour: Int, minute: Int) -> Date {
+        Date(timeIntervalSince1970: 1_789_948_800 + Double(hour * 3600 + minute * 60))
+    }
 }

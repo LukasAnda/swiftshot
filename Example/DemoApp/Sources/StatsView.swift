@@ -31,8 +31,9 @@ struct StatsView: View {
                         } else {
                             CompletionHero()
                             WeekChart()
-                            MetricGrid()
+                            // Graphics, not headings, under the tab bar and its accessory.
                             ConsistencyGrid()
+                            MetricGrid()
                             HabitBreakdown()
                         }
                     }
@@ -243,5 +244,5 @@ struct Highlights: View {
     }
 }
 
-#Preview("Stats") { StatsView() }
+#Preview("Stats") { AppTabs(selection: .stats) }
 #Preview("Stats landscape", traits: .landscapeLeft) { StatsView() }

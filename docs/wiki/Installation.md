@@ -14,7 +14,7 @@ export PATH="$HOME/.swiftshot/bin:$PATH"
 
 | variable | default | |
 |---|---|---|
-| `SWIFTSHOT_VERSION` | latest | release to install, e.g. `0.2.0` |
+| `SWIFTSHOT_VERSION` | latest | release to install, e.g. `0.2.1` |
 | `SWIFTSHOT_PREFIX` | `~/.swiftshot` | install location |
 
 The script downloads `swiftshot-macos-arm64.tar.gz` from the

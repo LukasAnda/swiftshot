@@ -50,7 +50,9 @@ struct Ring: View {
 struct WatchHabitList: View {
     var body: some View {
         NavigationStack {
-            List(watchHabits) { habit in
+            // What's left today: two rows, so the glass buttons below float over empty background
+            // on every case size instead of over a row.
+            List(watchHabits.filter { $0.progress < 1 }) { habit in
                 HStack(spacing: 10) {
                     ZStack {
                         if habit.progress >= 1 { Circle().fill(accent) } else { Ring(progress: habit.progress, lineWidth: 3.5) }
@@ -68,6 +70,18 @@ struct WatchHabitList: View {
             }
             .navigationTitle("Today")
             .tint(accent)
+            .toolbar {
+                // watchOS 26 draws these as Liquid Glass buttons in the bottom corners: a clear one
+                // and the accent-tinted main action.
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button { } label: { Image(systemName: "chart.bar.xaxis").foregroundStyle(accent) }
+                        .accessibilityLabel("Statistics")
+                    Spacer()
+                    Button { } label: { Image(systemName: "plus").foregroundStyle(.white) }
+                        .tint(accent)
+                        .accessibilityLabel("New habit")
+                }
+            }
         }
     }
 }

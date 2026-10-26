@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/showcase.png" alt="Screenshots rendered by swiftshot in English, German and Arabic">
+  <img src="docs/assets/showcase.png" alt="Screenshots rendered by swiftshot on iPhone, iPad and Apple Watch, in English, German and Arabic">
 </p>
 
 - Renders `#Preview`s directly. No UI tests, no `SnapshotHelper.swift`, no simulator to boot.
@@ -86,9 +86,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - uses: LukasAnda/swiftshot@v0.2.0
+      - uses: LukasAnda/swiftshot@v0.2.1
         with:
-          version: 0.2.0      # or "latest"
+          version: 0.2.1      # or "latest"
           # args: --devices "iPhone 17 Pro Max" --languages en-US,de-DE
       - uses: actions/upload-artifact@v4
         with:
@@ -102,7 +102,7 @@ Use `working-directory` if the project is not at the repo root.
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.2.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.2.1 sh
 ~/.swiftshot/bin/swiftshot run --download-missing-runtimes
 ```
 

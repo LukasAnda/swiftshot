@@ -17,9 +17,14 @@ struct SettingsView: View {
                     data
                     about
                 }
+                .listSectionSpacing(.compact)
+                // The same row heights in every language (Arabic lines are taller), so the iPhone
+                // screenshot's tab bar accessory always floats over the gap before About.
+                .environment(\.defaultMinListRowHeight, 54)
                 .scrollContentBackground(.hidden)
                 .background(Theme.canvas)
-                .contentMargins(.horizontal, max(0, (geo.size.width - Theme.readableWidth) / 2), for: .scrollContent)
+                // Wide screens: a readable column. Narrow ones keep the system's inset rows.
+                .contentMargins(.horizontal, max(20, (geo.size.width - Theme.readableWidth) / 2), for: .scrollContent)
                 .navigationTitle("Settings")
                 .tint(Theme.accent)
             }
@@ -32,19 +37,19 @@ struct SettingsView: View {
                 Text(verbatim: "MK")
                     .font(.figure(.title3))
                     .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 48, height: 48)
                     .background(Theme.accent.gradient, in: .circle)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: "Mara Keller").font(.headline)
                     Text("Habits Plus · since 2024").font(.subheadline).foregroundStyle(.secondary)
                 }
             }
-            .padding(.vertical, Theme.Space.xs)
+            .frame(height: 50)
         }
     }
 
     private var remindersSection: some View {
-        Section("Reminders") {
+        Section {
             Toggle(isOn: $reminders) { Label("Daily reminder", systemImage: "bell.badge") }
             LabeledContent {
                 Text(verbatim: Date(timeIntervalSince1970: 1_789_977_600).formatted(Date.FormatStyle.dateTime.hour().minute().utc))
@@ -52,11 +57,13 @@ struct SettingsView: View {
                 Label("Reminder time", systemImage: "clock")
             }
             Toggle(isOn: $sounds) { Label("Sounds", systemImage: "speaker.wave.2") }
+        } header: {
+            SectionHeader("Reminders")
         }
     }
 
     private var general: some View {
-        Section("General") {
+        Section {
             Picker(selection: $weekStart) {
                 Text("Monday").tag(1)
                 Text("Sunday").tag(0)
@@ -69,13 +76,17 @@ struct SettingsView: View {
             } label: {
                 Label("Appearance", systemImage: "circle.lefthalf.filled")
             }
+        } header: {
+            SectionHeader("General")
         }
     }
 
     private var data: some View {
-        Section("Data") {
+        Section {
             Toggle(isOn: $health) { Label("Apple Health", systemImage: "heart.text.square") }
             LinkRow(title: "Export history", icon: "square.and.arrow.up")
+        } header: {
+            SectionHeader("Data")
         }
     }
 
@@ -88,11 +99,19 @@ struct SettingsView: View {
             } label: {
                 Label("Version", systemImage: "info.circle")
             }
-        } header: {
-            Text("About")
         } footer: {
             Text("Your data stays on your devices.")
         }
+        .listSectionSpacing(44)
+    }
+}
+
+/// A section title with the same height in every language.
+struct SectionHeader: View {
+    let title: LocalizedStringKey
+    init(_ title: LocalizedStringKey) { self.title = title }
+    var body: some View {
+        Text(title).frame(height: 18, alignment: .bottom)
     }
 }
 
@@ -109,4 +128,4 @@ private struct LinkRow: View {
     }
 }
 
-#Preview("Settings") { SettingsView() }
+#Preview("Settings") { AppTabs(selection: .settings) }
