@@ -232,6 +232,106 @@
         }
       }
     },
+    "%lld days to go": {
+      "localizations": {
+        "ar": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "تبقّت %lld أيام"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "تبقّى %lld يومًا"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "تبقّى يوم واحد"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "تبقّى %lld يوم"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "تبقّى يومان"
+                }
+              },
+              "zero": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "تبقّى %lld يوم"
+                }
+              }
+            }
+          }
+        },
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Noch %lld Tag"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Noch %lld Tage"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あと%lld日"
+          }
+        },
+        "sk": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ešte %lld dni"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ešte %lld dňa"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ešte %lld deň"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ešte %lld dní"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld of %lld done": {
       "localizations": {
         "ar": {
@@ -434,6 +534,62 @@
         }
       }
     },
+    "12 pages to go": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تبقّت 12 صفحة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch 12 Seiten"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "残り12ページ"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ešte 12 strán"
+          }
+        }
+      }
+    },
+    "3 of 8 glasses": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 من 8 أكواب"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 von 8 Gläsern"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8杯中3杯"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 z 8 pohárov"
+          }
+        }
+      }
+    },
     "5.2 km": {
       "localizations": {
         "ar": {
@@ -462,30 +618,30 @@
         }
       }
     },
-    "6 of 8 glasses": {
+    "50-day run streak": {
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "6 من 8 أكواب"
+            "value": "50 يومًا من الجري المتواصل"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "6 von 8 Gläsern"
+            "value": "50 Tage Laufen in Folge"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "8杯中6杯"
+            "value": "ランニング50日連続"
           }
         },
         "sk": {
           "stringUnit": {
             "state": "translated",
-            "value": "6 z 8 pohárov"
+            "value": "50 dní behu v rade"
           }
         }
       }
@@ -542,6 +698,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pokojný rytmus pre veci, na ktorých záleží."
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "حول"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Info"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "情報"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O aplikácii"
           }
         }
       }
@@ -658,6 +842,90 @@
         }
       }
     },
+    "Apple Health": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تطبيق الصحة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Health"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘルスケア"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Zdravie"
+          }
+        }
+      }
+    },
+    "Before 9:00": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قبل 9:00"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vor 9:00"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "9:00前"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pred 9:00"
+          }
+        }
+      }
+    },
+    "Best day": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أفضل يوم"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bester Tag"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ベストな曜日"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Najlepší deň"
+          }
+        }
+      }
+    },
     "Best streak": {
       "localizations": {
         "ar": {
@@ -682,6 +950,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "Najdlhšia séria"
+          }
+        }
+      }
+    },
+    "Best time": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أفضل وقت"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beste Zeit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ベストな時間"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Najlepší čas"
+          }
+        }
+      }
+    },
+    "By habit": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "حسب العادة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Gewohnheit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "習慣別"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Podľa návyku"
           }
         }
       }
@@ -910,6 +1234,34 @@
         }
       }
     },
+    "Data": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "البيانات"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daten"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "データ"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Údaje"
+          }
+        }
+      }
+    },
     "Delete": {
       "localizations": {
         "ar": {
@@ -1050,6 +1402,34 @@
         }
       }
     },
+    "Export history": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تصدير السجل"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf exportieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "履歴を書き出す"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportovať históriu"
+          }
+        }
+      }
+    },
     "General": {
       "localizations": {
         "ar": {
@@ -1106,30 +1486,30 @@
         }
       }
     },
-    "Good afternoon, Mara": {
+    "Good morning, Mara": {
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "مساء الخير يا مارا"
+            "value": "صباح الخير يا مارا"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Guten Tag, Mara"
+            "value": "Guten Morgen, Mara"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "こんにちは、Maraさん"
+            "value": "おはようございます、Maraさん"
           }
         },
         "sk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dobrý deň, Mara"
+            "value": "Dobré ráno, Mara"
           }
         }
       }
@@ -1186,6 +1566,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "Habits Plus · od roku 2024"
+          }
+        }
+      }
+    },
+    "Highlights": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أبرز النتائج"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highlights"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ハイライト"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Najlepšie"
           }
         }
       }
@@ -1330,6 +1738,34 @@
         }
       }
     },
+    "Journal · 47%": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اليوميات · 47%"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagebuch · 47 %"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日記 · 47%"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denník · 47 %"
+          }
+        }
+      }
+    },
     "Last %lld weeks": {
       "localizations": {
         "ar": {
@@ -1414,6 +1850,34 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Last 30 days": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "آخر 30 يومًا"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte 30 Tage"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "過去30日間"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posledných 30 dní"
           }
         }
       }
@@ -1670,6 +2134,62 @@
         }
       }
     },
+    "Mornings work for you": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الصباح يناسبك"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Morgens läuft es bei dir"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "朝が得意なタイプです"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ránom sa vám darí"
+          }
+        }
+      }
+    },
+    "Most consistent": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الأكثر انتظامًا"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Am beständigsten"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最も継続"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Najpravidelnejší"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "ar": {
@@ -1698,6 +2218,34 @@
         }
       }
     },
+    "Needs attention": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يحتاج إلى اهتمام"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Braucht Aufmerksamkeit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要注意"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Treba zlepšiť"
+          }
+        }
+      }
+    },
     "New habit": {
       "localizations": {
         "ar": {
@@ -1722,6 +2270,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nový návyk"
+          }
+        }
+      }
+    },
+    "Next glass": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الكوب التالي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächstes Glas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次の1杯"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ďalší pohár"
+          }
+        }
+      }
+    },
+    "Next milestone": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الإنجاز التالي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächster Meilenstein"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次のマイルストーン"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ďalší míľnik"
           }
         }
       }
@@ -1810,6 +2414,34 @@
         }
       }
     },
+    "Privacy": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الخصوصية"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datenschutz"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プライバシー"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Súkromie"
+          }
+        }
+      }
+    },
     "Range": {
       "localizations": {
         "ar": {
@@ -1834,6 +2466,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "Obdobie"
+          }
+        }
+      }
+    },
+    "Rate Habits": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قيّم Habits"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Habits bewerten"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Habitsを評価"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohodnotiť Habits"
           }
         }
       }
@@ -1946,6 +2606,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pripomienky"
+          }
+        }
+      }
+    },
+    "Reminders on": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "التذكيرات مفعّلة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erinnerungen an"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リマインダーオン"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pripomienky zapnuté"
           }
         }
       }
@@ -2230,6 +2918,34 @@
         }
       }
     },
+    "Three lines are enough": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ثلاثة أسطر تكفي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drei Zeilen reichen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3行で十分"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stačia tri riadky"
+          }
+        }
+      }
+    },
     "Time": {
       "localizations": {
         "ar": {
@@ -2286,6 +3002,34 @@
         }
       }
     },
+    "Up next": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "التالي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Nächstes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このあと"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nasleduje"
+          }
+        }
+      }
+    },
     "Version": {
       "localizations": {
         "ar": {
@@ -2310,6 +3054,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verzia"
+          }
+        }
+      }
+    },
+    "Wednesday · 96%": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الأربعاء · 96%"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mittwoch · 96 %"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "水曜日 · 96%"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streda · 96 %"
           }
         }
       }
@@ -2394,6 +3166,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rok"
+          }
+        }
+      }
+    },
+    "You finish 94% of the habits you plan before 9:00, and 61% of those after 20:00. Try moving Journal to the morning.": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تُنجز 94% من العادات المخطط لها قبل 9:00، و61% من تلك بعد 20:00. جرّب نقل اليوميات إلى الصباح."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du schaffst 94 % der Gewohnheiten vor 9:00 und 61 % derer nach 20:00. Probier, das Tagebuch auf den Morgen zu legen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "9:00前に予定した習慣は94%、20:00以降は61%達成しています。日記を朝に移してみましょう。"
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Splníte 94 % návykov naplánovaných pred 9:00 a 61 % tých po 20:00. Skúste si denník presunúť na ráno."
           }
         }
       }

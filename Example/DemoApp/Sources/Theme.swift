@@ -17,7 +17,7 @@ enum Theme {
     /// Content never stretches wider than this on iPad; the rest becomes margin.
     static let readableWidth: CGFloat = 720
 
-    /// The screenshots' fixed "today": Monday 21 September 2026, early afternoon in UTC (so it is
+    /// The screenshots' fixed "today": Monday 21 September 2026, midday in UTC (so it is
     /// the same day in every time zone a simulator might be set to).
     static let today = Date(timeIntervalSince1970: 1_790_000_000)
     static var utc: Calendar {
@@ -152,10 +152,4 @@ struct Readable<Content: View>: View {
     var body: some View {
         content.frame(maxWidth: maxWidth).frame(maxWidth: .infinity)
     }
-}
-
-/// Weekday initials starting on Monday, in the current locale.
-func weekdayInitials() -> [String] {
-    let s = Calendar.current.veryShortStandaloneWeekdaySymbols
-    return (0..<7).map { s[($0 + 1) % 7] }
 }

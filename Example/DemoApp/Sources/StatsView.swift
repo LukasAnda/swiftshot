@@ -24,11 +24,16 @@ struct StatsView: View {
                                 WeekChart()
                             }
                             ConsistencyGrid(weeks: 26)
+                            HStack(alignment: .top, spacing: Theme.Space.l) {
+                                HabitBreakdown()
+                                Highlights()
+                            }
                         } else {
                             CompletionHero()
                             WeekChart()
                             MetricGrid()
                             ConsistencyGrid()
+                            HabitBreakdown()
                         }
                     }
                     .padding(.horizontal, Theme.Space.l + 4)
@@ -50,7 +55,7 @@ struct CompletionHero: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Text("Completion rate").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                Text(0.87.formatted(.percent.precision(.fractionLength(0))))
+                Text(0.74.formatted(.percent.precision(.fractionLength(0))))
                     .font(.system(size: 64, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .minimumScaleFactor(0.6)
@@ -75,12 +80,13 @@ struct CompletionHero: View {
 }
 
 struct WeekChart: View {
+    var barHeight: CGFloat = 150
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Last 7 days").font(.headline)
                 Spacer()
-                Text("\(29) check-ins").font(.subheadline).foregroundStyle(.secondary)
+                Text("\(History.weekCheckIns) check-ins").font(.subheadline).foregroundStyle(.secondary)
             }
             HStack(alignment: .bottom, spacing: Theme.Space.m) {
                 ForEach(Array(History.week.enumerated()), id: \.offset) { i, v in
@@ -91,9 +97,9 @@ struct WeekChart: View {
                             Capsule().fill(Color.primary.opacity(0.06))
                             Capsule()
                                 .fill(isToday ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.accent.opacity(0.45)))
-                                .frame(height: 150 * v)
+                                .frame(height: barHeight * v)
                         }
-                        .frame(height: 150)
+                        .frame(height: barHeight)
                         Text(verbatim: date.formatted(Date.FormatStyle.dateTime.weekday(.narrow).utc))
                             .font(.caption.weight(isToday ? .bold : .medium))
                             .foregroundStyle(isToday ? Theme.accent : Color.secondary)
@@ -172,6 +178,68 @@ struct ConsistencyGrid: View {
             }
         }
         .card(padding: Theme.Space.l + 4)
+    }
+}
+
+/// Each habit's completion over the last 30 days.
+struct HabitBreakdown: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("By habit").font(.headline)
+                Spacer()
+                Text("Last 30 days").font(.subheadline).foregroundStyle(.secondary)
+            }
+            ForEach(Habit.samples) { habit in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Label { Text(habit.title) } icon: { Image(systemName: habit.icon).foregroundStyle(Theme.accent) }
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(habit.rate.formatted(.percent.precision(.fractionLength(0))))
+                            .font(.figure(.subheadline, weight: .semibold)).monospacedDigit()
+                    }
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.primary.opacity(0.07))
+                            Capsule().fill(Theme.accent.opacity(0.35 + 0.65 * habit.rate)).frame(width: g.size.width * habit.rate)
+                        }
+                    }
+                    .frame(height: 8)
+                }
+            }
+        }
+        .card(padding: Theme.Space.l + 4)
+    }
+}
+
+/// A few notable facts, as a short list.
+struct Highlights: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            Text("Highlights").font(.headline)
+            row("calendar", "Best day", "Wednesday · 96%")
+            Divider()
+            row("sunrise.fill", "Best time", "Before 9:00")
+            Divider()
+            row("figure.run", "Most consistent", "Morning run")
+            Divider()
+            row("pencil.line", "Needs attention", "Journal · 47%")
+        }
+        .card(padding: Theme.Space.l + 4)
+    }
+
+    private func row(_ icon: String, _ title: LocalizedStringKey, _ value: LocalizedStringKey) -> some View {
+        HStack(spacing: Theme.Space.m) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 32, height: 32)
+                .background(Theme.accent.opacity(0.12), in: .circle)
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).font(.subheadline.weight(.semibold))
+        }
     }
 }
 

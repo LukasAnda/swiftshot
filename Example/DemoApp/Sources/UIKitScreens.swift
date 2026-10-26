@@ -6,7 +6,7 @@ import UIKit
 final class HabitTableViewController: UITableViewController {
     private struct Row { let title: String.LocalizationValue; let detail: String.LocalizationValue; let icon: String; let streak: Int; let done: Bool }
     private let habits = [
-        Row(title: "Drink water", detail: "6 of 8 glasses", icon: "drop.fill", streak: 12, done: false),
+        Row(title: "Drink water", detail: "3 of 8 glasses", icon: "drop.fill", streak: 12, done: false),
         Row(title: "Morning run", detail: "5.2 km", icon: "figure.run", streak: 31, done: true),
         Row(title: "Read 20 pages", detail: "8 of 20 pages", icon: "book.closed.fill", streak: 5, done: false),
         Row(title: "Meditate", detail: "10 minutes", icon: "figure.mind.and.body", streak: 9, done: true),

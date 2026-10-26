@@ -2,6 +2,8 @@ import SwiftUI
 
 struct HabitRow: View {
     let habit: Habit
+    /// iPad: the last seven days as dots before the ring.
+    var showsWeek = false
     var body: some View {
         HStack(spacing: Theme.Space.m + 2) {
             Image(systemName: habit.icon)
@@ -26,9 +28,10 @@ struct HabitRow: View {
                 .lineLimit(1)
             }
             Spacer(minLength: Theme.Space.s)
+            if showsWeek { WeekDots(days: habit.week).padding(.trailing, Theme.Space.l) }
             ProgressRing(progress: habit.progress, size: 30, lineWidth: 3.5)
         }
-        .padding(.vertical, Theme.Space.m)
+        .padding(.vertical, showsWeek ? Theme.Space.l : Theme.Space.m)
     }
 }
 
@@ -45,7 +48,7 @@ struct TodaySummary: View {
                 }
             }
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                Text("Good afternoon, Mara").font(.title3.weight(.semibold))
+                Text("Good morning, Mara").font(.title3.weight(.semibold))
                 Text("Three habits left today. You’re on a 31-day run streak.")
                     .font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -89,15 +92,25 @@ struct HabitListView: View {
                 ScrollView {
                     Group {
                         if wide {
-                            // iPad: today's overview beside the list.
+                            // iPad: the day's overview and history beside the list and what's next.
                             HStack(alignment: .top, spacing: Theme.Space.xl) {
-                                VStack(alignment: .leading, spacing: Theme.Space.l) { header; WeekChart() }
-                                    .frame(width: 400)
-                                list.padding(.top, 30)
+                                VStack(alignment: .leading, spacing: Theme.Space.l) {
+                                    header
+                                    WeekChart(barHeight: 190)
+                                    ConsistencyGrid()
+                                    MilestoneCard()
+                                }
+                                .frame(width: 420)
+                                VStack(alignment: .leading, spacing: Theme.Space.xl) {
+                                    list(showsWeek: true)
+                                    UpNextCard()
+                                    InsightCard()
+                                }
+                                .padding(.top, 30)
                             }
-                            .frame(maxWidth: 1100)
+                            .frame(maxWidth: 1180)
                         } else {
-                            VStack(alignment: .leading, spacing: Theme.Space.xl) { header; list }
+                            VStack(alignment: .leading, spacing: Theme.Space.xl) { header; list(showsWeek: false) }
                         }
                     }
                     .padding(.horizontal, Theme.Space.l + 4)
@@ -125,19 +138,115 @@ struct HabitListView: View {
         }
     }
 
-    private var list: some View {
+    private func list(showsWeek: Bool) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             FilterBar()
             VStack(spacing: 0) {
                 ForEach(Habit.samples) { habit in
-                    HabitRow(habit: habit)
+                    HabitRow(habit: habit, showsWeek: showsWeek)
                     if habit.id != Habit.samples.last?.id { Divider().padding(.leading, 58) }
                 }
             }
-            .padding(.horizontal, Theme.Space.l)
+            .padding(.horizontal, Theme.Space.l + (showsWeek ? 4 : 0))
             .padding(.vertical, Theme.Space.xs)
             .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.card, style: .continuous))
         }
+    }
+}
+
+/// Seven small dots, oldest first; today (last) is outlined until it's done.
+struct WeekDots: View {
+    let days: [Bool]
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(days.enumerated()), id: \.offset) { i, done in
+                if i == days.count - 1 && !done {
+                    Circle().strokeBorder(Theme.accent.opacity(0.6), lineWidth: 1.5).frame(width: 10, height: 10)
+                } else {
+                    Circle().fill(done ? Theme.accent : Color.primary.opacity(0.10)).frame(width: 10, height: 10)
+                }
+            }
+        }
+    }
+}
+
+/// The reminders still to come today.
+struct UpNextCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Up next").font(.headline)
+                Spacer()
+                Label("Reminders on", systemImage: "bell.fill")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(History.upNext.enumerated()), id: \.offset) { i, item in
+                    let habit = Habit.samples[item.habit]
+                    let time = Date(timeIntervalSince1970: 1_789_948_800 + Double(item.hour * 3600 + item.minute * 60))
+                    HStack(spacing: Theme.Space.l) {
+                        Text(verbatim: time.formatted(Date.FormatStyle.dateTime.hour().minute().utc))
+                            .font(.figure(.body, weight: .semibold)).monospacedDigit()
+                            .fixedSize()
+                            .frame(minWidth: 84, alignment: .leading)
+                        Capsule().fill(Theme.accent).frame(width: 3, height: 34)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(habit.title).font(.body.weight(.semibold))
+                            Text(item.note).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: habit.icon).font(.body.weight(.semibold)).foregroundStyle(Theme.accent)
+                    }
+                    .padding(.vertical, Theme.Space.m)
+                    if i < History.upNext.count - 1 { Divider() }
+                }
+            }
+        }
+        .card(padding: Theme.Space.l + 4)
+    }
+}
+
+/// One observation from the history, on a soft accent wash.
+struct InsightCard: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Space.l) {
+            Image(systemName: "sunrise.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Theme.accent.gradient, in: .rect(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Text("Mornings work for you").font(.headline)
+                Text("You finish 94% of the habits you plan before 9:00, and 61% of those after 20:00. Try moving Journal to the morning.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Theme.Space.l + 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.accent.opacity(0.10), in: .rect(cornerRadius: Theme.Radius.card, style: .continuous))
+    }
+}
+
+/// Progress towards the next round-number streak.
+struct MilestoneCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack {
+                Label("Next milestone", systemImage: "flag.checkered").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Text("\(19) days to go").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
+            }
+            Text("50-day run streak").font(.title3.weight(.semibold))
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.07))
+                    Capsule().fill(Theme.accent).frame(width: g.size.width * 31 / 50)
+                }
+            }
+            .frame(height: 10)
+        }
+        .card(padding: Theme.Space.l + 4)
     }
 }
 

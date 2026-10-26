@@ -27,7 +27,7 @@ struct WatchHabit: Identifiable {
 }
 
 let watchHabits = [
-    WatchHabit(id: 0, title: "Drink water", detail: "6 of 8 glasses", icon: "drop.fill", progress: 0.75),
+    WatchHabit(id: 0, title: "Drink water", detail: "3 of 8 glasses", icon: "drop.fill", progress: 0.375),
     WatchHabit(id: 1, title: "Morning run", detail: "5.2 km", icon: "figure.run", progress: 1.0),
     WatchHabit(id: 2, title: "Meditate", detail: "10 minutes", icon: "figure.mind.and.body", progress: 1.0),
     WatchHabit(id: 3, title: "Read 20 pages", detail: "8 of 20 pages", icon: "book.closed.fill", progress: 0.4),
@@ -89,9 +89,9 @@ struct ProgressDetailView: View {
 
     private var ring: some View {
         ZStack {
-            Ring(progress: 0.75, lineWidth: 12)
+            Ring(progress: 0.375, lineWidth: 12)
             VStack(spacing: 0) {
-                Text(verbatim: 6.formatted()).font(.system(size: 34, weight: .bold, design: .rounded))
+                Text(verbatim: 3.formatted()).font(.system(size: 34, weight: .bold, design: .rounded))
                 Text("of 8").font(.system(.caption2, design: .rounded, weight: .semibold)).foregroundStyle(.secondary)
             }
         }
@@ -99,12 +99,12 @@ struct ProgressDetailView: View {
 }
 
 struct WeekView: View {
-    let values: [Double] = [0.6, 0.8, 1.0, 0.8, 0.6, 1.0, 0.4]
+    let values: [Double] = [0.6, 0.8, 1.0, 0.8, 0.8, 0.8, 0.4]
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Last 7 days").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(0.87, format: .percent.precision(.fractionLength(0)))
+                Text(0.74, format: .percent.precision(.fractionLength(0)))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(accent)
                 Text("completion").font(.footnote).foregroundStyle(.secondary)
