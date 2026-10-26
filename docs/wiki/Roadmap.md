@@ -5,7 +5,7 @@ to suggest something or to say what you need most.
 
 | version | | status |
 |---|---|---|
-| [v0.3.0](https://github.com/LukasAnda/swiftshot/milestone/1) | [Homebrew](#v030--homebrew) | planned |
+| [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | [Homebrew](#v030--homebrew) | released |
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/milestone/2) | [Android: Jetpack Compose](#v040--android-jetpack-compose) | planned |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/milestone/3) | [Compose Multiplatform](#v050--compose-multiplatform) | planned |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/4) | [Flutter](#v060--flutter) | planned |
@@ -13,8 +13,9 @@ to suggest something or to say what you need most.
 
 ## v0.3.0 · Homebrew
 
-`brew install swiftshot`, with updates through `brew upgrade`. The GitHub Action and the install
-script stay.
+`brew install lukasanda/swiftshot/swiftshot`, with updates through `brew upgrade`. The formula is
+in [LukasAnda/homebrew-swiftshot](https://github.com/LukasAnda/homebrew-swiftshot) and every release
+updates it. The GitHub Action and the install script stay.
 
 ## v0.4.0 · Android: Jetpack Compose
 

@@ -5,6 +5,15 @@
 - The simulator runtimes you want to render (Xcode > Settings > Components)
 - An app with `#Preview`s, iOS 17 or later. Nothing has to be added to the project.
 
+## Homebrew
+
+```
+brew install lukasanda/swiftshot/swiftshot
+```
+
+The formula lives in [LukasAnda/homebrew-swiftshot](https://github.com/LukasAnda/homebrew-swiftshot)
+and is updated on every release.
+
 ## Install script
 
 ```
@@ -14,7 +23,7 @@ export PATH="$HOME/.swiftshot/bin:$PATH"
 
 | variable | default | |
 |---|---|---|
-| `SWIFTSHOT_VERSION` | latest | release to install, e.g. `0.2.1` |
+| `SWIFTSHOT_VERSION` | latest | release to install, e.g. `0.3.0` |
 | `SWIFTSHOT_PREFIX` | `~/.swiftshot` | install location |
 
 The script downloads `swiftshot-macos-arm64.tar.gz` from the
@@ -37,4 +46,6 @@ swiftshot devices      # installed runtimes and devices
 
 ## Update
 
-Run the install script again. To uninstall, delete `~/.swiftshot`.
+Homebrew: `brew upgrade swiftshot`, uninstall with `brew uninstall swiftshot`.
+
+Install script: run it again. To uninstall, delete `~/.swiftshot`.

@@ -59,7 +59,8 @@ final class Runner {
     static func locateAgent(_ platform: Platform) throws -> String {
         let envKey = platform == .ios ? "SWIFTSHOT_AGENT" : "SWIFTSHOT_WATCH_AGENT"
         if let env = ProcessInfo.processInfo.environment[envKey] { return env }
-        let exe = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+        // argv[0] is just "swiftshot" when run from PATH; the loader knows the real path.
+        let exe = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
         let dir = exe.deletingLastPathComponent()
         let candidates = [
             dir.appendingPathComponent(platform.agentFile),
