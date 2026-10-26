@@ -8,6 +8,7 @@ Task {
         let options = try Options.parse(Array(CommandLine.arguments.dropFirst()))
         Log.verbose = options.verbose
         if options.command == "init" { try await Setup.run(options); semaphore.signal(); return }
+        if options.command == "frame" { try await FrameRun.command(options); semaphore.signal(); return }
         let runner = try Runner(options: options)
         switch options.command {
         case "list": try await runner.list()
