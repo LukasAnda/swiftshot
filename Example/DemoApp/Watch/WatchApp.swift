@@ -50,7 +50,9 @@ struct Ring: View {
 struct WatchHabitList: View {
     var body: some View {
         NavigationStack {
-            List(watchHabits) { habit in
+            // What's left today: two rows, so the glass buttons below float over empty background
+            // on every case size instead of over a row.
+            List(watchHabits.filter { $0.progress < 1 }) { habit in
                 HStack(spacing: 10) {
                     ZStack {
                         if habit.progress >= 1 { Circle().fill(accent) } else { Ring(progress: habit.progress, lineWidth: 3.5) }
