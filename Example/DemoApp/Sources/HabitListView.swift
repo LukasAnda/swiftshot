@@ -113,6 +113,8 @@ struct HabitListView: View {
                             VStack(alignment: .leading, spacing: Theme.Space.xl) {
                                 header
                                 list(showsWeek: false)
+                                // Graphics, not headings, under the tab bar and its accessory.
+                                ConsistencyGrid()
                                 MilestoneCard()
                                 InsightCard()
                             }
@@ -260,7 +262,8 @@ struct MilestoneCard: View {
 
 /// A month of check-ins: taller than any screen (full-length screenshot demo).
 struct HabitHistoryView: View {
-    private let days = Array(0..<30)
+    /// The last 30 days in Monday-to-Sunday weeks, newest first (`Theme.today` is a Monday).
+    private let weeks: [[Int]] = [[0]] + stride(from: 1, to: 30, by: 7).map { Array($0..<min($0 + 7, 30)) }
 
     var body: some View {
         GeometryReader { geo in
@@ -274,12 +277,20 @@ struct HabitHistoryView: View {
 
     private var list: some View {
         List {
-            Section {
-                ForEach(days, id: \.self) { HistoryRow(daysAgo: $0) }
-            } header: {
-                Text(verbatim: Theme.today.formatted(Date.FormatStyle.dateTime.month(.wide).year().utc))
+            ForEach(Array(weeks.enumerated()), id: \.offset) { i, days in
+                Section {
+                    ForEach(days, id: \.self) { HistoryRow(daysAgo: $0) }
+                } header: {
+                    if i == 0 {
+                        Text(verbatim: Theme.today.formatted(Date.FormatStyle.dateTime.month(.wide).year().utc))
+                            .frame(height: 18, alignment: .bottom)
+                    }
+                }
             }
         }
+        // The same row heights in every language (Arabic lines are taller), so the iPhone
+        // screenshot's tab bar accessory always floats over the gap between two weeks.
+        .environment(\.defaultMinListRowHeight, 73)
         .scrollContentBackground(.hidden)
         .background(Theme.canvas)
         .navigationTitle("History")
@@ -313,7 +324,6 @@ struct HistoryRow: View {
                 }
             }
         }
-        .padding(.vertical, 2)
         .listRowBackground(Theme.surface)
     }
 }

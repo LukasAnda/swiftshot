@@ -31,8 +31,9 @@ struct StatsView: View {
                         } else {
                             CompletionHero()
                             WeekChart()
-                            MetricGrid()
+                            // Graphics, not headings, under the tab bar and its accessory.
                             ConsistencyGrid()
+                            MetricGrid()
                             HabitBreakdown()
                         }
                     }
