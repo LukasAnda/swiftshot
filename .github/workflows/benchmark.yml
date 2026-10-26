@@ -35,7 +35,7 @@ jobs:
       SWIFTSHOT_BOOT_AFTER_BUILD: ${{ matrix.variant == 'boot-after-build' && '1' || '' }}
       SWIFTSHOT_STAGED: ${{ matrix.variant == 'staged' && '1' || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Machine
         run: |
           sw_vers; xcodebuild -version; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
@@ -63,7 +63,7 @@ jobs:
     runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Machine
         run: |
           sw_vers; xcodebuild -version; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
