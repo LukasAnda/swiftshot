@@ -11,11 +11,13 @@
 		229E17ACE153C685E7AC1B3D /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9D9226F5791C15047A128C /* StatsView.swift */; };
 		3AA74866254CCC7CC710D437 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 298227214867CC2B42EDAB28 /* Localizable.xcstrings */; };
 		4433F05EEEB71875B82B1B2A /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0ACCFD58674971F7F3DFA2 /* WelcomeView.swift */; };
+		49714D154031D09C71E00A8A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAD0D3EC571BF04277128D88 /* Theme.swift */; };
 		533E0E56DFFD272E1B2D54C9 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92A245AEF72E60D294A609D /* Models.swift */; };
 		844F104A7EF579AFCEEFBC93 /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4224FC3D01EBC96DC3ADD910 /* ScreenshotTests.swift */; };
 		967DD1FBBB55C360276C5C01 /* UIKitScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC5234275373FE228E810134 /* UIKitScreens.swift */; };
 		9BB38ADE3FE2C50EF10D53DB /* WatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF4F10045932C4631208AF3C /* WatchApp.swift */; };
 		A7D97CEE09199D6812E484AE /* HabitListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1551CC8C7211FEC9EF220158 /* HabitListView.swift */; };
+		CB125B400834E515DD836DCE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EF96157AAA4AA5F2A91334EF /* Assets.xcassets */; };
 		CB87573F553EB99A674D4EFC /* DemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC68AC0096062EBCEB0A5566 /* DemoApp.swift */; };
 		E77F47DCCF2649D06F2CA86C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2EBA58DDC28CCAA7FBC3B49 /* SettingsView.swift */; };
 		FB5E812D5DDC05CED3272CE0 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 298227214867CC2B42EDAB28 /* Localizable.xcstrings */; };
@@ -44,6 +46,8 @@
 		C2EBA58DDC28CCAA7FBC3B49 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		CC5234275373FE228E810134 /* UIKitScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIKitScreens.swift; sourceTree = "<group>"; };
 		DF4F10045932C4631208AF3C /* WatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApp.swift; sourceTree = "<group>"; };
+		EAD0D3EC571BF04277128D88 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		EF96157AAA4AA5F2A91334EF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F55E8E92F299EC9CA392922A /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
 		FC68AC0096062EBCEB0A5566 /* DemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -71,12 +75,14 @@
 		9B7C8DD710251D4E68BCE537 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				EF96157AAA4AA5F2A91334EF /* Assets.xcassets */,
 				FC68AC0096062EBCEB0A5566 /* DemoApp.swift */,
 				1551CC8C7211FEC9EF220158 /* HabitListView.swift */,
 				298227214867CC2B42EDAB28 /* Localizable.xcstrings */,
 				B92A245AEF72E60D294A609D /* Models.swift */,
 				C2EBA58DDC28CCAA7FBC3B49 /* SettingsView.swift */,
 				4D9D9226F5791C15047A128C /* StatsView.swift */,
+				EAD0D3EC571BF04277128D88 /* Theme.swift */,
 				CC5234275373FE228E810134 /* UIKitScreens.swift */,
 				5A0ACCFD58674971F7F3DFA2 /* WelcomeView.swift */,
 			);
@@ -217,6 +223,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CB125B400834E515DD836DCE /* Assets.xcassets in Resources */,
 				3AA74866254CCC7CC710D437 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -233,6 +240,7 @@
 				533E0E56DFFD272E1B2D54C9 /* Models.swift in Sources */,
 				E77F47DCCF2649D06F2CA86C /* SettingsView.swift in Sources */,
 				229E17ACE153C685E7AC1B3D /* StatsView.swift in Sources */,
+				49714D154031D09C71E00A8A /* Theme.swift in Sources */,
 				967DD1FBBB55C360276C5C01 /* UIKitScreens.swift in Sources */,
 				4433F05EEEB71875B82B1B2A /* WelcomeView.swift in Sources */,
 			);
@@ -432,7 +440,8 @@
 		1C545C0DD7857285CD8FC0E0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -488,7 +497,8 @@
 		AD50BDF0C399EC95218708BF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
