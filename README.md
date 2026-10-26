@@ -38,6 +38,12 @@
 Requires an Apple silicon Mac with Xcode 26.6 or 27.x.
 
 ```
+brew install lukasanda/tap/swiftshot
+```
+
+Or without Homebrew:
+
+```
 curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | sh
 export PATH="$HOME/.swiftshot/bin:$PATH"
 ```
@@ -86,9 +92,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - uses: LukasAnda/swiftshot@v0.2.1
+      - uses: LukasAnda/swiftshot@v0.3.0
         with:
-          version: 0.2.1      # or "latest"
+          version: 0.3.0      # or "latest"
           # args: --devices "iPhone 17 Pro Max" --languages en-US,de-DE
       - uses: actions/upload-artifact@v4
         with:
@@ -102,7 +108,7 @@ Use `working-directory` if the project is not at the repo root.
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.2.1 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.3.0 sh
 ~/.swiftshot/bin/swiftshot run --download-missing-runtimes
 ```
 
@@ -275,7 +281,7 @@ simulators.
 
 | version | |
 |---|---|
-| [v0.3.0](https://github.com/LukasAnda/swiftshot/milestone/1) | Homebrew: `brew install swiftshot` |
+| [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | Homebrew: `brew install lukasanda/tap/swiftshot` (released) |
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/milestone/2) | Android: Jetpack Compose previews |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/milestone/3) | Compose Multiplatform |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
