@@ -11,6 +11,7 @@ iOS version, language and appearance, without booting a simulator.
 - [[Migrating from fastlane]]: replace `fastlane snapshot`
 - [[How it works]]: why it's fast and how output stays pixel identical
 - [[Troubleshooting]]
+- [[Roadmap]]: what's planned for upcoming versions
 
 **Links**
 
