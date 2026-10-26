@@ -247,14 +247,17 @@ simulators.
 
 ## Roadmap
 
-- Homebrew: `brew install swiftshot`
-- Android: Jetpack Compose previews, faster than Paparazzi and Roborazzi
-- Compose Multiplatform
-- Flutter
-- IDE plugins for Xcode, Android Studio and IntelliJ IDEA, to see screenshots as you edit
+| version | |
+|---|---|
+| [v0.3.0](https://github.com/LukasAnda/swiftshot/milestone/1) | Homebrew: `brew install swiftshot` |
+| [v0.4.0](https://github.com/LukasAnda/swiftshot/milestone/2) | Android: Jetpack Compose previews |
+| [v0.5.0](https://github.com/LukasAnda/swiftshot/milestone/3) | Compose Multiplatform |
+| [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
+| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/5) | IDE plugins for Xcode, Android Studio and IntelliJ IDEA |
 
-Details on the [Roadmap](https://github.com/LukasAnda/swiftshot/wiki/Roadmap) wiki page.
-Suggestions are welcome as [feature requests](https://github.com/LukasAnda/swiftshot/issues/new?template=feature_request.yml).
+Version numbers are targets and can move. Details on the
+[Roadmap](https://github.com/LukasAnda/swiftshot/wiki/Roadmap) wiki page; suggestions are welcome as
+[feature requests](https://github.com/LukasAnda/swiftshot/issues/new?template=feature_request.yml).
 
 ## Documentation
 
