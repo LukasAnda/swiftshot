@@ -24,7 +24,7 @@ jobs:
     runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: make && swift build --build-tests
       - name: Unit tests
@@ -41,7 +41,7 @@ jobs:
     runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Machine
         run: sw_vers; xcodebuild -version; xcrun simctl list runtimes
       - name: Build
