@@ -1,0 +1,19 @@
+# Build and unit tests on every pull request and push to main. Required for merging, so it runs
+# for every change, docs included (a few minutes).
+name: unit
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: make && swift build --build-tests
+      - name: Unit tests
+        run: swift test --skip-build --filter swiftshotTests
