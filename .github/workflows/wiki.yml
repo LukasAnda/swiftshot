@@ -1,0 +1,28 @@
+# Publishes docs/wiki to the GitHub wiki, so wiki changes go through pull requests like code.
+name: wiki
+on:
+  push:
+    branches: [main]
+    paths: ["docs/wiki/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone -q "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki
+          rsync -a --delete --exclude .git docs/wiki/ wiki/
+          cd wiki
+          git add -A
+          git diff --cached --quiet && { echo "Wiki up to date"; exit 0; }
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Update from ${GITHUB_SHA::7}"
+          git push -q
