@@ -1,6 +1,29 @@
-# Swiftshot
+<h1 align="center">Swiftshot</h1>
 
-App Store screenshots straight from your SwiftUI and UIKit `#Preview`s, without booting a simulator.
+<p align="center">
+  App Store screenshots straight from your SwiftUI and UIKit <code>#Preview</code>s, without booting a simulator.
+</p>
+
+<p align="center">
+  <a href="https://github.com/LukasAnda/swiftshot/actions/workflows/tests.yml"><img src="https://github.com/LukasAnda/swiftshot/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/LukasAnda/swiftshot/releases/latest"><img src="https://img.shields.io/github/v/release/LukasAnda/swiftshot" alt="Release"></a>
+  <a href="https://github.com/marketplace/actions/swiftshot-preview-screenshots"><img src="https://img.shields.io/badge/Marketplace-Swiftshot-blue?logo=github" alt="GitHub Marketplace"></a>
+  <img src="https://img.shields.io/badge/macOS-Apple%20silicon-black?logo=apple" alt="macOS, Apple silicon">
+  <img src="https://img.shields.io/badge/Xcode-26.6%20%7C%2027-147EFB?logo=xcode&logoColor=white" alt="Xcode 26.6 and 27">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/LukasAnda/swiftshot" alt="License: AGPL-3.0"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#ci">CI</a> ·
+  <a href="#swiftshot-vs-fastlane">vs fastlane</a> ·
+  <a href="https://github.com/LukasAnda/swiftshot/wiki">Documentation</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/showcase.png" alt="Screenshots rendered by swiftshot in English, German and Arabic">
+</p>
 
 - Renders `#Preview`s directly. No UI tests, no `SnapshotHelper.swift`, no simulator to boot.
 - Every device, iOS version, language, appearance and text size from one command.
@@ -159,30 +182,51 @@ Keys: `appearances`, `languages`, `devices`, `ios_versions` (`ios` on the comman
 Measured with this repo's `Example/DemoApp` on the free GitHub-hosted `xcode-27` runner, from a
 cold start. The workflow is `.github/workflows/benchmark.yml`, so anyone can re-run it.
 
-| tool | screenshots | wall clock |
+Both render the same 5 screens on 3 devices (iPhone 17 Pro Max, iPhone SE, iPad Pro 13-inch) in
+3 languages (en-US, de-DE, ar): 45 screenshots each.
+
+| tool | wall clock | per screenshot |
 |---|---:|---:|
-| `fastlane snapshot` | 45 | 3256 s (54 min) |
-| swiftshot | 73 | 45–59 s |
+| `fastlane snapshot` | 4615 s (77 min) | 103 s |
+| swiftshot, cold | 84 s | 1.9 s |
+| swiftshot, warm build | 55 s | 1.2 s |
+
+Cold includes building the app from an empty DerivedData.
 
 fastlane boots a simulator per device and runs a UI-test session per device and language, which
 installs a test runner, relaunches the app and taps to each screen. Swiftshot boots nothing and
-navigates nothing: it renders the previews directly. It starts one app process per language and
-renders every device inside it, after a single build.
+navigates nothing: it renders the previews directly. After a single build it starts one short-lived
+app process per device and language, in parallel, and each renders all of its previews.
 
 ## How it works
 
+```mermaid
+flowchart LR
+    CLI["swiftshot"] -->|"xcodebuild, once"| APP["MyApp.app<br/>(simulator build)"]
+    APP --> P["MyApp as a plain Mac process<br/>per device × language<br/>+ injected swiftshot agent"]
+    subgraph P2["inside each process"]
+        direction LR
+        D["find every #35;Preview"] --> R["render in a virtual screen<br/>with the device's exact geometry"] --> C["capture the frame"]
+    end
+    P --> P2 --> OUT[("PNG per preview,<br/>appearance, text size")]
+```
+
 1. Swiftshot builds the app once for the iOS simulator.
 2. It runs the app directly on the Mac against the simulator runtime, with a small injected
-   library. No simulator is booted.
+   library. No simulator is booted. A helper provides the Metal, IOSurface and shader compiler
+   services a booted simulator would.
 3. The library finds every `#Preview` in the built app.
-4. The app's windows go to a render server running inside the same process, on a fake display
-   with the target device's exact size. Its frame is the screenshot.
-5. Every device, appearance and text size is rendered in that one process. Each language gets its
-   own process, so localization is real.
+4. It answers UIKit's questions about the screen with the target device's measured geometry:
+   size, scale, corner radii, safe areas, Dynamic Island.
+5. The app's windows go to a Core Animation render server inside the same process, on a virtual
+   display. Its frame is the screenshot. Render settings that depend on timing are pinned, so the
+   output never depends on how fast the machine is.
 6. The status bar is drawn by the system's own status bar component.
 
 `--mode device` renders in real booted simulators instead and serves as the reference. Output is
-verified pixel identical against booted simulators in CI.
+verified pixel identical against booted simulators in CI. The
+[How it works](https://github.com/LukasAnda/swiftshot/wiki/How-it-works) wiki page has the full
+explanation and diagrams.
 
 ## Requirements
 
@@ -200,6 +244,15 @@ SWIFTSHOT_INTEGRATION=1 swift test --filter IntegrationTests
 
 The integration tests render `Example/DemoApp` and compare the output pixel by pixel with booted
 simulators.
+
+## Documentation
+
+The [wiki](https://github.com/LukasAnda/swiftshot/wiki) has the full configuration reference, CI
+recipes, a fastlane migration guide and troubleshooting.
+
+## Contributing
+
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

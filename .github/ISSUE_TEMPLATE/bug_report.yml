@@ -1,0 +1,47 @@
+name: Bug report
+description: Something renders wrong, fails or is slow
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected and what you got. Attach the wrong screenshot if it's a rendering issue.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or swiftshot.json
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: preview
+    attributes:
+      label: Preview code
+      description: The `#Preview` that renders wrong, if any.
+      render: swift
+  - type: input
+    id: version
+    attributes:
+      label: swiftshot --version
+    validations:
+      required: true
+  - type: input
+    id: xcode
+    attributes:
+      label: xcodebuild -version
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options: [Local Mac, GitHub Actions, Other CI]
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Output of the run with `--verbose`.
+      render: text

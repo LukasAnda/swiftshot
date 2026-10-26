@@ -5,8 +5,8 @@
 // variables). What a booted device adds for rendering — Metal, IOSurface and the shader compiler
 // service — swiftshot-simhost provides (Agent/SimHost.m, Agent/NoBoot.c), and the agent captures
 // with Core Animation's own renderer (same engine as the render server, Liquid Glass included).
-// No CoreSimulator device is created or booted, and one process renders every device of a runtime
-// (each device gets its own screen scale), so a whole language costs one app launch (~1 s).
+// No CoreSimulator device is created or booted. Each device model and language gets its own short
+// process (~1 s to launch), run in parallel, which renders all of that device's previews.
 
 import Foundation
 
