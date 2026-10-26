@@ -2,7 +2,8 @@
 // window server (CAWindowServer, the code backboardd composites the screen with) runs inside a
 // no-boot process. A booted simulator gets its displays from CoreSimulator's SimRenderServer; here
 // the agent describes them (SWIFTSHOT_DISPLAYS, one per device) and every frame the server swaps
-// is kept, so a capture is the composited framebuffer exactly as a device would show it.
+// is put on the display the way a booted simulator's is (only its update rect), so a capture is
+// the composited framebuffer exactly as a device would show it.
 //
 // Only what QuartzCore calls is provided (SFBConnection*/SFBDisplay*/SFBSwapchain*), with the
 // layouts a booted simulator reports: modes are 35-byte records {id, width, height, scale, 1,
@@ -13,6 +14,7 @@ typedef struct __IOSurface *IOSurfaceRef;  // opaque here (the watchOS SDK has n
 #include <Block.h>
 #include <dispatch/dispatch.h>
 #include <mach/mach_time.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -41,6 +43,7 @@ typedef struct {
 typedef struct {
     int display;
     IOSurfaceRef pending;
+    double x, y, width, height;   // the pending surface's update rect
     void *context;
     ss_present_block block;
     dispatch_queue_t queue;
@@ -50,8 +53,11 @@ typedef struct {
 static CFMutableArrayRef displays;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t presented = PTHREAD_COND_INITIALIZER;
-static uint64_t frames[SS_MAX_DISPLAYS];
+static uint64_t frames[SS_MAX_DISPLAYS], partials[SS_MAX_DISPLAYS];
 static IOSurfaceRef latest[SS_MAX_DISPLAYS];
+// What the display shows after a partial update: a copy of the frame before it with the update
+// rect taken from the new surface (see ss_swap_submit).
+static IOSurfaceRef shown[SS_MAX_DISPLAYS];
 
 #define TRACE(...) do { if (getenv("SWIFTSHOT_FB_TRACE")) fprintf(stderr, "[swiftshot] fb: " __VA_ARGS__); } while (0)
 
@@ -138,15 +144,78 @@ static void *ss_display_create_swapchain(void *d, long count, CFDictionaryRef op
     return object;
 }
 
+// MARK: surfaces
+
+// IOSurface, looked up at run time (QuartzCore has it loaded; no headers on watchOS).
+static struct {
+    int (*lock)(IOSurfaceRef, uint32_t, uint32_t *);
+    int (*unlock)(IOSurfaceRef, uint32_t, uint32_t *);
+    void *(*base)(IOSurfaceRef);
+    size_t (*row_bytes)(IOSurfaceRef), (*width)(IOSurfaceRef), (*height)(IOSurfaceRef), (*element_bytes)(IOSurfaceRef);
+    uint32_t (*format)(IOSurfaceRef);
+    IOSurfaceRef (*create)(CFDictionaryRef);
+} io;
+static bool load_iosurface(void) {
+    if (io.create) return true;
+    void *h = RTLD_DEFAULT;
+    io.lock = dlsym(h, "IOSurfaceLock"); io.unlock = dlsym(h, "IOSurfaceUnlock"); io.base = dlsym(h, "IOSurfaceGetBaseAddress");
+    io.row_bytes = dlsym(h, "IOSurfaceGetBytesPerRow"); io.width = dlsym(h, "IOSurfaceGetWidth"); io.height = dlsym(h, "IOSurfaceGetHeight");
+    io.element_bytes = dlsym(h, "IOSurfaceGetBytesPerElement"); io.format = dlsym(h, "IOSurfaceGetPixelFormat");
+    io.create = dlsym(h, "IOSurfaceCreate");
+    return io.lock && io.unlock && io.base && io.row_bytes && io.width && io.height && io.element_bytes && io.format && io.create;
+}
+
+static void set_number(CFMutableDictionaryRef d, CFStringRef key, long value) {
+    CFNumberRef n = CFNumberCreate(NULL, kCFNumberLongType, &value);
+    CFDictionarySetValue(d, key, n);
+    CFRelease(n);
+}
+
+/// A surface like `model` (size, pixel format, row layout).
+static IOSurfaceRef surface_like(IOSurfaceRef model) {
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    set_number(props, CFSTR("IOSurfaceWidth"), (long)io.width(model));
+    set_number(props, CFSTR("IOSurfaceHeight"), (long)io.height(model));
+    set_number(props, CFSTR("IOSurfaceBytesPerElement"), (long)io.element_bytes(model));
+    set_number(props, CFSTR("IOSurfaceBytesPerRow"), (long)io.row_bytes(model));
+    set_number(props, CFSTR("IOSurfacePixelFormat"), (long)io.format(model));
+    IOSurfaceRef s = io.create(props);
+    CFRelease(props);
+    return s;
+}
+
+/// Copies the pixels of `src` in the rect (pixels, clamped to both surfaces) into `dst`.
+static void blit(IOSurfaceRef dst, IOSurfaceRef src, long x, long y, long w, long h) {
+    long right = x + w, bottom = y + h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (right > (long)io.width(src)) right = (long)io.width(src);
+    if (right > (long)io.width(dst)) right = (long)io.width(dst);
+    if (bottom > (long)io.height(src)) bottom = (long)io.height(src);
+    if (bottom > (long)io.height(dst)) bottom = (long)io.height(dst);
+    if (right <= x || bottom <= y) return;
+    size_t bpe = io.element_bytes(src);
+    io.lock(src, 1, NULL);   // kIOSurfaceLockReadOnly
+    io.lock(dst, 0, NULL);
+    const uint8_t *from = io.base(src);
+    uint8_t *to = io.base(dst);
+    size_t from_row = io.row_bytes(src), to_row = io.row_bytes(dst);
+    for (long row = y; row < bottom; row++) memcpy(to + row * to_row + x * bpe, from + row * from_row + x * bpe, (right - x) * bpe);
+    io.unlock(dst, 0, NULL);
+    io.unlock(src, 1, NULL);
+}
+
 // MARK: swapchain
 
 static bool ss_swap_begin(void *s, uint64_t time, CFErrorRef *error) { TRACE("swap begin\n"); return true; }
 static bool ss_swap_add_surface(void *s, IOSurfaceRef surface, double sx, double sy, double sw, double sh,
                                 double dx, double dy, double dw, double dh, long layer, long flags, CFErrorRef *error) {
     ss_swapchain *chain = data_of(s);
+    TRACE("add surface %g %g %g %g\n", sx, sy, sw, sh);
     if (surface) CFRetain(surface);
     if (chain->pending) CFRelease(chain->pending);
     chain->pending = surface;
+    chain->x = sx; chain->y = sy; chain->width = sw; chain->height = sh;
     return true;
 }
 static bool ss_swap_set_callback(void *s, void *context, dispatch_queue_t queue, ss_present_block block) {
@@ -164,8 +233,37 @@ static bool ss_swap_submit(void *s, CFErrorRef *error) {
     int index = chain->display;
     if (surface && index < SS_MAX_DISPLAYS) {
         pthread_mutex_lock(&lock);
-        if (latest[index]) CFRelease(latest[index]);
-        latest[index] = surface;   // keeps the reference
+        // The server swaps a surface with the rect it redrew (what changed since it last drew
+        // that surface; SimDisplay::finish_update), and a booted simulator's display takes only
+        // that rect from it. The server draws past the rect: a blurred backdrop the rect cuts
+        // comes out different in whole 32 px tiles across its edge (iPhone 18 Pro: x 736–767 for
+        // a rect ending at 751, see ServerCapture.apertureRedraw), and a device shows the part
+        // inside the rect.
+        bool whole = !load_iosurface() || chain->width <= 0 || chain->height <= 0
+            || (chain->x <= 0 && chain->y <= 0 && chain->x + chain->width >= io.width(surface) && chain->y + chain->height >= io.height(surface));
+        if (whole || !latest[index]) {
+            if (latest[index]) CFRelease(latest[index]);
+            latest[index] = surface;   // keeps the reference
+        } else {
+            if (shown[index] && (io.width(shown[index]) != io.width(surface) || io.height(shown[index]) != io.height(surface) || io.format(shown[index]) != io.format(surface))) {
+                CFRelease(shown[index]);
+                shown[index] = NULL;
+            }
+            if (!shown[index]) shown[index] = surface_like(surface);
+            if (shown[index]) {
+                IOSurfaceRef before = latest[index];
+                if (before != shown[index]) blit(shown[index], before, 0, 0, (long)io.width(before), (long)io.height(before));
+                blit(shown[index], surface, (long)floor(chain->x), (long)floor(chain->y), (long)ceil(chain->width), (long)ceil(chain->height));
+                CFRetain(shown[index]);
+                CFRelease(before);
+                latest[index] = shown[index];
+                partials[index]++;
+                CFRelease(surface);
+            } else {
+                CFRelease(latest[index]);
+                latest[index] = surface;
+            }
+        }
         frames[index]++;
         pthread_cond_broadcast(&presented);
         pthread_mutex_unlock(&lock);
@@ -215,6 +313,14 @@ bool swiftshot_fb_resize(int display, unsigned width, unsigned height) {
 uint64_t swiftshot_fb_frames(int display) {
     pthread_mutex_lock(&lock);
     uint64_t n = display < SS_MAX_DISPLAYS ? frames[display] : 0;
+    pthread_mutex_unlock(&lock);
+    return n;
+}
+
+/// Frames so far that updated only part of a display.
+uint64_t swiftshot_fb_partial_frames(int display) {
+    pthread_mutex_lock(&lock);
+    uint64_t n = display < SS_MAX_DISPLAYS ? partials[display] : 0;
     pthread_mutex_unlock(&lock);
     return n;
 }
