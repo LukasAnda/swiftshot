@@ -1,4 +1,4 @@
-// swiftshot-simhost: runs a simulator process without a booted simulator (experimental).
+// swiftshot-simhost: runs a simulator process without a booted simulator.
 //
 //   swiftshot-simhost <runtime root> <simulator executable> [args…]
 //

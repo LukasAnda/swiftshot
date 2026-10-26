@@ -35,7 +35,7 @@ bin/SwiftshotAgent-watchOS.dylib: $(AGENT_SRC) Agent/Loader.m Agent/SwiftCall.s 
 		-module-name SwiftshotAgent $(AGENT_SRC) $(BUILD)/Loader-watch.o $(BUILD)/SwiftCall-watch.o $(BUILD)/WatchCapture-watch.o $(BUILD)/LayerDrawing-watch.o -o $(BUILD)/agent-watch.dylib
 	rm -f $@ && cp $(BUILD)/agent-watch.dylib $@
 
-# No-boot rendering (experimental): shim injected into simulator processes + the macOS host for them.
+# No-boot rendering (the default): shim injected into simulator processes + the macOS host for them.
 NOBOOT_SRC := Agent/NoBoot.c Agent/FakeDisplay.c Agent/SimFramebufferClient.tbd
 NOBOOT_LINK := -framework CoreFoundation
 

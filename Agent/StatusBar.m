@@ -1,6 +1,5 @@
-// iOS agent (no-boot, experimental — SWIFTSHOT_STATUSBAR=<spec.json>): the system status bar,
-// drawn with UIKit's own status bar view (the one SpringBoard shows) from a data description.
-// Not on by default: the Dynamic Island layouts still need the screen's sensor-region geometry.
+// iOS agent: the system status bar, drawn with the status bar view SpringBoard shows, from a data
+// description (9:41, full signal, charged battery). On by default; --no-status-bar leaves it out.
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>

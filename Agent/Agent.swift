@@ -15,7 +15,7 @@ import IOSurface
 @_cdecl("SwiftshotAgentStart")
 public func SwiftshotAgentStart() {
     guard let jobPath = ProcessInfo.processInfo.environment["SWIFTSHOT_JOB"] else { return }
-    // No-boot mode (experimental): the process runs straight on the Mac against the runtime, with
+    // No-boot mode (the default): the process runs straight on the Mac against the runtime, with
     // no simulator, so there is no app scene to wait for. Render right away, before the app's main.
     if NoBoot.enabled {
         NoBoot.install()
