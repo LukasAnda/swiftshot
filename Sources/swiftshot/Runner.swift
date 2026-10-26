@@ -223,10 +223,17 @@ final class Runner {
     func run() async throws {
         let total = Date()
         let frameSettings = FrameRun.settings(options, root: outputDir)
-        if options.clearOutput, FileManager.default.fileExists(atPath: outputDir) {
-            for lang in options.languages {
-                try? FileManager.default.removeItem(atPath: (outputDir as NSString).appendingPathComponent(lang))
-                try? FileManager.default.removeItem(atPath: (frameSettings.plainOutput as NSString).appendingPathComponent(lang))
+        if options.clearOutput {
+            // Images only: a language folder can also hold title.strings, keyword.strings or a
+            // Framefile.json for the frames.
+            let fm = FileManager.default
+            for root in [outputDir, frameSettings.plainOutput] {
+                for lang in options.languages {
+                    let dir = (root as NSString).appendingPathComponent(lang)
+                    for file in (try? fm.contentsOfDirectory(atPath: dir)) ?? [] where ["png", "jpg", "jpeg"].contains((file as NSString).pathExtension.lowercased()) {
+                        try? fm.removeItem(atPath: (dir as NSString).appendingPathComponent(file))
+                    }
+                }
             }
         }
         let allTypes = try await resolveDeviceTypes()
