@@ -13,8 +13,8 @@ to suggest something or to say what you need most.
 
 ## v0.3.0 · Homebrew
 
-`brew install lukasanda/swiftshot/swiftshot`, with updates through `brew upgrade`. The formula is
-in [LukasAnda/homebrew-swiftshot](https://github.com/LukasAnda/homebrew-swiftshot) and every release
+`brew install lukasanda/tap/swiftshot`, with updates through `brew upgrade`. The formula is
+in [LukasAnda/homebrew-tap](https://github.com/LukasAnda/homebrew-tap) and every release
 updates it. The GitHub Action and the install script stay.
 
 ## v0.4.0 · Android: Jetpack Compose

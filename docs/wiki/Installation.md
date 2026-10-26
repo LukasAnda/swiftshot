@@ -8,10 +8,10 @@
 ## Homebrew
 
 ```
-brew install lukasanda/swiftshot/swiftshot
+brew install lukasanda/tap/swiftshot
 ```
 
-The formula lives in [LukasAnda/homebrew-swiftshot](https://github.com/LukasAnda/homebrew-swiftshot)
+The formula lives in [LukasAnda/homebrew-tap](https://github.com/LukasAnda/homebrew-tap)
 and is updated on every release.
 
 ## Install script

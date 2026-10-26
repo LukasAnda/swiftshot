@@ -38,7 +38,7 @@
 Requires an Apple silicon Mac with Xcode 26.6 or 27.x.
 
 ```
-brew install lukasanda/swiftshot/swiftshot
+brew install lukasanda/tap/swiftshot
 ```
 
 Or without Homebrew:
@@ -281,7 +281,7 @@ simulators.
 
 | version | |
 |---|---|
-| [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | Homebrew: `brew install lukasanda/swiftshot/swiftshot` (released) |
+| [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | Homebrew: `brew install lukasanda/tap/swiftshot` (released) |
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/milestone/2) | Android: Jetpack Compose previews |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/milestone/3) | Compose Multiplatform |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
