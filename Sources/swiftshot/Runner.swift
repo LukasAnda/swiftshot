@@ -222,10 +222,23 @@ final class Runner {
 
     func run() async throws {
         let total = Date()
+        let frameSettings = FrameRun.settings(options, root: outputDir)
         if options.clearOutput, FileManager.default.fileExists(atPath: outputDir) {
-            for lang in options.languages { try? FileManager.default.removeItem(atPath: (outputDir as NSString).appendingPathComponent(lang)) }
+            for lang in options.languages {
+                try? FileManager.default.removeItem(atPath: (outputDir as NSString).appendingPathComponent(lang))
+                try? FileManager.default.removeItem(atPath: (frameSettings.plainOutput as NSString).appendingPathComponent(lang))
+            }
         }
         let allTypes = try await resolveDeviceTypes()
+        // Frames: ask for Apple's license now (not after rendering) and download the bezels while
+        // the app builds and renders.
+        let frameModes = FrameRun.modes(options)
+        let framing = FrameRun(frameSettings)
+        var bezels: Task<[String: BezelStore.Pack], Error>?
+        if !frameModes.isEmpty {
+            if !FrameRun.packs(devices: allTypes.map(\.name), modes: frameModes).isEmpty { try BezelStore.ensureLicense(accept: options.acceptBezelLicense) }
+            bezels = Task { try await framing.prepare(devices: allTypes.map(\.name), modes: frameModes) }
+        }
         // Plan first and boot every simulator the run needs right away: booting (seconds to a
         // minute when cold) then overlaps with xcodebuild instead of following it.
         var targets: [Target] = []
@@ -314,6 +327,28 @@ final class Runner {
             }
         }
         record("render (all simulators)", renderStart)
+
+        // Frames (also without --frame: removes frames left over from an earlier run).
+        let requests = shots.map { s in
+            FrameRequest(path: (outputDir as NSString).appendingPathComponent(s.file), relative: s.file, device: s.device,
+                         language: s.language, appearance: s.appearance, mode: FrameRun.mode(options, preview: s.preview))
+        }
+        do {
+            let frameStart = Date()
+            let summary = try await framing.run(requests, packs: try await bezels?.value ?? [:])
+            if !frameModes.isEmpty {
+                record("frames", frameStart)
+                FrameRun.report(summary, settings: frameSettings)
+                errors += summary.errors
+            }
+            let base = URL(fileURLWithPath: outputDir)
+            for i in shots.indices {
+                guard let framed = summary.framed[(outputDir as NSString).appendingPathComponent(shots[i].file)] else { continue }
+                shots[i].framed = relativePath(framed, from: base)
+            }
+        } catch {
+            errors.append("Frames: \(error)")
+        }
 
         try Report.write(shots: shots, errors: errors, to: outputDir, html: options.html, timings: timings,
                          total: Date().timeIntervalSince(total))

@@ -20,9 +20,14 @@ enum Report {
             body += "<h2>\(esc(language))</h2>\n"
             for (key, row) in Dictionary(grouping: group, by: { "\($0.device) · iOS \($0.runtime)" }).sorted(by: { $0.key < $1.key }) {
                 body += "<h3>\(esc(key))</h3><div class=row>\n"
+                func url(_ path: String) -> String {
+                    path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+                }
                 for s in row {
-                    let src = s.file.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
-                    body += "<figure><a href=\"\(src)\"><img loading=lazy src=\"\(src)\"></a><figcaption>\(esc(s.preview)) · \(s.appearance) · \(s.width)×\(s.height)</figcaption></figure>\n"
+                    // The framed version when there is one, linking to the plain screenshot.
+                    let src = url(s.file), shown = s.framed.map(url) ?? src
+                    let raw = s.framed == nil ? "" : " · <a href=\"\(src)\">unframed</a>"
+                    body += "<figure><a href=\"\(shown)\"><img class=\"\(s.framed == nil ? "" : "framed")\" loading=lazy src=\"\(shown)\"></a><figcaption>\(esc(s.preview)) · \(s.appearance) · \(s.width)×\(s.height)\(raw)</figcaption></figure>\n"
                 }
                 body += "</div>\n"
             }
@@ -30,7 +35,7 @@ enum Report {
         let page = """
         <!doctype html><meta charset=utf-8><title>Screenshots</title>
         <style>body{font:14px -apple-system,sans-serif;margin:24px;background:#f5f5f7;color:#1d1d1f}
-        .row{display:flex;flex-wrap:wrap;gap:16px}figure{margin:0;width:220px}img{width:100%;border-radius:12px;box-shadow:0 2px 8px #0002;background:#fff}
+        .row{display:flex;flex-wrap:wrap;gap:16px}figure{margin:0;width:220px}img{width:100%;border-radius:12px;box-shadow:0 2px 8px #0002;background:#fff}img.framed{border-radius:0;box-shadow:none;background:none}
         figcaption{font-size:12px;color:#555;margin-top:6px}h3{font-weight:500;color:#444}
         @media (prefers-color-scheme:dark){body{background:#111;color:#eee}figcaption,h3{color:#aaa}}</style>
         <h1>\(sorted.count) screenshots · \(String(format: "%.1f", total))s</h1>

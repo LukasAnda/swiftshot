@@ -102,10 +102,12 @@ struct ScreenRule: Codable {
     var fullLength: Bool?
     var delay: Double?
     var skip: Bool?
+    /// Device frame for these previews: "plain", "appstore" or "none" (host only).
+    var frame: String?
 
     enum CodingKeys: String, CodingKey {
         case preview, appearances, languages, devices, iosVersions = "ios_versions", textSizes = "text_sizes",
-             fullLength = "full_length", delay, skip
+             fullLength = "full_length", delay, skip, frame
     }
 
     func matches(_ name: String) -> Bool { globMatch(preview, name) }
@@ -203,6 +205,8 @@ struct ShotRecord: Codable {
     var width: Int
     var height: Int
     var renderMs: Double
+    /// The framed version (--frame), relative to the output directory.
+    var framed: String? = nil
 }
 
 struct JobResult: Codable {
