@@ -24,4 +24,6 @@ simulators. They boot simulators, so run them one at a time.
 - Output must stay pixel identical to `--mode device`.
 - `Unit tests` must pass before merging. The integration suite runs on every pull request too.
 
+The wiki is published from `docs/wiki` when it changes on main, so edit the pages there.
+
 By contributing you agree that your contribution is licensed under the [AGPL-3.0](LICENSE).

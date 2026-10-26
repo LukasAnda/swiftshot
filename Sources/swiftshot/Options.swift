@@ -50,6 +50,13 @@ struct Options: Codable {
     var emitTable: String?
     var inputFiles: [String] = []   // emit-table: calibration.json files to merge
     var templateCache: String?
+    var frame: FrameMode?             // nil: no frames
+    var frameColors: [String] = []    // "Colour" or "Device=Colour"
+    var framefile: String?
+    var frameBackground: String?
+    var frameOutput: String?          // plain frames (default: "<output>-framed")
+    var frameCache: String?
+    var acceptBezelLicense = false
     var force = false     // init: overwrite an existing swiftshot.json
     var verbose = false
 
@@ -60,7 +67,9 @@ struct Options: Codable {
              clearOutput = "clear_previous_screenshots", shutdownAfter = "shutdown_simulators",
              downloadRuntimes = "download_missing_runtimes", html, statusBar = "status_bar", parallelLanguages = "parallel_languages", timeout, screens, deviceSet = "device_set", watchScheme = "watch_scheme", watchAppPath = "watch_app",
              watchosVersions = "watchos_versions", contentSize = "content_size", textSizes = "text_sizes", fullLength = "full_length", allowUnsupportedDevices = "allow_unsupported_devices",
-             templates = "device_templates", templateCache = "template_cache", noBoot = "no_boot", verbose
+             templates = "device_templates", templateCache = "template_cache", noBoot = "no_boot", verbose,
+             frame, frameColors = "frame_color", framefile, frameBackground = "frame_background", frameOutput = "frame_output",
+             frameCache = "frame_cache", acceptBezelLicense = "accept_bezel_license"
     }
 
     init() {}
@@ -86,6 +95,23 @@ struct Options: Codable {
         try readOpt(.watchScheme, &watchScheme); try readOpt(.watchAppPath, &watchAppPath); try read(.watchosVersions, &watchosVersions)
         try readOpt(.contentSize, &contentSize); try read(.textSizes, &textSizes); try read(.fullLength, &fullLength); try read(.allowUnsupportedDevices, &allowUnsupportedDevices)
         try read(.templates, &templates); try readOpt(.templateCache, &templateCache); try read(.noBoot, &noBoot)
+        // "frame": "plain" | "appstore" | "none" | true | false
+        if let on = try? c.decodeIfPresent(Bool.self, forKey: .frame) { frame = on ? .plain : nil } else if let s = try c.decodeIfPresent(String.self, forKey: .frame) {
+            frame = try Options.frameMode(s)
+        }
+        // "frame_color": "Deep Blue" | ["Deep Blue", "iPad Pro 13-inch (M5)=Silver"] | {"iPad Pro 13-inch (M5)": "Silver"}
+        if let s = try? c.decodeIfPresent(String.self, forKey: .frameColors) { frameColors = [s] } else if let a = try? c.decodeIfPresent([String].self, forKey: .frameColors) {
+            frameColors = a
+        } else if let d = try c.decodeIfPresent([String: String].self, forKey: .frameColors) {
+            frameColors = d.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+        }
+        try readOpt(.framefile, &framefile); try readOpt(.frameBackground, &frameBackground); try readOpt(.frameOutput, &frameOutput)
+        try readOpt(.frameCache, &frameCache); try read(.acceptBezelLicense, &acceptBezelLicense)
+    }
+
+    static func frameMode(_ s: String) throws -> FrameMode? {
+        guard let mode = FrameMode(rawValue: s.lowercased()) else { throw CLIError("frame must be plain, appstore or none (got '\(s)')") }
+        return mode == .none ? nil : mode
     }
 
     static let usage = """
@@ -93,6 +119,7 @@ struct Options: Codable {
 
     USAGE
       swiftshot [run|list|devices|calibrate|emit-table|init] [options]
+      swiftshot frame [<dir>] [frame options]
 
     COMMANDS
       run         Build, render every preview for every device × iOS × language × appearance (default)
@@ -102,6 +129,8 @@ struct Options: Codable {
       emit-table  Merge calibration.json files into the built-in device table (maintainers)
       init        Write a swiftshot.json for the project here: scheme, watch scheme, languages and
                   App Store devices detected (alias auto-setup; --force overwrites an existing one)
+      frame       Put existing screenshots (<dir>, default --output) into device frames, like
+                  `fastlane frameit`. Plain unless --frame appstore.
 
     BUILD
       --project <path> | --workspace <path>   Xcode project or workspace
@@ -136,6 +165,20 @@ struct Options: Codable {
       --no-status-bar                         Leave out the system status bar (9:41, full battery), which is
                                               drawn like on a device by default
 
+    DEVICE FRAMES (Apple's Product Bezels, downloaded on first use)
+      --frame [plain|appstore|none]           plain: the device with the screenshot in it, transparent, in
+                                              <output>-framed/<lang>/<name>_framed.png.
+                                              appstore: App Store size with background and localized title
+                                              (title.strings / Framefile.json), as <lang>/<name>_framed.png
+                                              next to the original, which fastlane deliver uploads instead.
+      --frame-color "Deep Blue,iPad Pro 13-inch (M5)=Silver"
+                                              Bezel colour, for all devices or per device (default per model)
+      --framefile <path>                      frameit Framefile.json (default: found like frameit does)
+      --frame-background <#RRGGBB|image>      App Store background (default: light or dark grey by appearance)
+      --frame-output <dir>                    Where plain frames go (default <output>-framed)
+      --frame-cache <dir>                     Bezel cache (default ~/Library/Caches/swiftshot/frames)
+      --accept-bezel-license                  Accept Apple's Design Resources License without the prompt (CI)
+
     RENDERING
       --mode virtual|device                   virtual (default): every device rendered without booting a simulator.
                                               device: a booted simulator per device, framebuffer capture (the
@@ -153,7 +196,7 @@ struct Options: Codable {
     PER SCREENSHOT
       --screen "<preview>: key=v1,v2 key=v"     Override settings for previews matching <preview> (glob), repeatable.
                                               keys: appearances, languages, devices, ios, text_sizes, full_length,
-                                              delay, skip
+                                              delay, skip, frame
                                               e.g. --screen "Welcome: appearances=light,dark languages=en-US"
                                               (or a "screens" array in the JSON config; first match wins)
 
@@ -191,7 +234,7 @@ struct Options: Codable {
         }
 
         if let first = args.first, !first.hasPrefix("-") {
-            guard ["run", "list", "devices", "calibrate", "emit-table", "init", "auto-setup"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
+            guard ["run", "list", "devices", "calibrate", "emit-table", "init", "auto-setup", "frame"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
             options.command = setup ? "init" : first
             args.removeFirst()
         }
@@ -245,20 +288,37 @@ struct Options: Codable {
             case "--download-missing-runtimes": options.downloadRuntimes = true
             case "--no-html": options.html = false
             case "--no-status-bar": options.statusBar = false
+            case "--frame":
+                // The mode is optional: `--frame` alone means plain.
+                if i + 1 < args.count, FrameMode(rawValue: args[i + 1].lowercased()) != nil { options.frame = try frameMode(try value()) } else { options.frame = .plain }
+            case "--frame-color", "--frame-colour": options.frameColors = list(try value())
+            case "--framefile": options.framefile = try value()
+            case "--frame-background": options.frameBackground = try value()
+            case "--frame-output": options.frameOutput = try value()
+            case "--frame-cache": options.frameCache = try value()
+            case "--accept-bezel-license": options.acceptBezelLicense = true
             case "--force", "-f": options.force = true
             case "--verbose", "-v": options.verbose = true
             case "--help", "-h": print(usage); exit(0)
             case "--version": print("swiftshot \(swiftshotVersion)"); exit(0)
             default:
-                // emit-table takes calibration files as plain arguments.
-                guard options.command == "emit-table", !args[i].hasPrefix("-") else { throw CLIError("Unknown option \(args[i])\n\n\(usage)") }
+                // emit-table takes calibration files as plain arguments, frame a folder.
+                guard ["emit-table", "frame"].contains(options.command), !args[i].hasPrefix("-") else { throw CLIError("Unknown option \(args[i])\n\n\(usage)") }
                 options.inputFiles.append(args[i])
             }
             i += 1
         }
         for a in options.appearances where !["light", "dark"].contains(a) { throw CLIError("Unknown appearance \(a)") }
         try validateTextSizes(options.textSizes)
-        for rule in options.screens { try validateTextSizes(rule.textSizes ?? []) }
+        for rule in options.screens {
+            try validateTextSizes(rule.textSizes ?? [])
+            if let f = rule.frame { _ = try frameMode(f) }
+        }
+        if options.command == "frame" {
+            if options.inputFiles.count > 1 { throw CLIError("frame takes one folder") }
+            if options.frame == nil && !argv.contains("--frame") { options.frame = .plain }
+            if options.frame == nil { throw CLIError("frame: --frame none frames nothing") }
+        }
         if !["png", "jpeg"].contains(options.format) { throw CLIError("--format must be png or jpeg") }
         return options
     }
@@ -286,6 +346,7 @@ func parseScreenRule(_ text: String) throws -> ScreenRule {
         case "full_length", "full-length": rule.fullLength = kv[1] == "true"
         case "delay": rule.delay = Double(kv[1])
         case "skip": rule.skip = kv[1] == "true"
+        case "frame": _ = try Options.frameMode(kv[1]); rule.frame = kv[1].lowercased()
         default: throw CLIError("--screen: unknown key '\(kv[0])'")
         }
     }

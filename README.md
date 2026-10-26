@@ -16,6 +16,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#device-frames">Device frames</a> ·
   <a href="#ci">CI</a> ·
   <a href="#swiftshot-vs-fastlane">vs fastlane</a> ·
   <a href="https://github.com/LukasAnda/swiftshot/wiki">Documentation</a>
@@ -30,6 +31,7 @@
 - Pixel identical to a booted simulator's framebuffer, status bar included.
 - iPhone, iPad, iPhone Duo and Apple Watch.
 - Output in the fastlane/deliver layout, so `fastlane deliver` uploads it unchanged.
+- Optional device frames from Apple's bezels, plain or App Store-ready with localized titles.
 
 ## Install
 
@@ -176,6 +178,30 @@ Keys: `appearances`, `languages`, `devices`, `ios_versions` (`ios` on the comman
 - **Apple Watch.** Add watch models to `--devices`; use `--watch-scheme` if the watch app has its
   own scheme.
 - **Slow content.** `--delay <seconds>` waits before each capture, e.g. for async images.
+
+## Device frames
+
+Swiftshot can put screenshots into Apple's official device bezels.
+
+```
+swiftshot --frame                 # the device with the screenshot in it, transparent
+swiftshot --frame appstore        # App Store size, background and localized title
+swiftshot frame fastlane/screenshots --frame appstore   # an existing folder, like frameit
+```
+
+- **Plain** frames go to `screenshots-framed/<language>/<name>_framed.png`, for your website or
+  press kit.
+- **App Store** frames go next to the originals as `<name>_framed.png`, at the exact size App
+  Store Connect accepts for the device. `fastlane deliver` uploads them instead of the originals.
+- Titles come from `title.strings` in each language folder, or from a frameit `Framefile.json`.
+- `--frame-color "Deep Blue"` picks the device colour. Each model has a default.
+- iPhone 16 to 18, iPhone Air and Duo, current iPads and Apple Watch Ultra and Series 10/11.
+  Other devices stay unframed, with a warning.
+
+The bezels are downloaded from Apple on first use and cached. Swiftshot does not ship them: they
+come under Apple's Design Resources License, which you accept once (`--accept-bezel-license` on CI).
+The [Device frames](https://github.com/LukasAnda/swiftshot/wiki/Device-frames) wiki page has the
+full reference.
 
 ## Swiftshot vs fastlane
 
