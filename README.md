@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/showcase.png" alt="Screenshots rendered by swiftshot in English, German and Arabic">
+  <img src="docs/assets/showcase.png" alt="Screenshots rendered by swiftshot on iPhone, iPad and Apple Watch, in English, German and Arabic">
 </p>
 
 - Renders `#Preview`s directly. No UI tests, no `SnapshotHelper.swift`, no simulator to boot.
