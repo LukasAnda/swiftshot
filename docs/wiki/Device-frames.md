@@ -5,6 +5,8 @@ Swiftshot puts screenshots into Apple's official device bezels, the
 resources. It has two modes: plain frames for websites and press kits, and App Store screenshots
 with a background and a localized title.
 
+![App Store mode in English, German and Arabic, on iPhone 17 Pro Max and iPad Pro 13-inch](images/frames-appstore.png)
+
 ```
 swiftshot --frame                          # render, then frame (plain)
 swiftshot --frame appstore                 # render, then App Store screenshots
