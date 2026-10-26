@@ -68,6 +68,18 @@ struct WatchHabitList: View {
             }
             .navigationTitle("Today")
             .tint(accent)
+            .toolbar {
+                // watchOS 26 draws these as Liquid Glass buttons in the bottom corners: a clear one
+                // and the accent-tinted main action.
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button { } label: { Image(systemName: "chart.bar.xaxis").foregroundStyle(accent) }
+                        .accessibilityLabel("Statistics")
+                    Spacer()
+                    Button { } label: { Image(systemName: "plus").foregroundStyle(.white) }
+                        .tint(accent)
+                        .accessibilityLabel("New habit")
+                }
+            }
         }
     }
 }
