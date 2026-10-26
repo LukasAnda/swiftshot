@@ -19,10 +19,11 @@ struct DemoApp: App {
 struct RootView: View {
     var body: some View {
         TabView {
-            HabitListView().tabItem { Label("Habits", systemImage: "checklist") }
-            StatsView().tabItem { Label("Stats", systemImage: "chart.bar.fill") }
+            HabitListView().tabItem { Label("Habits", systemImage: "checkmark.circle") }
+            StatsView().tabItem { Label("Stats", systemImage: "chart.bar.xaxis") }
             SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }
         }
+        .tint(Theme.accent)
     }
 }
 
