@@ -18,21 +18,6 @@ on:
         default: ""
 
 jobs:
-<<<<<<< HEAD
-  # Required for merging into main: a few minutes, so every pull request gets it quickly.
-  unit:
-    name: Unit tests
-    runs-on: ${{ inputs.runner || 'xcode-27' }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build
-        run: make && swift build --build-tests
-      - name: Unit tests
-        run: swift test --skip-build --filter swiftshotTests
-
-=======
->>>>>>> 3c57cdb (Roadmap; unit tests run for every pull request)
   # One runner per integration test, and per device for the iPhone/iPad parity test: device-mode
   # references boot simulators, so in parallel the suite takes as long as its slowest job.
   test:
