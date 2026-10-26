@@ -4,4 +4,4 @@ bin/
 .bench.noindex/
 *.noindex/
 dist/
-.claude/worktrees/
+.claude/
