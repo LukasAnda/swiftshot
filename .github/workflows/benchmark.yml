@@ -48,7 +48,7 @@ jobs:
       - name: Summary
         if: always()
         run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" "swiftshot ${{ matrix.variant }}" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: swiftshot-bench-${{ matrix.variant }}
@@ -74,7 +74,7 @@ jobs:
       - name: Summary
         if: always()
         run: bench/summary.sh "$RUNNER_TEMP/bench.noindex/results.tsv" fastlane >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: fastlane-bench

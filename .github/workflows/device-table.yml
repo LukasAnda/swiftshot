@@ -46,7 +46,7 @@ jobs:
           # Free space as annotations every 15 min: they survive a runner that runs out of disk.
           ( while sleep 900; do echo "::notice title=disk::$(df -h / | awk 'NR==2{print $4}') free; sim caches $(du -sh /Library/Developer/CoreSimulator/Caches 2>/dev/null | cut -f1); devices $(du -sh "$RUNNER_TEMP/table.noindex/devices.noindex" 2>/dev/null | cut -f1)"; done ) &
           WORK="$RUNNER_TEMP/table.noindex" EMIT=0 FORCE=${{ inputs.force && 1 || 0 }} bench/update-device-table.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: calibration-${{ matrix.runner }}
           path: ${{ runner.temp }}/table.noindex/calibration.json
