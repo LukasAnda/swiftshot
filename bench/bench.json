@@ -18,22 +18,6 @@
   ],
   "screens": [
     {
-      "preview": "Welcome",
-      "appearances": [
-        "light",
-        "dark"
-      ]
-    },
-    {
-      "preview": "Stats",
-      "languages": [
-        "de-DE"
-      ],
-      "devices": [
-        "iPad*"
-      ]
-    },
-    {
       "preview": "Habit row",
       "skip": true
     },
@@ -51,6 +35,18 @@
     },
     {
       "preview": "Share dialog",
+      "skip": true
+    },
+    {
+      "preview": "Stats landscape",
+      "skip": true
+    },
+    {
+      "preview": "UIKit habit list",
+      "skip": true
+    },
+    {
+      "preview": "UIKit streak badge",
       "skip": true
     },
     {
