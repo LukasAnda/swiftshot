@@ -999,6 +999,8 @@ enum ServerCapture {
     typealias Resize = @convention(c) (Int32, UInt32, UInt32) -> Bool
     static let wait: Wait? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_wait").map { unsafeBitCast($0, to: Wait.self) }
     static let resize: Resize? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_resize").map { unsafeBitCast($0, to: Resize.self) }
+    typealias Count = @convention(c) (Int32) -> UInt64
+    static let partials: Count? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_fb_partial_frames").map { unsafeBitCast($0, to: Count.self) }
     static var context: NSObject?
     static var windowContext: NSObject?
     /// Shown over the window being captured, from its own context (SpringBoard's status bar).
@@ -1204,6 +1206,21 @@ enum ServerCapture {
         } }
     }
 
+    /// The rect (pixels) a portrait iPhone's server draws again for SpringBoard's system aperture
+    /// after an app's frame (iOS 27, measured from the swaps of booted simulators: iPhone 17,
+    /// 17 Pro Max, 18 Pro, 18 Pro Max; none on the iPhone Duo): from the top-left corner to the
+    /// island's gain map layers, whose bounds are the island outset by 2 pt
+    /// (CA::Render::GainMapLayer::get_bounds), one pixel more at the bottom. SpringBoard centres
+    /// the island on the screen, where UIKit's exclusion area can end a pixel short of that
+    /// (iPhone 17: 125 pt wide, SpringBoard's island 125.33). nil without an island.
+    static func apertureRedraw(width w: Int, scale: CGFloat) -> CGRect? {
+        guard runtimeMajor >= 27, NoBoot.screen?.idiom == "phone", let a = NoBoot.screen?.display?.exclusionArea, a.count == 4, a[1] > 0 else { return nil }
+        let screenWidth = CGFloat(w) / scale
+        guard a[0] < screenWidth / 2, a[0] + a[2] > screenWidth / 2 else { return nil }
+        let right = screenWidth - a[0], bottom = a[1] + a[3]
+        return CGRect(x: 0, y: 0, width: ((right + 2) * scale).rounded(), height: ((bottom + 2) * scale).rounded() + 1)
+    }
+
     static var keepAttached = false
     /// The rendered runtime's major version (set per job).
     static var runtimeMajor = 27
@@ -1359,6 +1376,31 @@ enum ServerCapture {
         }
         if agreeing < (mismatches > 0 ? 5 : 3) && redraws == limit { log("warning: \(w)x\(h) frames still changing after \(redraws) redraws") }
         if legacySettle { surface = quietFrame(gap: 0.016); bytes = copy(surface, w, h) }
+        if let chromeLayer, h > w, let rect = apertureRedraw(width: w, scale: scale), let partials {
+            // SpringBoard redraws the system aperture once the app's frame is up: on a device the
+            // server then draws the rect of its gain map layers (around the island, out to the
+            // top-left corner) a few more times, as partial updates, and the display takes that
+            // rect from them (FakeDisplay.c). Here the same rect is damaged in the chrome.
+            let damage = CALayer()
+            damage.actions = ["contents": NSNull()]
+            damage.frame = CGRect(x: 0, y: 0, width: rect.width / scale, height: rect.height / scale)
+            chromeLayer.addSublayer(damage)
+            defer { damage.removeFromSuperlayer() }
+            let images = [1, 2].compactMap { UIGraphicsImageRenderer(size: CGSize(width: $0, height: 1)).image { _ in }.cgImage }
+            let start = partials(0)
+            // The server keeps a damage shape per display surface: the first frames after full
+            // ones are still drawn whole. Two partial frames shown, the second confirming.
+            for i in 0..<8 where partials(0) < start + 2 {
+                let last = frameCount()
+                damage.contents = images[i % images.count]
+                CATransaction.flush()
+                for c in shown { _ = synchronize(c, timeout: 20) }
+                guard let next = wait(0, last, 1, &frame)?.takeRetainedValue() else { log("server capture: no frame for the aperture redraw"); break }
+                surface = next
+            }
+            if partials(0) < start + 2 { log("warning: the aperture redraw drew no partial frames") }
+            bytes = copy(surface, w, h)
+        }
         timings.append("pass: commit rendered after \(Int(rendered.timeIntervalSince(t0) * 1000)) ms\(attempts > 0 ? " (\(attempts) extra draws to reach the hosted contexts)" : ""), frame \(frame), \(redraws) redraws\(waits > 0 ? ", \(waits) animation waits" : "")")
         return bytes
     }

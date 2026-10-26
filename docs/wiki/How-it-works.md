@@ -136,8 +136,9 @@ process.
 
 **Virtual display.** UIKit draws through Core Animation, which on a simulator presents frames to
 the simulator's framebuffer through `SimFramebufferClient`. The agent replaces that framework's
-functions with a virtual display. It reports the device's exact display modes and keeps the
-newest `IOSurface` from every swap. With `CA_FORCE_LOCAL_SERVER=1`, the Core Animation render
+functions with a virtual display. It reports the device's exact display modes and shows every
+swap like a booted simulator's display: a frame that redrew only part of the screen updates
+only that rect. With `CA_FORCE_LOCAL_SERVER=1`, the Core Animation render
 server (`CAWindowServer`) runs inside the app process, and the app's window is hosted into it
 with a `CALayerHost`, the way SpringBoard hosts apps.
 
@@ -173,7 +174,10 @@ sequenceDiagram
 
 Each redraw damages the frame without changing what it shows, so a frame that's still settling
 (an animation, glass adapting to the content behind it) shows up as a difference. iOS 26 also
-waits for its glass brightness loop to go quiet. Previews that aren't full screen are rendered
+waits for its glass brightness loop to go quiet. On iOS 27 iPhones with a Dynamic Island, the
+server then redraws the rect SpringBoard's system aperture redraws on a device once an app is
+up (from the top-left corner to just past the island), as partial frames: a blurred backdrop cut
+by that rect comes out a step different inside it, as on the device. Previews that aren't full screen are rendered
 over black and over white, and the alpha channel is computed from the two.
 
 ## 6. Status bar
