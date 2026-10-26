@@ -245,6 +245,17 @@ SWIFTSHOT_INTEGRATION=1 swift test --filter IntegrationTests
 The integration tests render `Example/DemoApp` and compare the output pixel by pixel with booted
 simulators.
 
+## Roadmap
+
+- Homebrew: `brew install swiftshot`
+- Android: Jetpack Compose previews, faster than Paparazzi and Roborazzi
+- Compose Multiplatform
+- Flutter
+- IDE plugins for Xcode, Android Studio and IntelliJ IDEA, to see screenshots as you edit
+
+Details on the [Roadmap](https://github.com/LukasAnda/swiftshot/wiki/Roadmap) wiki page.
+Suggestions are welcome as [feature requests](https://github.com/LukasAnda/swiftshot/issues/new?template=feature_request.yml).
+
 ## Documentation
 
 The [wiki](https://github.com/LukasAnda/swiftshot/wiki) has the full configuration reference, CI

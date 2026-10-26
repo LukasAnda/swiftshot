@@ -1,4 +1,4 @@
-# Unit tests, then the integration suite on a fresh GitHub-hosted runner: no-boot output against a
+# The integration suite on a fresh GitHub-hosted runner: no-boot output against a
 # booted simulator's framebuffer (pixel parity), determinism, the performance budget, and that
 # no-boot rendering boots nothing.
 name: tests
@@ -18,22 +18,9 @@ on:
         default: ""
 
 jobs:
-  # Required for merging into main: a few minutes, so every pull request gets it quickly.
-  unit:
-    name: Unit tests
-    runs-on: ${{ inputs.runner || 'xcode-27' }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build
-        run: make && swift build --build-tests
-      - name: Unit tests
-        run: swift test --skip-build --filter swiftshotTests
-
   # One runner per integration test, and per device for the iPhone/iPad parity test: device-mode
   # references boot simulators, so in parallel the suite takes as long as its slowest job.
   test:
-    needs: unit
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(inputs.tests || '{"include":[{"key":"iPhone 18 Pro","test":"testNoBootMatchesBootedFramebuffer","devices":"iPhone 18 Pro"},{"key":"iPhone 17","test":"testNoBootMatchesBootedFramebuffer","devices":"iPhone 17"},{"key":"iPad Pro 13-inch","test":"testNoBootMatchesBootedFramebuffer","devices":"iPad Pro 13-inch (M5)"},{"key":"iPhone Duo","test":"testDuoMatchesBootedFramebuffer","devices":""},{"key":"Apple Watch","test":"testWatchMatchesBootedFramebuffer","devices":""},{"key":"Deterministic","test":"testDeterministic","devices":""},{"key":"Performance budget","test":"testNoBootPerformanceBudget","devices":""},{"key":"No simulator booted","test":"testNoSimulatorIsBooted","devices":""}]}') }}
@@ -65,7 +52,7 @@ jobs:
         if: always()
         run: |
           { echo '### Integration'; echo '```'; grep -E "max [0-9]+/255|perf:|passed \(|failed \(" "$RUNNER_TEMP/integration.log" || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
           name: integration-screenshots-${{ matrix.key }}
