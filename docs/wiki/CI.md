@@ -9,9 +9,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - uses: LukasAnda/swiftshot@v0.1.3
+      - uses: LukasAnda/swiftshot@v0.2.0
         with:
-          version: 0.1.3
+          version: 0.2.0
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots
@@ -28,7 +28,7 @@ Several iOS versions: the runner image ships a few runtimes. Missing ones can be
 `--download-missing-runtimes` (adds several minutes).
 
 ```yaml
-      - uses: LukasAnda/swiftshot@v0.1.3
+      - uses: LukasAnda/swiftshot@v0.2.0
         with:
           args: --ios 26.5,27.1 --download-missing-runtimes
 ```
@@ -56,7 +56,7 @@ Accept Apple's bezel license with a flag, and cache the downloaded bezels betwee
 ## Other CI
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.1.3 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.2.0 sh
 ~/.swiftshot/bin/swiftshot run --download-missing-runtimes
 ```
 
