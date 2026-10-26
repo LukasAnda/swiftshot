@@ -57,7 +57,7 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/calibrations
       - name: Merge into the table
