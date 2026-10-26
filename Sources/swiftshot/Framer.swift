@@ -57,6 +57,8 @@ final class Bezel {
 
 enum Framer {
     static let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+    nonisolated(unsafe) private static var missingFonts = Set<String>()
+    private static let missingFontsLock = NSLock()
 
     // MARK: Opening
 
@@ -326,7 +328,8 @@ enum Framer {
             }
             let font = CTFontCreateWithName(spec as CFString, size, nil)
             if (CTFontCopyPostScriptName(font) as String) == spec || (CTFontCopyFamilyName(font) as String) == spec { return font }
-            Log.warn("Font '\(spec)' not found; using the system font")
+            missingFontsLock.lock(); let first = missingFonts.insert(spec).inserted; missingFontsLock.unlock()
+            if first { Log.warn("Font '\(spec)' not found; using the system font") }
         }
         return CTFontCreateUIFontForLanguage(bold ? .emphasizedSystem : .system, size, language as CFString)
             ?? CTFontCreateWithName((bold ? "Helvetica-Bold" : "Helvetica") as CFString, size, nil)
