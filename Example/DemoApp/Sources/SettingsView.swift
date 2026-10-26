@@ -19,7 +19,8 @@ struct SettingsView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .background(Theme.canvas)
-                .contentMargins(.horizontal, max(0, (geo.size.width - Theme.readableWidth) / 2), for: .scrollContent)
+                // Wide screens: a readable column. Narrow ones keep the system's inset rows.
+                .contentMargins(.horizontal, max(20, (geo.size.width - Theme.readableWidth) / 2), for: .scrollContent)
                 .navigationTitle("Settings")
                 .tint(Theme.accent)
             }
@@ -109,4 +110,4 @@ private struct LinkRow: View {
     }
 }
 
-#Preview("Settings") { SettingsView() }
+#Preview("Settings") { AppTabs(selection: .settings) }

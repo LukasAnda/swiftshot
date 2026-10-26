@@ -243,5 +243,5 @@ struct Highlights: View {
     }
 }
 
-#Preview("Stats") { StatsView() }
+#Preview("Stats") { AppTabs(selection: .stats) }
 #Preview("Stats landscape", traits: .landscapeLeft) { StatsView() }

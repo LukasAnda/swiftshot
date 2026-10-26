@@ -110,7 +110,12 @@ struct HabitListView: View {
                             }
                             .frame(maxWidth: 1180)
                         } else {
-                            VStack(alignment: .leading, spacing: Theme.Space.xl) { header; list(showsWeek: false) }
+                            VStack(alignment: .leading, spacing: Theme.Space.xl) {
+                                header
+                                list(showsWeek: false)
+                                MilestoneCard()
+                                InsightCard()
+                            }
                         }
                     }
                     .padding(.horizontal, Theme.Space.l + 4)
@@ -183,7 +188,7 @@ struct UpNextCard: View {
             VStack(spacing: 0) {
                 ForEach(Array(History.upNext.enumerated()), id: \.offset) { i, item in
                     let habit = Habit.samples[item.habit]
-                    let time = Date(timeIntervalSince1970: 1_789_948_800 + Double(item.hour * 3600 + item.minute * 60))
+                    let time = History.time(hour: item.hour, minute: item.minute)
                     HStack(spacing: Theme.Space.l) {
                         Text(verbatim: time.formatted(Date.FormatStyle.dateTime.hour().minute().utc))
                             .font(.figure(.body, weight: .semibold)).monospacedDigit()
@@ -250,7 +255,7 @@ struct MilestoneCard: View {
     }
 }
 
-#Preview("Habit list") { HabitListView() }
+#Preview("Habit list") { AppTabs(selection: .today) }
 #Preview("Habit row", traits: .sizeThatFitsLayout) { HabitRow(habit: Habit.samples[0]).padding() }
 
 /// A month of check-ins: taller than any screen (full-length screenshot demo).
@@ -258,19 +263,27 @@ struct HabitHistoryView: View {
     private let days = Array(0..<30)
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(days, id: \.self) { HistoryRow(daysAgo: $0) }
-                } header: {
-                    Text(verbatim: Theme.today.formatted(Date.FormatStyle.dateTime.month(.wide).year().utc))
-                }
+        GeometryReader { geo in
+            NavigationStack {
+                list
+                    // Wide screens: a readable column, like Settings.
+                    .contentMargins(.horizontal, max(20, (geo.size.width - Theme.readableWidth) / 2), for: .scrollContent)
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.canvas)
-            .navigationTitle("History")
-            .tint(Theme.accent)
         }
+    }
+
+    private var list: some View {
+        List {
+            Section {
+                ForEach(days, id: \.self) { HistoryRow(daysAgo: $0) }
+            } header: {
+                Text(verbatim: Theme.today.formatted(Date.FormatStyle.dateTime.month(.wide).year().utc))
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Theme.canvas)
+        .navigationTitle("History")
+        .tint(Theme.accent)
     }
 }
 
@@ -360,7 +373,7 @@ struct NewHabitView: View {
     }
 }
 
-#Preview("History") { HabitHistoryView() }
+#Preview("History") { AppTabs(selection: .history) }
 #Preview("New habit sheet") {
     HabitListView().sheet(isPresented: .constant(true)) { NewHabitView().presentationDetents([.medium]) }
 }
