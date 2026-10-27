@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Habits</string>
+    <string name="today">اليوم</string>
+    <string name="statistics">الإحصاءات</string>
+    <string name="new_habit">عادة جديدة</string>
+    <string name="habit_water">شرب الماء</string>
+    <string name="habit_run">الجري الصباحي</string>
+    <string name="habit_read">قراءة 20 صفحة</string>
+    <string name="habit_meditate">التأمل</string>
+    <string name="habit_journal">اليوميات</string>
+    <string name="detail_water">3 من 8 أكواب</string>
+    <string name="detail_run">5.2 كم</string>
+    <string name="detail_read">8 من 20 صفحة</string>
+    <string name="detail_meditate">10 دقائق</string>
+    <string name="detail_journal">لم يُنجز اليوم بعد</string>
+    <string name="of_8">من 8</string>
+    <string name="next_glass">الكوب التالي</string>
+    <string name="last_7_days">آخر 7 أيام</string>
+    <string name="completion">إنجاز</string>
+    <string name="n_of_m_done">أُنجز %1$d من %2$d</string>
+    <plurals name="days">
+        <item quantity="zero">%d يوم</item>
+        <item quantity="one">يوم واحد</item>
+        <item quantity="two">يومان</item>
+        <item quantity="few">%d أيام</item>
+        <item quantity="many">%d يومًا</item>
+        <item quantity="other">%d يوم</item>
+    </plurals>
+    <plurals name="day_streak">
+        <item quantity="zero">سلسلة %d يوم</item>
+        <item quantity="one">سلسلة يوم واحد</item>
+        <item quantity="two">سلسلة يومين</item>
+        <item quantity="few">سلسلة %d أيام</item>
+        <item quantity="many">سلسلة %d يومًا</item>
+        <item quantity="other">سلسلة %d يوم</item>
+    </plurals>
+</resources>

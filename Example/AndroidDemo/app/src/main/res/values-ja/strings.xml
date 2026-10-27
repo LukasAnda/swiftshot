@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Habits</string>
+    <string name="health_connect">ヘルスコネクト</string>
+    <string name="backup_sync">バックアップと同期</string>
+    <string name="tab_today">今日</string>
+    <string name="tab_stats">統計</string>
+    <string name="tab_history">履歴</string>
+    <string name="tab_settings">設定</string>
+    <string name="statistics">統計</string>
+    <string name="habit_water">水を飲む</string>
+    <string name="habit_run">朝のランニング</string>
+    <string name="habit_read">20ページ読む</string>
+    <string name="habit_meditate">瞑想</string>
+    <string name="habit_journal">日記</string>
+    <string name="detail_water">8杯中3杯</string>
+    <string name="detail_run">5.2 km</string>
+    <string name="detail_read">20ページ中8ページ</string>
+    <string name="detail_meditate">10分</string>
+    <string name="detail_journal">今日はまだ</string>
+    <string name="greeting">おはようございます、Maraさん</string>
+    <string name="summary_body">今日の残りはあと3つ。ランニングは31日連続です。</string>
+    <string name="filter_all">すべて</string>
+    <string name="filter_morning">朝</string>
+    <string name="filter_evening">夜</string>
+    <string name="new_habit">新しい習慣</string>
+    <string name="up_next">このあと</string>
+    <string name="reminders_on">リマインダーオン</string>
+    <string name="note_next_glass">次の1杯</string>
+    <string name="note_pages_to_go">残り12ページ</string>
+    <string name="note_three_lines">3行で十分</string>
+    <string name="insight_title">朝が得意なタイプです</string>
+    <string name="insight_body" formatted="false">9:00前に予定した習慣は94%、20:00以降は61%達成しています。日記を朝に移してみましょう。</string>
+    <string name="next_milestone">次のマイルストーン</string>
+    <string name="milestone_title">ランニング50日連続</string>
+    <string name="completion_rate">達成率</string>
+    <string name="vs_last_week">先週比 %s</string>
+    <string name="last_7_days">過去7日間</string>
+    <string name="last_30_days">過去30日間</string>
+    <string name="range">期間</string>
+    <string name="range_week">週</string>
+    <string name="range_month">月</string>
+    <string name="range_year">年</string>
+    <string name="current_streak">現在の連続記録</string>
+    <string name="best_streak">最長記録</string>
+    <string name="check_ins">チェックイン</string>
+    <string name="consistency">継続度</string>
+    <string name="less">少</string>
+    <string name="more">多</string>
+    <string name="by_habit">習慣別</string>
+    <string name="highlights">ハイライト</string>
+    <string name="best_day">ベストな曜日</string>
+    <string name="best_day_value" formatted="false">水曜日 · 96%</string>
+    <string name="best_time">ベストな時間</string>
+    <string name="best_time_value">9:00前</string>
+    <string name="most_consistent">最も継続</string>
+    <string name="needs_attention">要注意</string>
+    <string name="needs_attention_value" formatted="false">日記 · 47%</string>
+    <string name="perfect_day">パーフェクトな日</string>
+    <string name="in_progress">進行中</string>
+    <string name="all_habits_completed">すべての習慣を達成</string>
+    <string name="n_of_5_habits">5件中%d件</string>
+    <string name="n_of_m_done">%2$d件中%1$d件完了</string>
+    <string name="of_total">/ %d</string>
+    <string name="section_reminders">リマインダー</string>
+    <string name="section_general">一般</string>
+    <string name="section_data">データ</string>
+    <string name="section_about">情報</string>
+    <string name="daily_reminder">毎日のリマインダー</string>
+    <string name="reminder_time">リマインダーの時刻</string>
+    <string name="sounds">サウンド</string>
+    <string name="week_starts_on">週の始まり</string>
+    <string name="monday">月曜日</string>
+    <string name="sunday">日曜日</string>
+    <string name="appearance">外観</string>
+    <string name="appearance_system">システム</string>
+    <string name="export_history">履歴を書き出す</string>
+    <string name="rate_habits">Habitsを評価</string>
+    <string name="privacy">プライバシー</string>
+    <string name="version">バージョン</string>
+    <string name="data_footer">データはお使いのデバイスにのみ保存されます。</string>
+    <string name="plan_since">Habits Plus · 2024年から</string>
+    <string name="welcome_title">大切なことに、続けられるリズムを。</string>
+    <string name="welcome_body">1日1回チェックするだけ。連続記録を積み重ね、1週間の形が見えてきます。</string>
+    <string name="get_started">はじめる</string>
+    <string name="have_account">アカウントをお持ちの方</string>
+    <string name="personal_best">自己ベスト</string>
+    <string name="days_in_a_row">日連続</string>
+    <string name="name">名前</string>
+    <string name="icon">アイコン</string>
+    <string name="repeat">繰り返し</string>
+    <string name="every_day">毎日</string>
+    <string name="remind_me">リマインド</string>
+    <string name="time">時刻</string>
+    <string name="add">追加</string>
+    <string name="cancel">キャンセル</string>
+    <string name="delete">削除</string>
+    <string name="delete_title">「水を飲む」を削除しますか？</string>
+    <string name="delete_body">12日連続の記録と履歴が削除されます。</string>
+    <string name="share_streak">連続記録を共有</string>
+    <plurals name="days">
+        <item quantity="other">%d日間</item>
+    </plurals>
+    <plurals name="n_check_ins">
+        <item quantity="other">チェックイン%d回</item>
+    </plurals>
+    <plurals name="days_to_go">
+        <item quantity="other">あと%d日</item>
+    </plurals>
+    <plurals name="day_streak">
+        <item quantity="other">%d日連続</item>
+    </plurals>
+    <plurals name="last_n_weeks">
+        <item quantity="other">過去%d週間</item>
+    </plurals>
+</resources>

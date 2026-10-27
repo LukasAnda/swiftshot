@@ -1,0 +1,5 @@
+plugins {
+    // AGP 9 compiles Kotlin itself; only the Compose compiler plugin is added.
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.compose.compiler) apply false
+}

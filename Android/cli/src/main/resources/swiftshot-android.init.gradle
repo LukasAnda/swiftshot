@@ -1,0 +1,173 @@
+// Swiftshot's Gradle init script: adds `swiftshotPrepare` to every Android application and library
+// module for this one invocation (nothing in the project changes). The task compiles the variant,
+// resolves its runtime classpath together with Paparazzi's layoutlib SDK, and writes what the
+// renderer needs to build/intermediates/swiftshot/<variant>/module.json.
+//
+//   ./gradlew -I swiftshot-android.init.gradle swiftshotPrepare -Pswiftshot.variant=debug
+
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.Directory
+import org.gradle.api.file.RegularFile
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.OutputFile
+import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.UntrackedTask
+import groovy.json.JsonOutput
+
+@UntrackedTask(because = "Writes a description of the build for the renderer")
+abstract class SwiftshotPrepare extends DefaultTask {
+    @InputFiles abstract ListProperty<RegularFile> getJars()
+    @InputFiles abstract ListProperty<Directory> getDirs()
+    @InputFiles abstract ConfigurableFileCollection getClasspath()
+    @InputFiles abstract ConfigurableFileCollection getModuleRes()
+    @InputFiles abstract ConfigurableFileCollection getLibraryRes()
+    @InputFiles abstract ConfigurableFileCollection getModuleAssets()
+    @InputFiles abstract ConfigurableFileCollection getLibraryAssets()
+    @InputFiles abstract ConfigurableFileCollection getSymbols()
+    @InputFiles abstract ConfigurableFileCollection getLayoutlibRuntime()
+    @InputFiles abstract ConfigurableFileCollection getLayoutlibResources()
+    @InputFiles abstract ConfigurableFileCollection getBootClasspath()
+    @Internal abstract ListProperty<Directory> getLocalRes()
+    @Internal abstract ListProperty<Directory> getLocalAssets()
+    @Input abstract Property<String> getModulePath()
+    @Input abstract Property<String> getNamespace()
+    @Input abstract Property<Integer> getCompileSdk()
+    @Input abstract Property<Integer> getTargetSdk()
+    @Input abstract Property<Boolean> getWear()
+    @Input abstract ListProperty<String> getComponents()
+    @OutputFile abstract RegularFileProperty getOutput()
+
+    @TaskAction
+    void write() {
+        def packages = [namespace.get()] + symbols.files.collect { f -> f.withReader { it.readLine() } }.findAll { it }
+        def json = [
+            module              : modulePath.get(),
+            packageName         : namespace.get(),
+            compileSdk          : compileSdk.get(),
+            targetSdk           : targetSdk.get(),
+            wear                : wear.get(),
+            classDirs           : dirs.get().collect { it.asFile.absolutePath } + jars.get().collect { it.asFile.absolutePath },
+            classpath           : classpath.files.collect { it.absolutePath },
+            bootClasspath       : bootClasspath.files.collect { it.absolutePath },
+            resourcePackageNames: packages.unique(),
+            localResourceDirs   : localRes.getOrElse([]).collect { it.asFile.absolutePath }.findAll { new File(it).exists() },
+            moduleResourceDirs  : moduleRes.files.collect { it.absolutePath },
+            libraryResourceDirs : libraryRes.files.collect { it.absolutePath },
+            assetDirs           : localAssets.getOrElse([]).collect { it.asFile.absolutePath }.findAll { new File(it).exists() } + moduleAssets.files.collect { it.absolutePath },
+            libraryAssetDirs    : libraryAssets.files.collect { it.absolutePath },
+            layoutlibRuntime    : layoutlibRuntime.singleFile.absolutePath,
+            layoutlibResources  : layoutlibResources.singleFile.absolutePath,
+            components          : components.get(),
+        ]
+        def out = output.get().asFile
+        out.parentFile.mkdirs()
+        out.text = JsonOutput.prettyPrint(JsonOutput.toJson(json))
+        println "swiftshot-module ${out.absolutePath}"
+    }
+}
+
+def variantName = startParameter.projectProperties["swiftshot.variant"] ?: "debug"
+def paparazziVersion = startParameter.projectProperties["swiftshot.paparazzi"] ?: "2.0.0-alpha05.1"
+def layoutlibVersion = startParameter.projectProperties["swiftshot.layoutlib"] ?: "16.2.3"
+
+allprojects { p ->
+    ["com.android.application", "com.android.library"].each { id ->
+        p.plugins.withId(id) { setupSwiftshot(p, variantName, paparazziVersion, layoutlibVersion) }
+    }
+}
+
+def setupSwiftshot(p, String variantName, String paparazziVersion, String layoutlibVersion) {
+    def components = p.extensions.getByName("androidComponents")
+    def loader = components.getClass().classLoader
+    def scope = loader.loadClass('com.android.build.api.variant.ScopedArtifacts$Scope').getField("PROJECT").get(null)
+    def classesArtifact = loader.loadClass('com.android.build.api.artifact.ScopedArtifact$CLASSES').getField("INSTANCE").get(null)
+    def artifactType = org.gradle.api.attributes.Attribute.of("artifactType", String)
+
+    def os = System.getProperty("os.name").toLowerCase()
+    def arch = System.getProperty("os.arch").toLowerCase()
+    def nativeClassifier = os.contains("mac") ? (arch.startsWith("x86") ? "mac" : "mac-arm") : os.contains("win") ? "win" : "linux"
+    def runtime = p.configurations.detachedConfiguration(p.dependencies.create("com.android.tools.layoutlib:layoutlib-runtime:${layoutlibVersion}:${nativeClassifier}"))
+    def resources = p.configurations.detachedConfiguration(p.dependencies.create("com.android.tools.layoutlib:layoutlib-resources:${layoutlibVersion}"))
+    runtime.transitive = false
+    resources.transitive = false
+
+    components.onVariants(components.selector().withName(variantName)) { variant ->
+        def source = variant.runtimeConfiguration
+        def cp = p.configurations.create("swiftshot${variant.name.capitalize()}Classpath")
+        cp.canBeConsumed = false
+        cp.canBeResolved = true
+        source.attributes.keySet().each { key -> cp.attributes.attribute(key, source.attributes.getAttribute(key)) }
+        source.extendsFrom.each { cp.extendsFrom(it) }
+        p.dependencies.add(cp.name, "app.cash.paparazzi:paparazzi:${paparazziVersion}")
+
+        def view = { conf, String type, Closure filter ->
+            conf.incoming.artifactView { v ->
+                v.attributes { it.attribute(artifactType, type) }
+                v.componentFilter(filter)
+                v.lenient(false)
+            }.files
+        }
+        def isProject = { it instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier }
+
+        def task = p.tasks.register("swiftshotPrepare", SwiftshotPrepare) { t ->
+            t.group = "swiftshot"
+            t.description = "Prepares the ${variantName} variant for Swiftshot's renderer"
+            t.modulePath.set(p.path)
+            t.namespace.set(variant.namespace)
+            // Plain values and configuration-cache-safe providers only: nothing here may hold on to
+            // the Project, so the project's configuration cache keeps working.
+            def compileSdk = compileSdkOf(p)
+            def target = null
+            try { target = variant.targetSdk?.apiLevel } catch (ignored) { }
+            if (target == null) try { target = variant.minSdk?.apiLevel } catch (ignored) { }
+            t.compileSdk.set(compileSdk)
+            t.targetSdk.set(target instanceof Number && target > 0 ? target.intValue() : compileSdk)
+            t.classpath.from(view(cp, "android-classes-jar", { true }))
+            t.moduleRes.from(view(source, "android-res", isProject))
+            t.libraryRes.from(view(source, "android-res", { !isProject(it) }))
+            t.moduleAssets.from(view(source, "android-assets", isProject))
+            t.libraryAssets.from(view(source, "android-assets", { !isProject(it) }))
+            t.symbols.from(view(source, "android-symbol-with-package-name", { true }))
+            t.layoutlibRuntime.from(runtime)
+            t.layoutlibResources.from(resources)
+            t.bootClasspath.from(components.sdkComponents.bootClasspath)
+            def res = variant.sources.res
+            if (res != null) t.localRes.set(res.all.map { layers -> layers.flatten().reverse() })
+            def assets = variant.sources.assets
+            if (assets != null) t.localAssets.set(assets.all.map { layers -> layers.flatten().reverse() })
+            def ids = source.incoming.resolutionResult.rootComponent.map { root ->
+                def seen = new LinkedHashSet()
+                def queue = [root] as LinkedList
+                def names = []
+                while (!queue.isEmpty()) {
+                    def c = queue.removeFirst()
+                    if (!seen.add(c.id)) continue
+                    def m = c.moduleVersion
+                    names << (m == null ? c.id.displayName : "${m.group}:${m.name}:${m.version}".toString())
+                    c.dependencies.each { d -> if (d instanceof org.gradle.api.artifacts.result.ResolvedDependencyResult) queue << d.selected }
+                }
+                names
+            }
+            t.components.set(ids)
+            t.wear.set(ids.map { list -> list.any { it.startsWith("androidx.wear.compose:") } })
+            t.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/module.json"))
+        }
+        variant.artifacts.forScope(scope).use(task).toGet(classesArtifact, { it.jars }, { it.dirs })
+    }
+}
+
+def compileSdkOf(p) {
+    def android = p.extensions.getByName("android")
+    def v = null
+    try { v = android.compileSdk } catch (ignored) { }
+    if (v instanceof Number) return v.intValue()
+    try { v = android.compileSdkVersion } catch (ignored) { }
+    def m = (v?.toString() ?: "") =~ /(\d+)/
+    return m.find() ? m.group(1).toInteger() : 36
+}

@@ -1,5 +1,5 @@
 name: Swiftshot Preview Screenshots
-description: Screenshots of SwiftUI and UIKit previews for every device, iOS version, language and appearance. No simulator boot.
+description: SwiftUI, UIKit and Jetpack Compose preview screenshots for every device, language and appearance. No simulator or emulator.
 branding:
   icon: camera
   color: blue
@@ -8,7 +8,7 @@ inputs:
     description: swiftshot release to install (e.g. 0.1.0), or "latest"
     default: latest
   args:
-    description: Arguments for `swiftshot run` (project, scheme, devices, languages…), or empty to use swiftshot.json
+    description: Arguments for `swiftshot run` (project, scheme or Gradle modules, devices, languages…), or empty to use swiftshot.json
     default: ""
   working-directory:
     description: Where to run (the folder with your project / swiftshot.json)

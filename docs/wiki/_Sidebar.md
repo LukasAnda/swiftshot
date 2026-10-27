@@ -1,6 +1,7 @@
 **[[Home]]**
 
 - [[Installation]]
+- [[Android]]
 - [[Configuration]]
 - [[Command line]]
 - [[CI]]

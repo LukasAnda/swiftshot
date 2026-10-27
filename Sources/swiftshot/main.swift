@@ -1,6 +1,7 @@
 import Foundation
 
 setvbuf(stdout, nil, _IOLBF, 0)
+Android.handOffIfNeeded(Array(CommandLine.arguments.dropFirst()))
 let semaphore = DispatchSemaphore(value: 0)
 var exitCode: Int32 = 0
 Task {
