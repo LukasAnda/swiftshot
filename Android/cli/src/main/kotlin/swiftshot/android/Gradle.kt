@@ -7,8 +7,13 @@ import java.util.zip.ZipFile
 /** What the init script reports for one module (see swiftshot-android.init.gradle). */
 class Module(val json: Map<*, *>) {
     val path = json["module"] as String
-    val packageName = json["packageName"] as String
-    val wear = json["wear"] as Boolean
+    /** android (layoutlib) or desktop (a Compose Multiplatform JVM target). */
+    val platform = json["platform"] as String? ?: "android"
+    val desktop get() = platform == "desktop"
+    /** How the module is named in logs: `:shared` for Android, `:shared (desktop)` for its desktop target. */
+    val label get() = if (desktop) "$path (desktop)" else path
+    val packageName = json["packageName"] as String? ?: ""
+    val wear = json["wear"] as Boolean? ?: false
     val projectDir = (json["projectDir"] as String?)?.let(::File)
 
     /**
@@ -29,10 +34,10 @@ class Module(val json: Map<*, *>) {
     val classpath = (json["classpath"] as List<*>).map { File(it as String) }
     /** The SDK's android.jar: classes layoutlib leaves out (android.os.Build). Last, so layoutlib wins. */
     val bootClasspath = (json["bootClasspath"] as List<*>? ?: emptyList<Any>()).map { File(it as String) }
-    val layoutlibRuntime = File(json["layoutlibRuntime"] as String)
-    val layoutlibResources = File(json["layoutlibResources"] as String)
-    val hasTooling get() = classpath.any { it.path.contains("ui-tooling") && !it.path.contains("ui-tooling-preview") && !it.path.contains("ui-tooling-data") } ||
-        (json["components"] as List<*>).any { (it as String).startsWith("androidx.compose.ui:ui-tooling:") || (it as String).startsWith("androidx.compose.ui:ui-tooling-android:") }
+    val layoutlibRuntime get() = File(json["layoutlibRuntime"] as String)
+    val layoutlibResources get() = File(json["layoutlibResources"] as String)
+    val hasTooling get() = desktop || classpath.any { it.path.contains("ui-tooling") && !it.path.contains("ui-tooling-preview") && !it.path.contains("ui-tooling-data") } ||
+        (json["components"] as List<*>? ?: emptyList<Any>()).any { (it as String).startsWith("androidx.compose.ui:ui-tooling:") || (it as String).startsWith("androidx.compose.ui:ui-tooling-android:") }
 
     fun environment(appTestDir: File) = linkedMapOf(
         "appTestDir" to appTestDir.path,

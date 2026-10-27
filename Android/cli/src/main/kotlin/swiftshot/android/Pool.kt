@@ -105,12 +105,46 @@ class Pool(val module: Module, private val java: File, private val workerJar: Fi
 
     /** `java @file`: the classpath is far too long for a command line. */
     private fun argfile(): File {
-        val cp = (listOf(workerJar) + module.classDirs + module.classpath + module.bootClasspath).joinToString(File.pathSeparator) { it.absolutePath }
-        val hash = MessageDigest.getInstance("SHA-1").digest((cp + java.path).toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
+        val extra = if (module.desktop) Skiko.runtime(module.classpath)?.let(::listOf) ?: emptyList() else module.bootClasspath
+        // A library's generated R classes go first, ahead of its compile-time R jar.
+        val rClasses = listOfNotNull(RClasses.jar(module))
+        val cp = (listOf(workerJar) + rClasses + module.classDirs + module.classpath + extra).joinToString(File.pathSeparator) { it.absolutePath }
+        val main = if (module.desktop) "swiftshot.android.desktop.DesktopWorkerKt" else "swiftshot.android.worker.WorkerKt"
+        val hash = MessageDigest.getInstance("SHA-1").digest((cp + java.path + main).toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
         val f = File(Cache.root, "args/$hash.args")
         f.parentFile.mkdirs()
-        f.writeText("-cp \"${cp.replace("\\", "\\\\")}\"\nswiftshot.android.worker.WorkerKt\n")
+        f.writeText("-cp \"${cp.replace("\\", "\\\\")}\"\n$main\n")
         return f
+    }
+
+}
+
+/**
+ * Skia's native library for the desktop renderer. A shared module's desktop classpath usually
+ * has skiko-awt but not the runtime for this OS (that comes with `compose.desktop.currentOs` in the
+ * app module), so the matching one is fetched from Maven Central once.
+ */
+object Skiko {
+    fun runtime(classpath: List<File>): File? {
+        if (classpath.any { it.name.startsWith("skiko-awt-runtime-") }) return null
+        val awt = classpath.firstOrNull { it.name.startsWith("skiko-awt-") && it.name.endsWith(".jar") } ?: return null
+        val version = awt.name.removePrefix("skiko-awt-").removeSuffix(".jar")
+        val os = System.getProperty("os.name").lowercase()
+        val arch = if (System.getProperty("os.arch").lowercase().let { it == "aarch64" || it == "arm64" }) "arm64" else "x64"
+        val platform = when {
+            os.contains("mac") -> "macos-$arch"
+            os.contains("win") -> "windows-$arch"
+            else -> "linux-$arch"
+        }
+        val name = "skiko-awt-runtime-$platform"
+        val file = File(Cache.root, "skiko/$name-$version.jar")
+        if (file.isFile) return file
+        file.parentFile.mkdirs()
+        val url = "https://repo1.maven.org/maven2/org/jetbrains/skiko/$name/$version/$name-$version.jar"
+        val tmp = File(file.path + ".part")
+        java.net.URI(url).toURL().openStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+        tmp.renameTo(file)
+        return file
     }
 }
 

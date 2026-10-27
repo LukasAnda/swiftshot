@@ -44,13 +44,14 @@ class Runner(private val o: Options, private val log: Log) {
         // used if the classpath comes out the same.
         val warm = if (o.command == "run") warmPools(budgetAll) else emptyMap()
         val modules = try { Gradle.prepare(o, log) } catch (e: Exception) { warm.values.forEach { it.close() }; throw e }
-        log.ok("Built ${modules.joinToString(", ") { it.path }} in ${"%.1f".format(Locale.ROOT, log.seconds)}s")
+            .filter { o.platforms.isEmpty() || it.platform in o.platforms }
+        log.ok("Built ${modules.joinToString(", ") { it.label }} in ${"%.1f".format(Locale.ROOT, log.seconds)}s")
         val found = modules.associateWith { m -> PreviewScanner(m.classDirs + m.classpath).scan(m.classDirs) }
             .filterValues { it.isNotEmpty() }
         if (found.isEmpty()) { warm.values.forEach { it.close() }; throw CliError("No @Preview functions found in ${modules.joinToString { it.path }}.") }
         if (o.command == "list") {
             for ((m, previews) in found) {
-                println("${m.path}${if (m.wear) " (Wear OS)" else ""}")
+                println("${m.label}${if (m.wear) " (Wear OS)" else ""}")
                 for (p in previews) println("  ${p.name}  ${p.composable}${describe(p)}")
             }
             return 0
@@ -62,7 +63,6 @@ class Runner(private val o: Options, private val log: Log) {
         if (shots.isEmpty()) throw CliError("Nothing to render: every preview is filtered out.")
         if (o.clear) clear()
         val javaBin = Java.find(o)
-        val workerJar = workerJar()
         val byFile = shots.associateBy { it.file.path }
         val results = java.util.Collections.synchronizedList(mutableListOf<Pair<Shot, Result>>())
         val total = shots.size
@@ -73,10 +73,11 @@ class Runner(private val o: Options, private val log: Log) {
         val totalGroups = byModule.values.sumOf { it.size }
         val threads = byModule.map { (m, groups) ->
             val processes = maxOf(1, minOf(groups.size, Math.round(budget * groups.size.toDouble() / totalGroups).toInt()))
-            log.step("${m.path}: ${groups.sumOf { (it["shots"] as List<*>).size }} screenshots in ${groups.size} groups, $processes renderer processes")
-            kotlin.concurrent.thread(name = m.path) {
+            log.step("${m.label}: ${groups.sumOf { (it["shots"] as List<*>).size }} screenshots in ${groups.size} groups, $processes renderer processes")
+            kotlin.concurrent.thread(name = m.label) {
                 val t0 = System.nanoTime()
-                val pool = warm[m.path]?.takeIf { it.argfile == Pool(m, javaBin, workerJar, log).argfile } ?: Pool(m, javaBin, workerJar, log)
+                val workerJar = workerJar(m)
+                val pool = warm[m.label]?.takeIf { it.argfile == Pool(m, javaBin, workerJar, log).argfile } ?: Pool(m, javaBin, workerJar, log)
                 pool.totalProcesses = budget
                 val readyMs = pool.run(groups, processes) { r ->
                     val shot = byFile[r.file] ?: byFile[r.file.replace(Regex("_\\d+\\.png$"), ".png")]
@@ -86,7 +87,7 @@ class Runner(private val o: Options, private val log: Log) {
                     else if (o.verbose) log.step("[$n/$total] ${File(r.file).name} ${r.millis} ms")
                 }
                 val ok = results.count { it.first.module == m && it.second.ok }
-                log.ok("${m.path}: $ok screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (renderer start ${readyMs} ms)")
+                log.ok("${m.label}: $ok screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (renderer start ${readyMs} ms)")
             }
         }
         threads.forEach { it.join() }
@@ -103,16 +104,16 @@ class Runner(private val o: Options, private val log: Log) {
         val root = File(o.projectDir).absoluteFile
         val files = root.walkTopDown().maxDepth(6)
             .onEnter { it.name != ".gradle" && it.name != "src" && it.name != "node_modules" && !it.name.startsWith(".") }
-            .filter { it.name == "module.json" && it.parentFile.name == o.variant && it.parentFile.parentFile.name == "swiftshot" }
+            .filter { it.extension == "json" && it.parentFile.name == o.variant && it.parentFile.parentFile.name == "swiftshot" }
             .toList()
         val modules = files.mapNotNull { runCatching { Module(Json.parse(it.readText()) as Map<*, *>) }.getOrNull() }
             .filter { o.modules.isEmpty() || it.path in o.modules }
+            .filter { o.platforms.isEmpty() || it.platform in o.platforms }
             .filter { m -> (m.classpath + m.bootClasspath).all { it.exists() } }
         if (modules.isEmpty()) return emptyMap()
         val javaBin = Java.find(o)
-        val worker = workerJar()
         val each = maxOf(1, budget / modules.size)
-        modules.associate { m -> m.path to Pool(m, javaBin, worker, log).also { it.totalProcesses = budget; it.warm(each) } }
+        modules.associate { m -> m.label to Pool(m, javaBin, workerJar(m), log).also { it.totalProcesses = budget; it.warm(each) } }
     }.getOrDefault(emptyMap())
 
     private fun describe(p: Preview) = buildList {
@@ -132,8 +133,10 @@ class Runner(private val o: Options, private val log: Log) {
             if (o.previews.isNotEmpty() && o.previews.none { glob(it).matches(p.name) }) continue
             val rule = o.rule(p.name)
             if (rule?.skip == true) continue
-            val watch = m.wear || p.isWatchDevice
+            val watch = !m.desktop && (m.wear || p.isWatchDevice)
             val devices = when {
+                m.desktop -> Devices.resolveDesktop(rule?.devices?.filter { d -> Devices.desktop.any { glob(d).matches(it.name) || it.id == d } }?.ifEmpty { null }
+                    ?: o.desktopDevices.ifEmpty { Devices.defaultDesktop })
                 p.device.isNotEmpty() -> listOf(Devices.fromPreview(p.device) ?: throw CliError("${p.name}: unknown device \"${p.device}\""))
                 rule?.devices != null -> Devices.resolve(rule.devices)
                 watch -> Devices.resolve(o.watchDevices.ifEmpty { Devices.defaultWatch })
@@ -146,7 +149,7 @@ class Runner(private val o: Options, private val log: Log) {
             val systemUi = when (o.systemUi) { "always" -> true; "never" -> false; else -> p.showSystemUi }
             val full = rule?.fullLength ?: o.fullLength
             val mode = when {
-                full -> "vscroll"
+                full && !m.desktop -> "vscroll"
                 systemUi -> "normal"
                 else -> "shrink"
             }
@@ -180,6 +183,7 @@ class Runner(private val o: Options, private val log: Log) {
 
     /** Shots that can share one render session, as worker jobs. */
     private fun groups(m: Module, shots: List<Shot>): List<Map<String, Any?>> {
+        if (m.desktop) return desktopGroups(shots)
         val appTest = File(Cache.root, "app").apply { mkdirs() }
         val runtime = Gradle.unpack(m.layoutlibRuntime)
         val resources = Gradle.unpack(m.layoutlibResources)
@@ -191,6 +195,7 @@ class Runner(private val o: Options, private val log: Log) {
                 "environment" to m.environment(appTest),
                 "device" to s.device.toJson().apply { put("type", if (s.device.type == "watch") "watch" else s.device.type) },
                 "locale" to qualifier(s.language),
+                "languageTag" to s.language.replace('_', '-'),
                 "rtl" to rtl(s.language),
                 "night" to s.dark,
                 "fontScale" to s.fontScale,
@@ -215,6 +220,29 @@ class Runner(private val o: Options, private val log: Log) {
             )
         }
     }
+
+    /** Desktop jobs: no layoutlib, the locale as a BCP 47 tag (the JVM's default locale). */
+    private fun desktopGroups(shots: List<Shot>): List<Map<String, Any?>> =
+        shots.groupBy { listOf(it.device, it.language, it.dark, it.fontScale, it.mode) }.map { (_, list) ->
+            val s = list.first()
+            linkedMapOf(
+                "device" to s.device.toJson(),
+                "locale" to s.language,
+                "rtl" to rtl(s.language),
+                "night" to s.dark,
+                "fontScale" to s.fontScale,
+                "mode" to s.mode,
+                "shots" to list.map { shot ->
+                    linkedMapOf(
+                        "composable" to shot.preview.composable,
+                        "out" to shot.file.path,
+                        "provider" to shot.preview.provider,
+                        "providerLimit" to shot.preview.providerLimit,
+                        "background" to background(shot.preview),
+                    )
+                },
+            )
+        }
 
     private val arts = HashMap<String, FrameArt?>()
     private fun art(d: Device): FrameArt? = if (o.frame != "plain") null else synchronized(arts) { arts.getOrPut(d.id) { Frames.art(d, log) } }
@@ -305,12 +333,13 @@ class Runner(private val o: Options, private val log: Log) {
         )
     }
 
-    /** The worker jar ships next to this one (or in the build output while developing). */
-    private fun workerJar(): File {
-        System.getenv("SWIFTSHOT_ANDROID_WORKER")?.let { return File(it) }
+    /** The worker jars ship next to this one (or sit in the build output while developing). */
+    private fun workerJar(m: Module): File {
+        val (name, module) = if (m.desktop) "swiftshot-desktop-worker.jar" to "desktop-worker" else "swiftshot-android-worker.jar" to "worker"
+        System.getenv(if (m.desktop) "SWIFTSHOT_DESKTOP_WORKER" else "SWIFTSHOT_ANDROID_WORKER")?.let { return File(it) }
         val self = File(Runner::class.java.protectionDomain.codeSource.location.toURI())
-        listOf(File(self.parentFile, "swiftshot-android-worker.jar"), File(self.parentFile, "../../../worker/build/libs/swiftshot-android-worker.jar"))
+        listOf(File(self.parentFile, name), File(self.parentFile, "../../../$module/build/libs/$name"))
             .firstOrNull { it.isFile }?.let { return it.canonicalFile }
-        throw CliError("swiftshot-android-worker.jar not found next to ${self.name}")
+        throw CliError("$name not found next to ${self.name}")
     }
 }
