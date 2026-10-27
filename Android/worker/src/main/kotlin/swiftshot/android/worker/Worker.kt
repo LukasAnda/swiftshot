@@ -48,7 +48,7 @@ fun main() {
             System.setProperty("paparazzi.layoutlib.resources.root", job.str("layoutlibResources"))
             env = environment(job.map("environment"))
         }
-        val emit = { line: String -> out.println(line); out.flush() }
+        val emit = { line: String -> synchronized(out) { out.println(line); out.flush() } }
         try {
             runGroup(env, job, emit)
         } catch (t: Throwable) {
@@ -90,6 +90,7 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
     SystemUi.init(job.str("layoutlibRuntime"))
     var frame: BufferedImage? = null
     var remaining = 0
+    val pending = mutableListOf<java.util.concurrent.Future<*>>()
     val sdk = PaparazziSdk(
         environment = env,
         deviceConfig = device,
@@ -106,11 +107,16 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
         // Android 15 enforces edge-to-edge for apps that target it; Android Studio renders them so.
         RenderParamsFlags.FLAG_KEY_EDGE_TO_EDGE to (targetSdk >= 35),
     )
+    val trace = System.getenv("SWIFTSHOT_TRACE") != null
+    fun mark(what: String) { if (trace) System.err.println("TRACE ${what} ${(System.nanoTime() - start) / 1_000_000} ms (jvm up ${java.lang.management.ManagementFactory.getRuntimeMXBean().uptime} ms)") }
     try {
+        mark("begin")
         sdk.setup()
+        mark("setup")
         Insets.install()
         val injected = SessionFlags.add(flags, targetSdk)
         sdk.prepare()
+        mark("prepare")
         // The very first session is built before Paparazzi's builder exists: rebuild it with the flags.
         if (!injected && SessionFlags.add(flags, targetSdk)) sdk.unsafeUpdateConfig(theme = job.str("theme"))
     } catch (t: Throwable) {
@@ -151,21 +157,32 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
                 var image = frame ?: error("no frame rendered")
                 if (ownBars) image = SystemUi.draw(image, device.density.dpiValue, bars, job.bool("night"), job.bool("rtl"), handle = true)
                 File(target).parentFile.mkdirs()
-                val final = opaque(image, round, job.str("roundCorners"))
-                ImageIO.write(final, "png", File(target))
-                shot.strOrNull("framed")?.let { framed ->
-                    val f = File(if (index < 0) framed else framed.removeSuffix("_framed.png") + "_${index + 1}_framed.png")
-                    runCatching {
-                        f.parentFile.mkdirs()
-                        ImageIO.write(Frame.compose(final, job.map("frame")), "png", f)
-                    }.onFailure { System.err.println("swiftshot: no frame for $target: ${message(it)}") }
+                val renderMs = (System.nanoTime() - t0) / 1_000_000
+                val size = "${image.width}x${image.height}"
+                val rendered = image
+                // PNG encoding (and framing) runs beside the next render instead of before it.
+                pending += Encoder.pool.submit {
+                    try {
+                        val final = opaque(rendered, round, job.str("roundCorners"))
+                        ImageIO.write(final, "png", File(target))
+                        shot.strOrNull("framed")?.let { framed ->
+                            val f = File(if (index < 0) framed else framed.removeSuffix("_framed.png") + "_${index + 1}_framed.png")
+                            runCatching {
+                                f.parentFile.mkdirs()
+                                ImageIO.write(Frame.compose(final, job.map("frame")), "png", f)
+                            }.onFailure { System.err.println("swiftshot: no frame for $target: ${message(it)}") }
+                        }
+                        emit("ok\t$target\t$renderMs\t$size")
+                    } catch (t: Throwable) {
+                        emit("error\t$target\t${message(t)}")
+                    }
                 }
-                emit("ok\t$target\t${(System.nanoTime() - t0) / 1_000_000}\t${image.width}x${image.height}")
             } catch (t: Throwable) {
                 emit("error\t$target\t${message(t)}")
             }
         }
     }
+    pending.forEach { it.get() }
     try {
         sdk.teardown()
     } catch (_: Throwable) {
@@ -270,6 +287,10 @@ object Debug {
         }
         System.err.println("  view y=${v.top} h=${v.height}")
     }
+}
+
+object Encoder {
+    val pool: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newFixedThreadPool(2) { r -> Thread(r, "encoder").apply { isDaemon = true } }
 }
 
 /** How many values a PreviewParameterProvider gives (its `count`, as Android Studio uses). */
