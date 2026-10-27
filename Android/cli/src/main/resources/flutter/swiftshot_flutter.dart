@@ -33,6 +33,12 @@ class _Device {
         size = Size((j['width'] as num).toDouble(), (j['height'] as num).toDouble()),
         ratio = (j['ratio'] as num).toDouble(),
         insets = [for (final v in j['insets'] as List) (v as num).toDouble()];
+  _Device.native()
+      : name = '',
+        platform = defaultTargetPlatform,
+        size = Size.zero,
+        ratio = 1,
+        insets = const [0, 0, 0, 0];
   final String name;
   final TargetPlatform platform;
   final Size size;
@@ -134,6 +140,9 @@ List<_Shot> _plan(List<Entry> entries, Map<String, dynamic> job) {
     final brightnesses = preview.brightness != null ? [preview.brightness!] : appearances;
     final textScales = preview.textScaleFactor != null ? [preview.textScaleFactor!] : scales;
     for (final device in devices) {
+      // iPhones and iPads that render on the iOS engine: only the components it needs measured.
+      final size = preview.size;
+      if (job['iosMeasureOnly'] == true && device.platform == TargetPlatform.iOS && (size == null || (size.width.isFinite && size.height.isFinite))) continue;
       for (final b in brightnesses) {
         for (final s in textScales) {
           var base = '${_clean(device.name)}-${_clean(name)}';
@@ -227,6 +236,19 @@ List<LocalizationsDelegate<Object?>> Function() kDefaultLocalizations = () => co
 /// text scales, output folder and fonts; one result line per shot goes to its results file.
 void run(List<Entry> entries, String jobPath) {
   final job = json.decode(File(jobPath).readAsStringSync()) as Map<String, dynamic>;
+  // What Swiftshot's iOS host app needs: each preview by its index, as the annotations say.
+  final manifest = job['manifest'] as String?;
+  if (manifest != null) {
+    double? finite(double? v) => v != null && v.isFinite ? v : null;
+    final list = [
+      for (final (e, p) in previewsOf(entries))
+        {'name': p.name ?? e.function, 'width': finite(p.size?.width), 'height': finite(p.size?.height), 'component': p.size != null,
+          'brightness': p.brightness?.name, 'textScale': p.textScaleFactor, 'locale': p.localizations?.call().locale?.toLanguageTag(),
+          'script': e.script, 'line': e.line},
+    ];
+    final tmp = File('$manifest.${pid}')..writeAsStringSync(json.encode(list));
+    tmp.renameSync(manifest);
+  }
   testWidgets('swiftshot ${job['language']}', (tester) async {
     // One line per shot, written straight away: a process that dies still says how far it got.
     final results = File(job['results'] as String)..writeAsStringSync('');
@@ -296,4 +318,17 @@ void run(List<Entry> entries, String jobPath) {
       tester.platformDispatcher.clearAllTestValues();
     }
   }, timeout: Timeout.none);
+}
+
+/// One preview as the app of a device: Swiftshot's iOS host app spawns an engine per screenshot
+/// with the preview's index in [previewsOf] as [args]. Brightness, locale and text scale are the
+/// device's own: the process is started with the language and the window with the appearance.
+void runPreview(List<Entry> entries, List<String> args) {
+  final (entry, preview) = previewsOf(entries)[int.parse(args.first)];
+  runApp(Builder(builder: (context) {
+    final dispatcher = ui.PlatformDispatcher.instance;
+    final shot = _Shot(entry, preview, preview.name ?? entry.function, _Device.native(), dispatcher.locale,
+        preview.brightness ?? MediaQuery.platformBrightnessOf(context), preview.textScaleFactor ?? MediaQuery.textScalerOf(context).scale(1), '');
+    return _tree(shot, GlobalKey());
+  }));
 }

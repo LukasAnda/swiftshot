@@ -31,9 +31,13 @@ class Flutter(private val o: Options, private val log: Log) {
         if (public.isEmpty()) throw CliError("No @Preview functions found in ${File(root, "lib")}.")
         val devices = devices()
         val languages = o.languages.map { it.replace('_', '-') }
+        val iosDevices = devices.filter { it["platform"] == "ios" }.map { it["name"] as String }
+        val exact = if (iosDevices.isEmpty()) null else FlutterIos(o, log, root, File(root, ".dart_tool/swiftshot"), sdk, output).let { f ->
+            f.unavailable()?.let { why -> log.step("iPhones and iPads rendered headless ($why); on a Mac with Xcode they render exactly as on a device"); null } ?: f
+        }
         if (o.clear) output.listFiles()?.forEach { if (it.isDirectory) it.deleteRecursively() else if (it.name.endsWith(".png") || it.name == "screenshots.html" || it.name == "swiftshot-report.json") it.delete() }
         val dir = File(root, ".dart_tool/swiftshot").apply { deleteRecursively(); mkdirs() }
-        generate(dir, pkg, public, pubspec, languages, devices)
+        generate(dir, pkg, public, pubspec, languages, devices, exact != null)
         val processes = if (o.parallel > 0) o.parallel else maxOf(1, minOf(languages.size, Runtime.getRuntime().availableProcessors()))
         log.step("${public.size} preview declarations, ${devices.size} devices, ${languages.size} languages, $processes tester processes")
         val t0 = System.nanoTime()
@@ -53,9 +57,29 @@ class Flutter(private val o: Options, private val log: Log) {
         for (r in results.filter { it["ok"] != true }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["error"]} (${r["script"]}:${r["line"]})")
         if (status != 0 && results.isEmpty()) throw CliError("flutter test failed:\n${out.toString().lines().filter { it.isNotBlank() }.takeLast(40).joinToString("\n")}")
         log.ok("${ok.size} screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (flutter test)")
-        report(ok, results.filter { it["ok"] != true })
-        log.ok("${ok.size} screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
-        return if (ok.isNotEmpty() && ok.size == results.size) 0 else 1
+        var shots = ok
+        if (exact != null) {
+            val manifest = (Json.parse(File(dir, "previews.json").readText()) as List<*>).map { it as Map<*, *> }
+            // Self-sizing components: their size in points from the headless iPhone renders.
+            val ratios = devices.associate { (it["name"] as String) to (it["ratio"] as Number).toDouble() }
+            val measured = HashMap<String, Pair<Double, Double>>()
+            for (r in ok) if (ratios[r["device"]] != null && (r["device"] as String) in iosDevices) {
+                val (w, h) = (r["size"] as String).split('x').map { it.toDouble() / ratios[r["device"]]!! }
+                measured.putIfAbsent(r["preview"] as String, w to h)
+            }
+            val t1 = System.nanoTime()
+            val rendered = exact.run(manifest, measured, iosDevices)
+            if (rendered != null) {
+                log.ok("${rendered.size} iOS screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t1) / 1e9)}s (Flutter's iOS engine, no simulator booted)")
+                shots = ok.filter { (it["device"] as String) !in iosDevices } + rendered.map { s ->
+                    mapOf("ok" to true, "file" to File(output, s.file).path, "preview" to s.preview, "device" to s.device, "language" to s.language,
+                        "appearance" to s.appearance, "fontScale" to 1.0, "size" to "${s.width}x${s.height}", "millis" to 0, "script" to null, "line" to null)
+                }
+            }
+        }
+        report(shots, results.filter { it["ok"] != true })
+        log.ok("${shots.size} screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
+        return if (shots.isNotEmpty() && ok.size == results.size) 0 else 1
     }
 
     /** The SDK: --flutter-root, FLUTTER_ROOT, the project's fvm version, then `flutter` on the PATH. */
@@ -90,7 +114,7 @@ class Flutter(private val o: Options, private val log: Log) {
 
     private fun file(language: String) = "swiftshot_" + language.lowercase().replace(Regex("[^a-z0-9]"), "_")
 
-    private fun generate(dir: File, pkg: String, previews: List<DartScanner.Found>, pubspec: String, languages: List<String>, devices: List<Map<String, Any?>>) {
+    private fun generate(dir: File, pkg: String, previews: List<DartScanner.Found>, pubspec: String, languages: List<String>, devices: List<Map<String, Any?>>, iosExact: Boolean) {
         File(dir, "swiftshot_flutter.dart").writeText(Flutter::class.java.getResource("/flutter/swiftshot_flutter.dart")!!.readText())
         val lib = File(root, "lib")
         val byFile = previews.groupBy { it.library }
@@ -122,7 +146,9 @@ class Flutter(private val o: Options, private val log: Log) {
             val job = linkedMapOf(
                 "language" to lang, "languages" to languages, "devices" to devices, "appearances" to o.appearances,
                 "fontScales" to o.fontScales, "previews" to o.previews, "output" to output.path, "delay" to o.delay,
-                "results" to File(dir, "${file(lang)}.results.jsonl").path,
+                "results" to File(dir, "${file(lang)}.results.jsonl").path, "manifest" to File(dir, "previews.json").path,
+                // iPhones and iPads render on the iOS engine: here only the components it needs measured.
+                "iosMeasureOnly" to iosExact,
                 "fonts" to fonts.forLanguage(lang, ios = devices.any { it["platform"] == "ios" }, android = devices.any { it["platform"] == "android" }),
             )
             File(dir, "${file(lang)}.json").writeText(Json.write(job, "  "))

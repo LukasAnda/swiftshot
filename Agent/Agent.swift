@@ -516,6 +516,8 @@ final class AgentRunner {
         window.isHidden = false
         window.layoutIfNeeded()
         settle(frames: job.settleFrames, delay: job.delay(for: preview.name))
+        // Compose and Flutter draw on their own clock: until they have drawn this preview.
+        ServerCapture.composeIdle(window)
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { dumpPresentation(vc, window) }
         return window
     }
@@ -1201,6 +1203,13 @@ enum ServerCapture {
     static func composeIdle(_ window: UIWindow) {
         guard hostsCompose(window), let running = displayLinksRunning else { return }
         let t0 = Date()
+        // Flutter starts its isolate asynchronously: no link wants frames before the first one.
+        // Its view controller says when Flutter's UI is on screen (displayingFlutterUI).
+        let flutter = flutterControllers(window.rootViewController)
+        func drawn() -> Bool { flutter.allSatisfy { ($0.value(forKey: "displayingFlutterUI") as? Bool) == true } }
+        while !flutter.isEmpty && Date().timeIntervalSince(t0) < 10 && !drawn() {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0 / 240.0))
+        }
         var idle = 0
         while idle < 3 && Date().timeIntervalSince(t0) < 5 {
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0 / 60.0))
@@ -1220,10 +1229,18 @@ enum ServerCapture {
         .map { unsafeBitCast($0, to: (@convention(c) () -> Int32).self) }
 
     /// A view of Compose Multiplatform's UIKit host in the window (CMPViewController's views).
+    /// A view of a toolkit that draws its own frames at display-link ticks: Compose
+    /// Multiplatform's UIKit host (CMPViewController's views) or Flutter's (FlutterView).
     static func hostsCompose(_ view: UIView) -> Bool {
         let name = NSStringFromClass(type(of: view))
-        if name.hasPrefix("CMP") || name.contains("ComposeSceneLayerView") || name.contains("ComposeContainerView") { return true }
+        if name.hasPrefix("CMP") || name.contains("ComposeSceneLayerView") || name.contains("ComposeContainerView") || name == "FlutterView" { return true }
         return view.subviews.contains { hostsCompose($0) }
+    }
+
+    static func flutterControllers(_ vc: UIViewController?) -> [UIViewController] {
+        guard let vc else { return [] }
+        let own = NSClassFromString("FlutterViewController").map { vc.isKind(of: $0) } == true ? [vc] : []
+        return own + vc.children.flatMap(flutterControllers) + flutterControllers(vc.presentedViewController)
     }
 
     /// iOS 26's glass settles through a server ↔ UIKit luma feedback loop (see settled(_:)).
