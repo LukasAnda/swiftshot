@@ -9,8 +9,12 @@ One `swiftshot` binary covers both platforms. It renders Android when:
   `settings.gradle(.kts)`, no `.xcodeproj` or `.xcworkspace`, no `--project`, `--workspace` or
   `--app`, and no `project`, `workspace` or `scheme` in `swiftshot.json`.
 
-Otherwise it renders iOS. `--platform ios` forces iOS. On Linux (and with the Android-only
-package) `swiftshot` is the Android renderer.
+Otherwise it renders iOS. `--platform ios` forces iOS.
+
+On Linux (and with the Android-only package) `swiftshot` is the Android renderer, with the same
+`run`, `list`, `devices` and `init` commands. `--platform android` is accepted. `--platform ios`,
+a folder with an Xcode project, and the Mac-only `frame`, `calibrate` and `emit-table` stop with
+a message that iOS needs a Mac with Xcode. Compose Multiplatform iOS targets are skipped.
 
 - [iOS](#ios)
 - [Android](#android): `swiftshot --platform android --help`
@@ -134,6 +138,7 @@ COMMANDS
 
 PROJECT
   --project-dir <path>                  Gradle project (default: .)
+  --platform android                    Accepted as on the Mac (iOS projects need the Mac tool)
   --modules ":app,:wear"                Modules to render (default: every Android module with previews)
   --variant <name>                      Build variant (default: debug)
   --gradle-arg <arg>                    Extra Gradle argument (repeatable)

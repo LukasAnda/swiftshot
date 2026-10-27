@@ -24,11 +24,11 @@ watch app has its own scheme.
 
 ## Android
 
-**No JDK 21.** `swiftshot needs JDK 21 or later for Android projects` (from the launcher) or
-`Swiftshot needs JDK 21 or later to render Android previews`: install one, or set `JAVA_HOME`,
-`SWIFTSHOT_JAVA_HOME` or `--java-home`. Android Studio's bundled JDK is found automatically. The
-lookup order is on [[Installation]]. An `UnsupportedClassVersionError` means the `java` on `PATH`
-is older than 21.
+**No JDK 21.** `swiftshot needs a JDK 21 or later` (from the launcher) or `Swiftshot needs JDK 21
+or later to render Android previews`: install one (`openjdk-21-jre-headless` on Debian and Ubuntu,
+`java-21-openjdk-headless` on Fedora), or set `JAVA_HOME`, `SWIFTSHOT_JAVA_HOME` or `--java-home`.
+Android Studio's JDK and the ones in `/usr/lib/jvm` are found automatically. The lookup order is
+on [[Installation]].
 
 **ui-tooling missing.** `:app has no androidx.compose.ui:ui-tooling on its debug classpath; add
 debugImplementation("androidx.compose.ui:ui-tooling") as Android Studio's previews need it too.`
@@ -38,6 +38,13 @@ variant's classpath.
 **iOS runs instead of Android.** A folder with an `.xcodeproj` or `.xcworkspace`, or a
 `swiftshot.json` with `project`, `workspace` or `scheme`, is an iOS project. Pass
 `--platform android`, or `--project-dir` to point at the Gradle project.
+
+**iOS needs a Mac.** `iOS needs a Mac with Xcode` on Linux: `--platform ios`, a folder with an
+Xcode project, `swiftshot frame`, `calibrate` and `emit-table` need the Mac tool. In a Compose
+Multiplatform project the iOS targets are skipped and the rest renders.
+
+**A note about iOS keys.** `swiftshot.json: scheme, mode are for iOS on a Mac; ignored here`: the
+file is shared with the iOS tool. Nothing to fix.
 
 **Gradle failed.** `Gradle failed (exit <n>)` is followed by the last 40 lines of Gradle's
 output; `--verbose` shows all of it. Run `./gradlew assembleDebug` to see whether the project

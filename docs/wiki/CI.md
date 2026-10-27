@@ -1,7 +1,7 @@
 | | runner | needs |
 |---|---|---|
 | iOS | a Mac: the free GitHub-hosted `macos-26` and `xcode-27` runners | Xcode and the runtimes you render |
-| Android | any Linux or Mac runner, e.g. the free `ubuntu-latest` | a JDK 21+ and the Android SDK your build uses (preinstalled on GitHub's runners) |
+| Android, Compose Multiplatform (Android, desktop) | any Linux or Mac runner, e.g. the free `ubuntu-latest` | a JDK 21+ and the Android SDK your build uses (preinstalled on GitHub's runners) |
 
 Neither boots a simulator or an emulator, and neither needs a GUI session.
 
@@ -13,9 +13,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
         with:
-          version: 0.4.0
+          version: 0.6.0
       - uses: actions/upload-artifact@v7
         with:
           name: ios-screenshots
@@ -30,9 +30,9 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
         with:
-          version: 0.4.0
+          version: 0.6.0
       - uses: actions/upload-artifact@v7
         with:
           name: android-screenshots
@@ -45,8 +45,8 @@ jobs:
 | `args` | | arguments for `swiftshot run`; empty uses `swiftshot.json` |
 | `working-directory` | `.` | folder with the project and `swiftshot.json` |
 
-The action runs `install.sh`: on a Linux runner it installs the Android package, on an Apple
-silicon Mac both platforms. In a Gradle project `swiftshot run` renders Android, see
+The action runs `install.sh`: on a Linux runner it installs the Android package (Android and
+Compose Multiplatform without iOS), on an Apple silicon Mac both platforms. In a Gradle project `swiftshot run` renders Android, see
 [[Command line]].
 
 ## iOS
@@ -55,7 +55,7 @@ Several iOS versions: the runner image ships a few runtimes. Missing ones can be
 `--download-missing-runtimes` (adds several minutes).
 
 ```yaml
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
         with:
           args: --ios 26.5,27.1 --download-missing-runtimes
 ```
@@ -75,7 +75,7 @@ own cache (unpacked layoutlib, class-data-sharing archives, device art) can be c
       - uses: actions/cache@v6
         with:
           path: ~/.cache/swiftshot/android
-          key: swiftshot-android-${{ runner.os }}-0.4.0
+          key: swiftshot-android-${{ runner.os }}-0.6.0
 ```
 
 macOS runners work the same way; there the cache is `~/Library/Caches/swiftshot/android`.
@@ -83,7 +83,7 @@ macOS runners work the same way; there the cache is `~/Library/Caches/swiftshot/
 Pass Gradle arguments with `args`, for example a module and a variant:
 
 ```yaml
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
         with:
           args: --modules :app --variant demoDebug --gradle-arg=--no-daemon
 ```
@@ -103,7 +103,7 @@ iOS: accept Apple's bezel license with a flag, and cache the downloaded bezels b
         with:
           path: ~/Library/Caches/swiftshot/frames
           key: swiftshot-frames-1
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
         with:
           args: --frame appstore --accept-bezel-license
 ```
@@ -114,7 +114,7 @@ into Swiftshot's cache, which the cache step above keeps.
 ## Other CI
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.4.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.6.0 sh
 ~/.swiftshot/bin/swiftshot run --download-missing-runtimes     # iOS
 ~/.swiftshot/bin/swiftshot run                                 # Android, in the folder with gradlew
 ```

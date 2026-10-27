@@ -59,6 +59,7 @@ a JSON report.
 
 - Android, desktop and iOS screenshots from one module, in one run.
 - iOS through the same no-boot renderer, pixel identical to a booted simulator (Mac with Xcode).
+- On Linux, the Android and desktop targets; iOS is skipped.
 
 ## Install
 
@@ -68,7 +69,15 @@ On a Mac (Apple silicon), for iOS and Android:
 brew install lukasanda/tap/swiftshot
 ```
 
-Or without Homebrew, on a Mac or on Linux (Android only there):
+On Linux, for Android, desktop and Compose Multiplatform (no iOS), with a JDK 21+:
+
+| | |
+|---|---|
+| Homebrew | `brew install lukasanda/tap/swiftshot` |
+| Debian, Ubuntu | `curl -fsSLO https://github.com/LukasAnda/swiftshot/releases/latest/download/swiftshot_all.deb && sudo apt install ./swiftshot_all.deb` |
+| Fedora, RHEL, openSUSE | `sudo dnf install https://github.com/LukasAnda/swiftshot/releases/latest/download/swiftshot.noarch.rpm` |
+
+Or without a package manager, on a Mac or on Linux:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | sh
@@ -142,8 +151,8 @@ wiki page.
 ## CI
 
 iOS needs a Mac with Xcode and the runtimes you render; it runs on the free `macos-26` and
-`xcode-27` runners. Android runs on any runner with a JDK 21+, including `ubuntu-latest`. Neither
-boots a simulator or an emulator.
+`xcode-27` runners. Android, desktop and Compose Multiplatform (without iOS) run on any runner
+with a JDK 21+, including `ubuntu-latest`. Neither boots a simulator or an emulator.
 
 ```yaml
 jobs:
@@ -151,9 +160,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
         with:
-          version: 0.4.0      # or "latest"
+          version: 0.6.0      # or "latest"
       - uses: actions/upload-artifact@v7
         with: { name: ios-screenshots, path: fastlane/screenshots }
 
@@ -163,9 +172,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
         with:
-          version: 0.4.0
+          version: 0.6.0
       - uses: actions/upload-artifact@v7
         with: { name: android-screenshots, path: fastlane/metadata/android }
 ```
@@ -176,7 +185,7 @@ The action installs the release and runs `swiftshot run` with your `swiftshot.js
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.4.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.6.0 sh
 ~/.swiftshot/bin/swiftshot run
 ```
 
@@ -401,7 +410,8 @@ Android:
 
 Compose Multiplatform:
 
-- As Android, plus a Mac with Xcode for the iOS target
+- As Android, plus a Mac with Xcode for the iOS target. Linux renders the Android and desktop
+  targets.
 
 ## Development
 
@@ -424,7 +434,7 @@ the time budget.
 | [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | Homebrew: `brew install lukasanda/tap/swiftshot` (released) |
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.4.0) | Android: Jetpack Compose previews (released) |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.5.0) | Compose Multiplatform: Android, desktop and iOS (released) |
-| [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/6) | Linux as a full host: the same `swiftshot` command, setup and config as on a Mac (iOS skipped) |
+| [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | Linux as a full host: the same `swiftshot` command, setup and config as on a Mac (released) |
 | [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/7) | Easy migration from Paparazzi and Roborazzi: `swiftshot init` sets Swiftshot up to match |
 | [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
 | [v0.9.0](https://github.com/LukasAnda/swiftshot/milestone/5) | IDE plugins for Xcode, Android Studio and IntelliJ IDEA |

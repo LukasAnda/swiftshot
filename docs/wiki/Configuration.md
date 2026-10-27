@@ -7,12 +7,18 @@ overwrites an existing file.
   `values-*/strings*.xml` for, Play devices (Pixel 10 Pro, Pixel 9 Pro Fold, Pixel Tablet), a
   watch device if a module uses Wear OS, and the `fastlane` layout if the project has a `fastlane`
   folder. Nothing is built.
+- Compose Multiplatform: only the modules with `@Preview`s, the languages from
+  `composeResources`, and `desktop_devices` / `ios_devices` when the module has those targets.
 
 Swiftshot reads `./swiftshot.json` automatically, or the file given with `--config`. Command-line
 flags override the file.
 
-iOS and Android each have their own keys, below; a key that only the other platform knows is an
-error on Android. A file with `project`, `workspace` or `scheme` is an iOS configuration.
+iOS and Android each have their own keys, below. A file with `project`, `workspace` or `scheme`
+is an iOS configuration. Unknown keys are an error.
+
+One `swiftshot.json` can serve both: in a Gradle project, and on Linux, the iOS-only keys
+(`scheme`, `project`, `mode`, `status_bar`…) are ignored with a note, and `"frame": "appstore"`
+gives plain device frames.
 
 - [iOS](#example)
 - [Android](#android)
