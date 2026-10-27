@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RunnerPlanTest {
@@ -325,5 +326,28 @@ class RunnerPlanTest {
         val r = runner()
         for (tag in listOf("ar", "ar-EG", "he", "he-IL", "iw", "fa-IR", "ur", "ps", "sd", "ug", "yi", "dv", "ckb", "ar_SA")) assertTrue(r.rtl(tag), tag)
         for (tag in listOf("en-US", "de", "ja", "zh-Hans-CN", "sk", "arn", "hea")) assertFalse(r.rtl(tag), tag)
+    }
+}
+
+class ModuleThemeTest {
+    private fun module(manifest: String?): Module {
+        val dir = kotlin.io.path.createTempDirectory("swiftshot-theme").toFile()
+        if (manifest != null) File(dir, "src/main").apply { mkdirs() }.resolve("AndroidManifest.xml").writeText(manifest)
+        return Module(mapOf(
+            "module" to ":app", "projectDir" to dir.path, "packageName" to "a", "wear" to false,
+            "classDirs" to emptyList<String>(), "classpath" to emptyList<String>(),
+            "layoutlibRuntime" to "", "layoutlibResources" to "", "components" to emptyList<String>(),
+        ))
+    }
+
+    @Test fun projectTheme() = assertEquals("Theme.Habits", module("""<manifest><application android:label="x"
+        android:theme="@style/Theme.Habits"><activity android:theme="@style/Other"/></application></manifest>""").theme)
+
+    @Test fun frameworkTheme() = assertEquals("android:Theme.DeviceDefault",
+        module("""<manifest><application android:theme="@android:style/Theme.DeviceDefault"/></manifest>""").theme)
+
+    @Test fun noTheme() {
+        assertNull(module("""<manifest><application android:label="x"/></manifest>""").theme)
+        assertNull(module(null).theme)
     }
 }

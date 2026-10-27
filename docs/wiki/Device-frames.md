@@ -1,9 +1,15 @@
 # Device frames
 
-Swiftshot puts screenshots into Apple's official device bezels, the
-[Product Bezels](https://developer.apple.com/design/resources/#product-bezels) from Apple's design
+| | iOS | Android |
+|---|---|---|
+| art | Apple's [Product Bezels](https://developer.apple.com/design/resources/#product-bezels) | Android Studio's device art |
+| plain | yes | yes |
+| App Store (background, title) | yes | no |
+| `swiftshot frame <dir>` | yes | no |
+
+On iOS Swiftshot puts screenshots into Apple's official device bezels from Apple's design
 resources. It has two modes: plain frames for websites and press kits, and App Store screenshots
-with a background and a localized title.
+with a background and a localized title. Android: see [Android](#android).
 
 ![App Store mode in English, German and Arabic, on iPhone 17 Pro Max and iPad Pro 13-inch](images/frames-appstore.png)
 
@@ -251,17 +257,61 @@ The cache keeps about 2–16 MB of PNGs per family, in `~/Library/Caches/swiftsh
 On CI, cache that folder:
 
 ```yaml
-- uses: actions/cache@v4
+- uses: actions/cache@v6
   with:
     path: ~/Library/Caches/swiftshot/frames
     key: swiftshot-frames-1
-- uses: LukasAnda/swiftshot@v0.2.0
+- uses: LukasAnda/swiftshot@v0.4.0
   with:
     args: --frame appstore --accept-bezel-license
 ```
 
 Framing itself is fast. Compositing takes about 6 ms per image; writing the PNG takes most of the
 time. On an M4 Pro, 34 frames of an iPhone 17 Pro Max and a 13-inch iPad take 0.9 s.
+
+## Android
+
+```
+swiftshot --frame plain
+```
+
+```json
+{ "frame": "plain" }
+```
+
+The device with the screenshot in it, at the art's own size, transparent around the device, with
+the screen's rounded corners and camera hole cut out. Plain only: there are no App Store-style
+frames, titles or backgrounds on Android, and `--frame` needs the value `plain`.
+
+Output: `<output>-framed/<language>/<name>_framed.png`, e.g.
+`screenshots-framed/en-US/Pixel 10 Pro-Welcome-light_framed.png`. With `"layout": "fastlane"` the
+`images/<type>Screenshots` folders repeat inside it. The screenshots themselves stay unframed, so
+`fastlane supply` uploads the Play sizes.
+
+Only full-screen screenshots get a frame: previews with `showSystemUi = true`, or all with
+`--system-ui always`. Components and full-length captures stay unframed.
+
+| devices with art | |
+|---|---|
+| phones | every Pixel, from Pixel and Pixel XL to Pixel 10 Pro XL, with the a models |
+| foldables | Pixel Fold, Pixel 9 Pro Fold, Pixel 10 Pro Fold, unfolded and folded |
+| tablets | Pixel Tablet |
+| Wear OS | Large Round, Small Round, XL Round, Square, Rectangular |
+
+Other devices, or art whose screen doesn't match the device's size, stay unframed with a warning.
+
+Swiftshot takes the art from, in order:
+
+1. an installed Android Studio (`/Applications`, `~/Applications`, `/opt/android-studio`)
+2. the Android SDK's `skins` folder (`ANDROID_HOME`, `ANDROID_SDK_ROOT` or `~/Library/Android/sdk`)
+3. [AOSP](https://android.googlesource.com/platform/tools/adt/idea/+/refs/heads/mirror-goog-studio-main/artwork/resources/device-art-resources),
+   downloaded once per device into the cache (`~/Library/Caches/swiftshot/android/device-art` on a
+   Mac, `~/.cache/swiftshot/android/device-art` on Linux)
+
+WebP art is converted to PNG once. If Java can't read a file, Swiftshot uses `sips` on a Mac,
+or ImageMagick or `dwebp` on Linux.
+
+The device art is part of Android Studio and licensed under the Apache License 2.0.
 
 ## License
 

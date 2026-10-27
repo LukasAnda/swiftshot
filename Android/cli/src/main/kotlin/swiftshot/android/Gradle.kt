@@ -9,6 +9,22 @@ class Module(val json: Map<*, *>) {
     val path = json["module"] as String
     val packageName = json["packageName"] as String
     val wear = json["wear"] as Boolean
+    val projectDir = (json["projectDir"] as String?)?.let(::File)
+
+    /**
+     * The application's theme from its manifest, as Android Studio renders previews with it:
+     * `@style/Theme.App` → `Theme.App`, `@android:style/Theme.X` → `android:Theme.X`.
+     */
+    val theme: String? by lazy {
+        val manifest = projectDir?.let { File(it, "src/main/AndroidManifest.xml") }?.takeIf { it.isFile } ?: return@lazy null
+        val app = Regex("""<application\b[^>]*>""", RegexOption.DOT_MATCHES_ALL).find(manifest.readText())?.value ?: return@lazy null
+        val value = Regex("""android:theme\s*=\s*"([^"]+)"""").find(app)?.groupValues?.get(1) ?: return@lazy null
+        when {
+            value.startsWith("@android:style/") -> "android:" + value.removePrefix("@android:style/")
+            value.startsWith("@style/") -> value.removePrefix("@style/")
+            else -> null
+        }
+    }
     val classDirs = (json["classDirs"] as List<*>).map { File(it as String) }
     val classpath = (json["classpath"] as List<*>).map { File(it as String) }
     /** The SDK's android.jar: classes layoutlib leaves out (android.os.Build). Last, so layoutlib wins. */

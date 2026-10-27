@@ -38,7 +38,8 @@ class Options {
     var fullLength = false
     var delay = 0.0
     var systemUi = "preview"
-    var theme = "android:Theme.Material.Light.NoActionBar"
+    /** An explicit theme for every preview; otherwise each module's application theme. */
+    var theme: String? = null
     var roundCorners = "black"
     var parallel = 0
     var gradleArgs: List<String> = emptyList()
@@ -56,7 +57,7 @@ class Options {
             swiftshot (Android) — Play Store screenshots straight from your Jetpack Compose @Previews.
 
             USAGE
-              swiftshot [run|list|devices] [options]
+              swiftshot [run|list|devices|init] [options]
 
             COMMANDS
               run       Build, render every preview for every device × language × appearance (default)
@@ -84,7 +85,7 @@ class Options {
 
             OUTPUT
               --output <dir>                        Default: screenshots
-              --layout swiftshot|fastlane           fastlane: metadata/android/<locale>/images/<type>Screenshots
+              --layout swiftshot|fastlane           fastlane: <output>/<locale>/images/<type>Screenshots
               --clear                               Delete existing screenshots first
               --no-html                             Do not write screenshots.html
               --full-length                         Grow scrolling screens to their whole content
@@ -230,7 +231,7 @@ class Options {
         for (s in fontScales) require(s in 0.5..3.0) { "font_scales: $s is outside 0.5…3" }
     }
 
-    /** Keys shared with the iOS side are accepted and ignored here, so one file can serve both. */
+    /** The Android keys; iOS-only keys (scheme, ios_versions…) are rejected, so typos surface. */
     private val configKeys = setOf(
         "project_dir", "modules", "variant", "devices", "watch_devices", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",

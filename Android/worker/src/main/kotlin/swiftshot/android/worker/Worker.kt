@@ -246,6 +246,18 @@ private fun previewView(sdk: PaparazziSdk, shot: Map<*, *>, mode: RenderingMode,
                 @Suppress("DEPRECATION") navigationBarColor = android.graphics.Color.TRANSPARENT
                 isNavigationBarContrastEnforced = false
                 isStatusBarContrastEnforced = false
+                // The window spans the whole display, bars included (its frame otherwise stops above
+                // the navigation bar and nothing is drawn behind the gesture handle).
+                attributes = attributes.apply {
+                    fitInsetsTypes = 0
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                }
+            }
+            (decor.layoutParams as? WindowManager.LayoutParams)?.let { lp ->
+                if (lp.fitInsetsTypes != 0) {
+                    lp.fitInsetsTypes = 0
+                    runCatching { (v.context.getSystemService(android.content.Context.WINDOW_SERVICE) as WindowManager).updateViewLayout(decor, lp) }
+                }
             }
             var p = v.parent
             while (p is ViewGroup && p !== decor) {

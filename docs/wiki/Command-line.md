@@ -1,5 +1,22 @@
 `swiftshot <command> [options]`. `run` is the default command. Run `swiftshot --help` for the same text.
 
+## Platform
+
+One `swiftshot` binary covers both platforms. It renders Android when:
+
+- `--platform android` is given, or
+- the project folder (the current one, or `--project-dir`) has `gradlew` and a
+  `settings.gradle(.kts)`, no `.xcodeproj` or `.xcworkspace`, no `--project`, `--workspace` or
+  `--app`, and no `project`, `workspace` or `scheme` in `swiftshot.json`.
+
+Otherwise it renders iOS. `--platform ios` forces iOS. On Linux (and with the Android-only
+package) `swiftshot` is the Android renderer.
+
+- [iOS](#ios)
+- [Android](#android): `swiftshot --platform android --help`
+
+## iOS
+
 ```
 USAGE
   swiftshot [run|list|devices|calibrate|emit-table|init] [options]
@@ -101,3 +118,52 @@ CI
 ```
 
 Exit code: 0 when every screenshot was rendered, non-zero otherwise. Errors are listed at the end of the run and in `swiftshot-report.json`.
+
+## Android
+
+```
+USAGE
+  swiftshot [run|list|devices|init] [options]
+
+COMMANDS
+  run       Build, render every preview for every device × language × appearance (default)
+  list      Build and print the previews that were found
+  devices   List the devices and their screens
+  init      Write a swiftshot.json for the project here: modules, languages and Play devices
+            detected (alias auto-setup; --force overwrites an existing one)
+
+PROJECT
+  --project-dir <path>                  Gradle project (default: .)
+  --modules ":app,:wear"                Modules to render (default: every Android module with previews)
+  --variant <name>                      Build variant (default: debug)
+  --gradle-arg <arg>                    Extra Gradle argument (repeatable)
+  --java-home <path>                    JDK 21+ for the renderer (default: JAVA_HOME, then Android Studio's)
+
+MATRIX
+  --devices "Pixel 10 Pro,Pixel 9 Pro Fold,Pixel Tablet"   Phones, foldables, tablets (default: Pixel 10 Pro, Pixel Tablet)
+  --watch-devices "Wear OS Large Round"                    For Wear OS modules (default: Wear OS Large Round)
+  --languages "en-US,de-DE"             Default: en-US
+  --appearances "light,dark"            Default: light
+  --font-scales "1,1.3,2"               Default: 1
+  --previews "Welcome,Stats*"           Only previews matching these names or * globs
+  --screen "<preview>: key=value …"     Per-screenshot settings (repeatable), e.g.
+                                        --screen "Stats: languages=de-DE devices=Pixel*"
+
+OUTPUT
+  --output <dir>                        Default: screenshots
+  --layout swiftshot|fastlane           fastlane: <output>/<locale>/images/<type>Screenshots
+  --clear                               Delete existing screenshots first
+  --no-html                             Do not write screenshots.html
+  --full-length                         Grow scrolling screens to their whole content
+  --delay <seconds>                     Advance the clock before capture (animations)
+  --system-ui preview|always|never      Status and navigation bars (default: as the preview says)
+  --frame plain|none                    Put each screenshot in its device (Android Studio's device art)
+  --round-corners black|transparent     Outside round watch screens (default: black, as Play requires)
+  --parallel <n>                        Renderer processes (default: from cores and memory)
+
+  --config <file>                       Default: ./swiftshot.json
+  -v, --verbose
+```
+
+The same exit codes as on iOS. `swiftshot devices` lists every device with its size in px and dp
+and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs.

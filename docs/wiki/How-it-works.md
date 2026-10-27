@@ -1,7 +1,8 @@
-Swiftshot runs your simulator app as a plain Mac process, gives it a virtual screen with the target
-device's exact geometry, and lets Core Animation render each preview into it. No simulator is
-created or booted. This page explains each step and how the output is kept identical to a booted
-simulator.
+On iOS, Swiftshot runs your simulator app as a plain Mac process, gives it a virtual screen with
+the target device's exact geometry, and lets Core Animation render each preview into it. No
+simulator is created or booted. This page explains each step and how the output is kept identical
+to a booted simulator. On Android, it renders Compose previews with layoutlib, the engine of
+Android Studio's previews, in parallel processes: see [Android](#android).
 
 - [Overview](#overview)
 - [1. Build once](#1-build-once)
@@ -16,6 +17,7 @@ simulator.
 - [10. Proving it's pixel identical](#10-proving-its-pixel-identical)
 - [11. Device table](#11-device-table)
 - [Why it's faster than fastlane](#why-its-faster-than-fastlane)
+- [Android](#android)
 
 ## Overview
 
@@ -291,3 +293,92 @@ flowchart TB
 | app launches | one per screen, device and language | one per device and language |
 | getting to a screen | XCUITest taps | the preview is the screen |
 | per screenshot, free GitHub runner | 103 s | 1.2–1.9 s, build included |
+
+## Android
+
+```mermaid
+flowchart LR
+    CLI["swiftshot"] -->|"init script"| G["Gradle<br/>swiftshotPrepare"]
+    G -->|"module.json:<br/>classes, classpath,<br/>resources, assets"| SCAN["@Preview scan<br/>(bytecode)"]
+    SCAN --> PLAN["groups:<br/>device × language ×<br/>appearance × font scale"]
+    PLAN --> R1["renderer 1<br/>layoutlib"]
+    PLAN --> R2["renderer 2<br/>layoutlib"]
+    PLAN --> RN["renderer n<br/>layoutlib"]
+    R1 --> OUT[("PNGs, gallery,<br/>report, frames")]
+    R2 --> OUT
+    RN --> OUT
+```
+
+**Build.** Swiftshot runs `./gradlew -I <init script> swiftshotPrepare -Pswiftshot.variant=debug`.
+The init script adds the task to every Android application and library module for this one
+invocation; nothing in the project changes. The task compiles the variant as usual, resolves its
+runtime classpath together with Paparazzi's layoutlib SDK, and writes the module's classes,
+classpath, resources and assets to `build/intermediates/swiftshot/<variant>/module.json`. The
+task holds no reference to the project and the script sits at a fixed path in the cache, so the
+project's configuration cache stays valid: a warm Gradle step takes about a second.
+
+**Find previews.** `@Preview` has binary retention, so reflection can't see it. Swiftshot reads
+the compiled class files with ASM and resolves multipreview annotations (`@PreviewLightDark`,
+`@WearPreviewDevices`, your own) through the project's classes and its libraries.
+
+**Render.** Each renderer is a JVM with the app's classpath and layoutlib, loaded through
+Paparazzi's SDK. It inflates Compose's own `ComposeViewAdapter`, as Android Studio does, so
+`@PreviewParameter`, inspection mode and the preview wrappers behave as in the IDE. A process
+starts once and then renders whole groups of screenshots that share a device, language,
+appearance and font scale, swapping only the composable. Groups go to whichever process is free.
+
+```mermaid
+sequenceDiagram
+    participant CLI as swiftshot
+    participant G as Gradle
+    participant R as renderer processes
+    CLI->>R: start, with the previous run's classpath
+    CLI->>G: swiftshotPrepare
+    R->>R: load layoutlib, apply its patches
+    G-->>CLI: module.json
+    CLI->>CLI: scan previews, plan groups
+    alt classpath unchanged
+        CLI->>R: send groups
+    else classpath changed
+        CLI->>R: start new processes, send groups
+    end
+    R-->>CLI: one line per screenshot
+    CLI->>R: stop
+```
+
+Renderer processes start while Gradle builds, and are used when the classpath comes out the
+same. The first process writes a class-data-sharing archive of the classpath, which makes every
+later start faster. Several processes run in parallel: one per core and 1.5 GB of memory, at most
+8, or `--parallel`.
+
+**System bars.** On a device the status bar and gesture handle are system windows above the app
+(and above a dialog's scrim). Apps that target API 35 or later are edge-to-edge, so the content
+gets the device's real insets (a status bar sized to the camera cutout, the gesture area at the
+bottom) and draws behind them. Swiftshot then draws the bars over the finished frame: 9:30, full
+Wi-Fi, signal and battery, and the gesture handle. Older apps keep layoutlib's own bars.
+
+**Wear OS.** Watch devices render with the watch UI mode and, for round screens, a round screen
+configuration. Wear OS has no light mode, so they render once, dark. Outside the circle the image
+is black (Play rejects transparency), or transparent with `round_corners`.
+
+**Full length.** With `full_length`, Swiftshot reads how far the preview's vertical scroll
+containers can still scroll from Compose's semantics (the vertical scroll range that
+`verticalScroll` and `LazyColumn` report), grows the screen by that much and renders again, until
+nothing scrolls.
+
+**Encoding.** PNG encoding, and framing, run on separate threads beside the next render, at a
+fast deflate level instead of ImageIO's slowest one.
+
+### Why it's faster than Paparazzi and Roborazzi
+
+They run screenshots as unit tests: Gradle compiles a test source set, and a test task renders
+one screenshot per test, one at a time per JVM. Swiftshot has no test sources to compile and no
+test task, and keeps parallel renderers up for the whole run.
+
+The same 470 screenshots on a free 4-core `ubuntu-latest` runner
+([`bench/android`](https://github.com/LukasAnda/swiftshot/tree/main/bench/android)):
+
+| | swiftshot | Paparazzi 2.0.0-alpha05.1 | Roborazzi 1.77.0 |
+|---|---:|---:|---:|
+| first run | **57.7 s** | 87.4 s | 93.0 s |
+| warm run | **38.0 s** | 66.1 s | 70.8 s |

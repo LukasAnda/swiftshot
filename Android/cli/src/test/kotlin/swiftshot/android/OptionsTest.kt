@@ -40,7 +40,7 @@ class OptionsTest {
         assertFalse(o.fullLength)
         assertEquals(0.0, o.delay)
         assertEquals("preview", o.systemUi)
-        assertEquals("android:Theme.Material.Light.NoActionBar", o.theme)
+        assertNull(o.theme) // each module's application theme unless android_theme is set
         assertEquals("black", o.roundCorners)
         assertEquals(0, o.parallel)
         assertEquals(emptyList(), o.gradleArgs)
