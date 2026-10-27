@@ -134,6 +134,20 @@ jobs:
 
 ## How it works
 
+```mermaid
+flowchart LR
+  cli["swiftshot"] -->|"init script"| gradle["Gradle<br/>swiftshotPrepare"]
+  gradle -->|"classes, classpath,<br/>resources"| scan["@Preview scan<br/>(bytecode)"]
+  scan --> plan["matrix<br/>devices × languages ×<br/>appearances × font scales"]
+  plan --> r1["renderer 1<br/>layoutlib"]
+  plan --> r2["renderer 2<br/>layoutlib"]
+  plan --> rn["renderer n<br/>layoutlib"]
+  r1 & r2 & rn --> out["PNGs, gallery,<br/>report, frames"]
+```
+
+Renderer processes start while Gradle is still building, from the previous run's classpath, and
+are kept when it is unchanged.
+
 1. **Build.** Swiftshot runs `./gradlew swiftshotPrepare` with an init script: the variant is
    compiled as usual and the task writes the module's classes, runtime classpath, resources and
    assets to a JSON file. Nothing in the project changes.
