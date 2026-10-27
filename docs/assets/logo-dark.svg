@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>Swiftshot</title>
+  <g fill="none" stroke="#F2F2F0" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 36V20a10 10 0 0 1 10-10h16"/>
+    <path d="M84 10h16a10 10 0 0 1 10 10v16"/>
+    <path d="M110 84v16a10 10 0 0 1-10 10H84"/>
+    <path d="M36 110H20a10 10 0 0 1-10-10V84"/>
+  </g>
+  <rect x="39" y="27" width="42" height="66" rx="10" fill="#F2552C"/>
+  <rect x="52" y="34" width="16" height="5" rx="2.5" fill="#16181D"/>
+</svg>
