@@ -11,7 +11,8 @@ class Module(val json: Map<*, *>) {
     val platform = json["platform"] as String? ?: "android"
     val desktop get() = platform == "desktop"
     /** How the module is named in logs: `:shared` for Android, `:shared (desktop)` for its desktop target. */
-    val label get() = if (platform == "android") path else "$path ($platform)"
+    /** `:app`; a multiplatform module's targets as `:shared (android)`, `:shared (desktop)`… */
+    val label get() = if (platform == "android" && json["multiplatform"] != true) path else "$path ($platform)"
     val packageName = json["packageName"] as String? ?: ""
     val wear = json["wear"] as Boolean? ?: false
     val projectDir = (json["projectDir"] as String?)?.let(::File)

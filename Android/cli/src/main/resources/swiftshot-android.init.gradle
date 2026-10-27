@@ -45,6 +45,7 @@ abstract class SwiftshotPrepare extends DefaultTask {
     @Input abstract Property<Integer> getTargetSdk()
     @Input abstract Property<Boolean> getWear()
     @Input abstract Property<Boolean> getIsApplication()
+    @Input abstract Property<Boolean> getIsMultiplatform()
     @Input abstract ListProperty<String> getComponents()
     @OutputFile abstract RegularFileProperty getOutput()
 
@@ -66,6 +67,7 @@ abstract class SwiftshotPrepare extends DefaultTask {
             symbolFiles         : symbols.files.collect { it.absolutePath },
             ownSymbolFiles      : ownSymbols.files.findAll { it.exists() }.collect { it.absolutePath },
             application         : isApplication.get(),
+            multiplatform       : isMultiplatform.get(),
             localResourceDirs   : localRes.getOrElse([]).collect { it.asFile.absolutePath }.findAll { new File(it).exists() },
             moduleResourceDirs  : moduleRes.files.collect { it.absolutePath },
             libraryResourceDirs : libraryRes.files.collect { it.absolutePath },
@@ -299,6 +301,7 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             t.bootClasspath.from(components.sdkComponents.bootClasspath)
             // A library's own R class isn't in its classes (an app's is): AGP's compile R jar.
             t.isApplication.set(p.plugins.hasPlugin("com.android.application"))
+            t.isMultiplatform.set(p.plugins.hasPlugin("org.jetbrains.kotlin.multiplatform"))
             if (!p.plugins.hasPlugin("com.android.application")) {
                 try {
                     def rType = loader.loadClass('com.android.build.gradle.internal.scope.InternalArtifactType$COMPILE_R_CLASS_JAR').getField("INSTANCE").get(null)

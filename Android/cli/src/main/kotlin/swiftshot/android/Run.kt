@@ -69,6 +69,7 @@ class Runner(private val o: Options, private val log: Log) {
         if (planned.isEmpty() && iosModules.isEmpty()) throw CliError("Nothing to render: every preview is filtered out.")
         if (o.clear) clear()
         val measures = measures(iosModules, allFound)
+        val measureSet = measures.toHashSet()
         val shots = planned + measures
         val javaBin = Java.find(o)
         val byFile = shots.associateBy { it.file.path }
@@ -81,7 +82,7 @@ class Runner(private val o: Options, private val log: Log) {
         val totalGroups = byModule.values.sumOf { it.size }
         val threads = byModule.map { (m, groups) ->
             val processes = maxOf(1, minOf(groups.size, Math.round(budget * groups.size.toDouble() / totalGroups).toInt()))
-            log.step("${m.label}: ${groups.sumOf { (it["shots"] as List<*>).size }} screenshots in ${groups.size} groups, $processes renderer processes")
+            log.step("${m.label}: ${planned.count { it.module == m }} screenshots in ${groups.size} groups, $processes renderer processes")
             kotlin.concurrent.thread(name = m.label) {
                 val t0 = System.nanoTime()
                 val workerJar = workerJar(m)
@@ -94,13 +95,12 @@ class Runner(private val o: Options, private val log: Log) {
                     if (!r.ok) log.warn("${shot?.let { "${it.preview.name} · ${it.device.name} · ${it.language}" } ?: r.file}: ${r.error}")
                     else if (o.verbose) log.step("[$n/$total] ${File(r.file).name} ${r.millis} ms")
                 }
-                val ok = results.count { it.first.module == m && it.second.ok }
+                val ok = results.count { it.first.module == m && it.second.ok && it.first !in measureSet }
                 log.ok("${m.label}: $ok screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (renderer start ${readyMs} ms)")
             }
         }
         threads.forEach { it.join() }
         warm.values.forEach { it.close() }
-        val measureSet = measures.toHashSet()
         val measured = results.filter { it.first in measureSet }
         results.removeAll(measured)
         val iosShots = renderIos(iosModules, allFound, measured)
