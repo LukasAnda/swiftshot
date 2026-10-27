@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Habits</string>
+    <string name="today">Dnes</string>
+    <string name="statistics">Štatistiky</string>
+    <string name="new_habit">Nový návyk</string>
+    <string name="habit_water">Piť vodu</string>
+    <string name="habit_run">Ranný beh</string>
+    <string name="habit_read">Prečítať 20 strán</string>
+    <string name="habit_meditate">Meditovať</string>
+    <string name="habit_journal">Denník</string>
+    <string name="detail_water">3 z 8 pohárov</string>
+    <string name="detail_run">5,2 km</string>
+    <string name="detail_read">8 z 20 strán</string>
+    <string name="detail_meditate">10 minút</string>
+    <string name="detail_journal">Dnes ešte nie</string>
+    <string name="of_8">z 8</string>
+    <string name="next_glass">Ďalší pohár</string>
+    <string name="last_7_days">Posledných 7 dní</string>
+    <string name="completion">splnené</string>
+    <string name="n_of_m_done">Splnené: %1$d z %2$d</string>
+    <plurals name="days">
+        <item quantity="one">%d deň</item>
+        <item quantity="few">%d dni</item>
+        <item quantity="many">%d dňa</item>
+        <item quantity="other">%d dní</item>
+    </plurals>
+    <plurals name="day_streak">
+        <item quantity="one">Séria: %d deň</item>
+        <item quantity="few">Séria: %d dni</item>
+        <item quantity="many">Séria: %d dňa</item>
+        <item quantity="other">Séria: %d dní</item>
+    </plurals>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Habits</string>
+    <string name="today">今日</string>
+    <string name="statistics">統計</string>
+    <string name="new_habit">新しい習慣</string>
+    <string name="habit_water">水を飲む</string>
+    <string name="habit_run">朝のランニング</string>
+    <string name="habit_read">20ページ読む</string>
+    <string name="habit_meditate">瞑想</string>
+    <string name="habit_journal">日記</string>
+    <string name="detail_water">8杯中3杯</string>
+    <string name="detail_run">5.2 km</string>
+    <string name="detail_read">20ページ中8ページ</string>
+    <string name="detail_meditate">10分</string>
+    <string name="detail_journal">今日はまだ</string>
+    <string name="of_8">/ 8</string>
+    <string name="next_glass">次の1杯</string>
+    <string name="last_7_days">過去7日間</string>
+    <string name="completion">達成</string>
+    <string name="n_of_m_done">%2$d件中%1$d件完了</string>
+    <plurals name="days">
+        <item quantity="other">%d日間</item>
+    </plurals>
+    <plurals name="day_streak">
+        <item quantity="other">%d日連続</item>
+    </plurals>
+</resources>

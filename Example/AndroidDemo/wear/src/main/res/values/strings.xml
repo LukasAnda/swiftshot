@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Habits</string>
+    <string name="today">Today</string>
+    <string name="statistics">Statistics</string>
+    <string name="new_habit">New habit</string>
+    <string name="habit_water">Drink water</string>
+    <string name="habit_run">Morning run</string>
+    <string name="habit_read">Read 20 pages</string>
+    <string name="habit_meditate">Meditate</string>
+    <string name="habit_journal">Journal</string>
+    <string name="detail_water">3 of 8 glasses</string>
+    <string name="detail_run">5.2 km</string>
+    <string name="detail_read">8 of 20 pages</string>
+    <string name="detail_meditate">10 minutes</string>
+    <string name="detail_journal">Not yet today</string>
+    <string name="of_8">of 8</string>
+    <string name="next_glass">Next glass</string>
+    <string name="last_7_days">Last 7 days</string>
+    <string name="completion">completion</string>
+    <string name="n_of_m_done">%1$d of %2$d done</string>
+    <plurals name="days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <plurals name="day_streak">
+        <item quantity="one">%d-day streak</item>
+        <item quantity="other">%d-day streak</item>
+    </plurals>
+</resources>

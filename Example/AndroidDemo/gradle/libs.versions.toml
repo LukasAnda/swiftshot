@@ -1,0 +1,33 @@
+[versions]
+agp = "9.4.1"
+kotlin = "2.4.21"
+compose-bom = "2026.09.00"
+# Material 3 Expressive APIs are public from 1.5 (the BOM still pins 1.4.0, where they are internal).
+material3 = "1.5.0-beta02"
+activity-compose = "1.13.0"
+wear-compose = "1.7.1"
+wear-tooling-preview = "1.0.0"
+
+android-compileSdk = "37"
+android-targetSdk = "36"
+android-minSdk = "26"
+
+[libraries]
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
+compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
+compose-material3-navigation-suite = { module = "androidx.compose.material3:material3-adaptive-navigation-suite", version.ref = "material3" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+
+wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wear-compose" }
+wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wear-compose" }
+wear-compose-ui-tooling = { module = "androidx.wear.compose:compose-ui-tooling", version.ref = "wear-compose" }
+wear-tooling-preview = { module = "androidx.wear:wear-tooling-preview", version.ref = "wear-tooling-preview" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

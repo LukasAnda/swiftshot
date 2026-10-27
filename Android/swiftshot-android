@@ -1,0 +1,19 @@
+#!/bin/sh
+# Renders Jetpack Compose previews: runs swiftshot-android.jar from this folder with a JDK 21+
+# (SWIFTSHOT_JAVA_HOME, JAVA_HOME, Android Studio's bundled one, or java on PATH).
+set -e
+dir=$(cd "$(dirname "$0")" && pwd -P)
+self=$0
+while [ -L "$self" ]; do
+  target=$(readlink "$self"); case $target in /*) self=$target ;; *) self=$(dirname "$self")/$target ;; esac
+done
+dir=$(cd "$(dirname "$self")" && pwd -P)
+for home in "$SWIFTSHOT_JAVA_HOME" "$JAVA_HOME" "/Applications/Android Studio.app/Contents/jbr/Contents/Home" "$HOME/Applications/Android Studio.app/Contents/jbr/Contents/Home" /opt/android-studio/jbr; do
+  if [ -n "$home" ] && [ -x "$home/bin/java" ]; then
+    v=$("$home/bin/java" -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)
+    if [ "${v:-0}" -ge 21 ]; then export SWIFTSHOT_JAVA_HOME="$home"; exec "$home/bin/java" -XX:TieredStopAtLevel=1 -Xshare:auto -jar "$dir/swiftshot-android.jar" "$@"; fi
+  fi
+done
+command -v java >/dev/null && exec java -XX:TieredStopAtLevel=1 -jar "$dir/swiftshot-android.jar" "$@"
+echo "error: swiftshot needs JDK 21 or later for Android projects. Set JAVA_HOME." >&2
+exit 1
