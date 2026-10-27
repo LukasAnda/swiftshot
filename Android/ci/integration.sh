@@ -7,7 +7,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 out=${1:-${RUNNER_TEMP:-/tmp}/swiftshot-android-it}
-budget=${SWIFTSHOT_ANDROID_BUDGET:-90}
+# The free Linux runners differ by machine: the same warm run took 58–93 s in October 2026.
+budget=${SWIFTSHOT_ANDROID_BUDGET:-120}
 rm -rf "$out" && mkdir -p "$out"
 ( cd Android && ./gradlew --no-daemon -q :cli:jar :worker:jar )
 jar=Android/cli/build/libs/swiftshot-android.jar

@@ -85,7 +85,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Machine
-        run: nproc; free -g; java -version; echo "ANDROID_HOME=$ANDROID_HOME"
+        run: nproc; lscpu | grep "Model name"; free -g; java -version; echo "ANDROID_HOME=$ANDROID_HOME"
       - name: Android unit tests
         run: cd Android && ./gradlew --no-daemon -q :cli:test
       - name: Integration (render, sizes, determinism, budget)
@@ -114,7 +114,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Machine
-        run: nproc; free -g; java -version; echo "ANDROID_HOME=$ANDROID_HOME"
+        run: nproc; lscpu | grep "Model name"; free -g; java -version; echo "ANDROID_HOME=$ANDROID_HOME"
       - name: Render and check
         run: Android/ci/multiplatform.sh android,desktop "$RUNNER_TEMP/multiplatform"
       - uses: actions/upload-artifact@v7
