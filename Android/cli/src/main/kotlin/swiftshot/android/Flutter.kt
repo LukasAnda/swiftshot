@@ -34,7 +34,7 @@ class Flutter(private val o: Options, private val log: Log) {
         if (o.clear) output.listFiles()?.forEach { if (it.isDirectory) it.deleteRecursively() else if (it.name.endsWith(".png") || it.name == "screenshots.html" || it.name == "swiftshot-report.json") it.delete() }
         val dir = File(root, ".dart_tool/swiftshot").apply { deleteRecursively(); mkdirs() }
         generate(dir, pkg, public, pubspec, languages, devices)
-        val processes = if (o.parallel > 0) o.parallel else maxOf(1, minOf(languages.size, Runtime.getRuntime().availableProcessors() / 2))
+        val processes = if (o.parallel > 0) o.parallel else maxOf(1, minOf(languages.size, Runtime.getRuntime().availableProcessors()))
         log.step("${public.size} preview declarations, ${devices.size} devices, ${languages.size} languages, $processes tester processes")
         val t0 = System.nanoTime()
         val tests = languages.map { File(dir, "${file(it)}_test.dart").relativeTo(root).path }
@@ -122,7 +122,8 @@ class Flutter(private val o: Options, private val log: Log) {
             val job = linkedMapOf(
                 "language" to lang, "languages" to languages, "devices" to devices, "appearances" to o.appearances,
                 "fontScales" to o.fontScales, "previews" to o.previews, "output" to output.path, "delay" to o.delay,
-                "results" to File(dir, "${file(lang)}.results.jsonl").path, "fonts" to fonts.forLanguage(lang),
+                "results" to File(dir, "${file(lang)}.results.jsonl").path,
+                "fonts" to fonts.forLanguage(lang, ios = devices.any { it["platform"] == "ios" }, android = devices.any { it["platform"] == "android" }),
             )
             File(dir, "${file(lang)}.json").writeText(Json.write(job, "  "))
             File(dir, "${file(lang)}_test.dart").writeText(
@@ -169,7 +170,8 @@ class Fonts(private val material: File, private val log: Log) {
 
     private val roboto = material.listFiles()?.filter { it.name.startsWith("Roboto-") }?.map { it.path }?.sorted().orEmpty()
     private val sf = listOfNotNull(first("/System/Library/Fonts/SFNS.ttf"), first("/System/Library/Fonts/SFNSItalic.ttf"))
-    private val iosFamilies = listOf("CupertinoSystemText", "CupertinoSystemDisplay", ".SF Pro Text", ".SF Pro Display", ".SF UI Text", ".SF UI Display")
+    /** The families Flutter's typography asks for on iOS (Material's and Cupertino's). */
+    private val iosFamilies = listOf("CupertinoSystemText", "CupertinoSystemDisplay")
 
     /**
      * One font with both the script and Latin, macOS first, then the usual Linux packages: the
@@ -192,14 +194,13 @@ class Fonts(private val material: File, private val log: Log) {
 
     private val needsScript = setOf("ar", "fa", "ur", "ps", "he", "yi", "ja", "zh", "ko", "th", "hi", "mr", "ne")
 
-    fun forLanguage(language: String): Map<String, List<String>> {
+    fun forLanguage(language: String, ios: Boolean = true, android: Boolean = true): Map<String, List<String>> {
         val lang = language.substringBefore('-')
         val special = if (lang in needsScript) script(language) else null
         if (lang in needsScript && special == null) log.warn("$language: no font with its script found on this machine; its text may render as boxes")
-        val android = special?.let(::listOf) ?: roboto
-        val ios = special?.let(::listOf) ?: sf.ifEmpty { roboto }
-        return linkedMapOf<String, List<String>>("Roboto" to android).apply {
-            for (f in iosFamilies) put(f, ios)
+        return linkedMapOf<String, List<String>>().apply {
+            if (android) put("Roboto", special?.let(::listOf) ?: roboto)
+            if (ios) for (f in iosFamilies) put(f, special?.let(::listOf) ?: sf.ifEmpty { roboto })
             put("MaterialIcons", listOf(File(material, "MaterialIcons-Regular.otf").path))
         }
     }

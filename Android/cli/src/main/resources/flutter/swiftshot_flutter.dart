@@ -75,10 +75,14 @@ Locale _locale(String tag) {
 
 String _tag(Locale l) => l.toLanguageTag();
 
+final _fontFiles = <String, ByteData>{};
+
+/// [family] from [files], each file read once however many families use it.
 Future<void> _font(String family, List<String> files) async {
   final loader = FontLoader(family);
   for (final f in files) {
-    if (File(f).existsSync()) loader.addFont(Future.value(ByteData.sublistView(File(f).readAsBytesSync())));
+    if (!File(f).existsSync()) continue;
+    loader.addFont(Future.value(_fontFiles.putIfAbsent(f, () => ByteData.sublistView(File(f).readAsBytesSync()))));
   }
   await loader.load();
 }
