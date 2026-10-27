@@ -38,7 +38,8 @@ class Options {
     var fullLength = false
     var delay = 0.0
     var systemUi = "preview"
-    var theme = "android:Theme.Material.Light.NoActionBar"
+    /** An explicit theme for every preview; otherwise each module's application theme. */
+    var theme: String? = null
     var roundCorners = "black"
     var parallel = 0
     var gradleArgs: List<String> = emptyList()

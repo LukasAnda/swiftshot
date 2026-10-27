@@ -197,7 +197,7 @@ class Runner(private val o: Options, private val log: Log) {
                 "mode" to s.mode,
                 "systemUi" to s.systemUi,
                 "gestureNav" to (s.device.type != "watch" && s.device.type != "tv"),
-                "theme" to if (s.dark) o.theme.replace(".Light.", ".") else o.theme,
+                "theme" to theme(m, s.dark),
                 "roundCorners" to o.roundCorners,
                 "frame" to art(s.device)?.toJson(),
                 "shots" to list.map { shot ->
@@ -223,6 +223,13 @@ class Runner(private val o: Options, private val log: Log) {
         val rel = file.relativeTo(output).path.removeSuffix(".png")
         return File(output.path + "-framed", "${rel}_framed.png")
     }
+
+    /**
+     * The explicit `android_theme`, else the module's application theme (night variants come from
+     * its values-night resources), else Material's own light or dark theme.
+     */
+    private fun theme(m: Module, dark: Boolean): String = o.theme ?: m.theme
+        ?: if (dark) "android:Theme.Material.NoActionBar" else "android:Theme.Material.Light.NoActionBar"
 
     private fun background(p: Preview): String? {
         if (!p.showBackground) return null

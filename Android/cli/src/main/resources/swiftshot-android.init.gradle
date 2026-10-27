@@ -36,6 +36,7 @@ abstract class SwiftshotPrepare extends DefaultTask {
     @Internal abstract ListProperty<Directory> getLocalRes()
     @Internal abstract ListProperty<Directory> getLocalAssets()
     @Input abstract Property<String> getModulePath()
+    @Input abstract Property<String> getProjectDir()
     @Input abstract Property<String> getNamespace()
     @Input abstract Property<Integer> getCompileSdk()
     @Input abstract Property<Integer> getTargetSdk()
@@ -48,6 +49,7 @@ abstract class SwiftshotPrepare extends DefaultTask {
         def packages = [namespace.get()] + symbols.files.collect { f -> f.withReader { it.readLine() } }.findAll { it }
         def json = [
             module              : modulePath.get(),
+            projectDir          : projectDir.get(),
             packageName         : namespace.get(),
             compileSdk          : compileSdk.get(),
             targetSdk           : targetSdk.get(),
@@ -119,6 +121,7 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             t.group = "swiftshot"
             t.description = "Prepares the ${variantName} variant for Swiftshot's renderer"
             t.modulePath.set(p.path)
+            t.projectDir.set(p.projectDir.absolutePath)
             t.namespace.set(variant.namespace)
             // Plain values and configuration-cache-safe providers only: nothing here may hold on to
             // the Project, so the project's configuration cache keeps working.
