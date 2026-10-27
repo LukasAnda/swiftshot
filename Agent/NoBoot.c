@@ -109,3 +109,20 @@ __attribute__((used, section("__DATA,__interpose"))) static struct { const void 
     { (const void *)noboot_create, (const void *)xpc_connection_create },
     { (const void *)noboot_xpc_main, (const void *)real_xpc_main },
 };
+
+// Debugging (SWIFTSHOT_BACKTRACE=1): the call stack on stderr when the app aborts, for crashes
+// inside frameworks that print only a one-line reason.
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
+static void swiftshot_backtrace(int sig) {
+    void *frames[96];
+    int n = backtrace(frames, 96);
+    fprintf(stderr, "[swiftshot] signal %d, backtrace:\n", sig);
+    backtrace_symbols_fd(frames, n, 2);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+__attribute__((constructor)) static void swiftshot_backtrace_init(void) {
+    if (getenv("SWIFTSHOT_BACKTRACE")) { signal(SIGABRT, swiftshot_backtrace); signal(SIGSEGV, swiftshot_backtrace); signal(SIGBUS, swiftshot_backtrace); signal(SIGTRAP, swiftshot_backtrace); signal(SIGILL, swiftshot_backtrace); }
+}

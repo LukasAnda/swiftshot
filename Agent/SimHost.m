@@ -146,6 +146,21 @@ int main(int argc, char *argv[]) {
             exit(WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status));
         });
         dispatch_resume(exitSource);
+        // Stopped (swiftshot's timeout): the app and its shader compilers go too, or the
+        // compilers would keep running, holding swiftshot's output pipe open.
+        static dispatch_source_t stopSources[2];
+        int stopSignals[2] = { SIGTERM, SIGINT };
+        for (int i = 0; i < 2; i++) {
+            signal(stopSignals[i], SIG_IGN);
+            stopSources[i] = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, stopSignals[i], 0, dispatch_get_main_queue());
+            int sig = stopSignals[i];
+            dispatch_source_set_event_handler(stopSources[i], ^{
+                kill(child, SIGKILL);
+                for (int j = 0; j < compilerCount; j++) kill(compilerPids[j], SIGKILL);
+                exit(128 + sig);
+            });
+            dispatch_resume(stopSources[i]);
+        }
         dispatch_main();
     }
 }

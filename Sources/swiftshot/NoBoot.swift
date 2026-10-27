@@ -131,6 +131,13 @@ extension Runner {
         let home = (base as NSString).appendingPathComponent("home")
         try? FileManager.default.removeItem(atPath: base)
         try FileManager.default.createDirectory(atPath: (home as NSString).appendingPathComponent("tmp"), withIntermediateDirectories: true)
+        // Library/Caches shared by every run: Metal keeps its compiled shaders there (an app that
+        // draws with Metal itself, like Compose Multiplatform's Skia, compiles them otherwise in
+        // every process, for every view).
+        let caches = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Caches/swiftshot/app-caches.noindex/\(runtime.version)")
+        try FileManager.default.createDirectory(atPath: caches, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: (home as NSString).appendingPathComponent("Library"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: (home as NSString).appendingPathComponent("Library/Caches"), withDestinationPath: caches)
         job.resultPath = (base as NSString).appendingPathComponent("result.json")
         let jobPath = try writeJob(job, tag: tag)
 
@@ -179,7 +186,7 @@ extension Runner {
         // SDF cache on, its glass depended on how far apart its frames fell (a CI VM's Duo "+").
         env["CA_DISABLE_GENERIC_SHADERS"] = "1"; env["CA_DISABLE_OCCLUSION_CULLING"] = "1"
         if job.platform == "ios" { env["CA_DISABLE_SDF_CACHE"] = "1" }
-        for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") { env[k] = v }
+        for (k, v) in ProcessInfo.processInfo.environment where ["SWIFTSHOT_DEBUG", "SWIFTSHOT_TREE"].contains(k) || k.hasPrefix("SWIFTSHOT_FB_") || k.hasPrefix("CA_") || k == "SWIFTSHOT_BACKTRACE" || k == "SWIFTSHOT_DEBUG_LINKS" || k.hasPrefix("MTL_") { env[k] = v }
         // Debugging: the app's os_log (UIKit warnings…) on stderr, shown with --verbose.
         let osLog = ProcessInfo.processInfo.environment["SWIFTSHOT_OSLOG"] != nil
         if osLog { env["OS_ACTIVITY_DT_MODE"] = "1" }

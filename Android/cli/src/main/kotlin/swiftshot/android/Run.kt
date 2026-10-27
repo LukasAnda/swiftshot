@@ -43,29 +43,37 @@ class Runner(private val o: Options, private val log: Log) {
         // Renderer processes for last run's classpath start now, while Gradle builds; they are
         // used if the classpath comes out the same.
         val warm = if (o.command == "run") warmPools(budgetAll) else emptyMap()
-        val modules = try { Gradle.prepare(o, log) } catch (e: Exception) { warm.values.forEach { it.close() }; throw e }
-            .filter { o.platforms.isEmpty() || it.platform in o.platforms }
-        log.ok("Built ${modules.joinToString(", ") { it.label }} in ${"%.1f".format(Locale.ROOT, log.seconds)}s")
-        val found = modules.associateWith { m -> PreviewScanner(m.classDirs + m.classpath).scan(m.classDirs) }
+        val prepared = try { Gradle.prepare(o, log) } catch (e: Exception) { warm.values.forEach { it.close() }; throw e }
+        // iOS modules have no classes of their own: their previews are found on a JVM target,
+        // which is prepared even when only iOS is asked for.
+        val iosModules = prepared.filter { it.ios && (o.platforms.isEmpty() || "ios" in o.platforms) }
+        val scanned = prepared.filter { !it.ios }
+        val modules = scanned.filter { o.platforms.isEmpty() || it.platform in o.platforms }
+        log.ok("Built ${(modules + iosModules).joinToString(", ") { it.label }} in ${"%.1f".format(Locale.ROOT, log.seconds)}s")
+        val allFound = scanned.associateWith { m -> PreviewScanner(m.classDirs + m.classpath).scan(m.classDirs) }
             .filterValues { it.isNotEmpty() }
-        if (found.isEmpty()) { warm.values.forEach { it.close() }; throw CliError("No @Preview functions found in ${modules.joinToString { it.path }}.") }
+        val found = allFound.filterKeys { it in modules }
+        if (found.isEmpty() && iosModules.isEmpty()) { warm.values.forEach { it.close() }; throw CliError("No @Preview functions found in ${modules.joinToString { it.path }}.") }
         if (o.command == "list") {
             for ((m, previews) in found) {
                 println("${m.label}${if (m.wear) " (Wear OS)" else ""}")
                 for (p in previews) println("  ${p.name}  ${p.composable}${describe(p)}")
             }
+            for (m in iosModules) println("${m.label}: the previews of ${m.path} above")
             return 0
         }
         for (m in found.keys) if (!m.hasTooling) throw CliError(
             "${m.path} has no androidx.compose.ui:ui-tooling on its ${o.variant} classpath; add debugImplementation(\"androidx.compose.ui:ui-tooling\") as Android Studio's previews need it too."
         )
-        val shots = found.flatMap { (m, previews) -> plan(m, previews) }
-        if (shots.isEmpty()) throw CliError("Nothing to render: every preview is filtered out.")
+        val planned = found.flatMap { (m, previews) -> plan(m, previews) }
+        if (planned.isEmpty() && iosModules.isEmpty()) throw CliError("Nothing to render: every preview is filtered out.")
         if (o.clear) clear()
+        val measures = measures(iosModules, allFound)
+        val shots = planned + measures
         val javaBin = Java.find(o)
         val byFile = shots.associateBy { it.file.path }
         val results = java.util.Collections.synchronizedList(mutableListOf<Pair<Shot, Result>>())
-        val total = shots.size
+        val total = planned.size
         val done = java.util.concurrent.atomic.AtomicInteger()
         // Every module at once: the renderer processes are shared out by how much each has to do.
         val byModule = shots.groupBy { it.module }.mapValues { (m, list) -> groups(m, list) }
@@ -92,9 +100,14 @@ class Runner(private val o: Options, private val log: Log) {
         }
         threads.forEach { it.join() }
         warm.values.forEach { it.close() }
+        val measureSet = measures.toHashSet()
+        val measured = results.filter { it.first in measureSet }
+        results.removeAll(measured)
+        val iosShots = renderIos(iosModules, allFound, measured)
+        measures.firstOrNull()?.file?.parentFile?.deleteRecursively()
         val failed = results.filter { !it.second.ok }
-        report(results)
-        val ok = results.count { it.second.ok }
+        report(results, iosShots)
+        val ok = results.count { it.second.ok } + iosShots.size
         log.ok("$ok screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
         return if (failed.isEmpty() && ok > 0) 0 else 1
     }
@@ -239,6 +252,9 @@ class Runner(private val o: Options, private val log: Log) {
                         "provider" to shot.preview.provider,
                         "providerLimit" to shot.preview.providerLimit,
                         "background" to background(shot.preview),
+                        // A declared size is kept in shrink mode, as Android Studio does.
+                        "fixedWidth" to (shot.preview.widthDp > 0),
+                        "fixedHeight" to (shot.preview.heightDp > 0),
                     )
                 },
             )
@@ -292,7 +308,59 @@ class Runner(private val o: Options, private val log: Log) {
         }
     }
 
-    private fun report(results: List<Pair<Shot, Result>>) {
+    /**
+     * One desktop render per preview of each iOS module, at an iPhone's width, not reported: it
+     * tells the iOS host app how many values each @PreviewParameter provider has and how large
+     * a component preview is (iOS lays a preview out at the size it is given).
+     */
+    private fun measures(iosModules: List<Module>, found: Map<Module, List<Preview>>): List<Shot> {
+        val dir = File(Cache.root, "measure/${System.nanoTime()}")
+        val phone = Device("measure", "measure", "window", 804, 1748, 320, 320, 320, "normal")
+        return iosModules.flatMap { m ->
+            val (jvm, previews) = found.entries.filter { it.key.path == m.path }.sortedBy { if (it.key.desktop) 0 else 1 }.firstOrNull() ?: return@flatMap emptyList()
+            val device = if (jvm.desktop) phone else Devices.resolve(Devices.defaults).first()
+            previews.filter { p -> (o.previews.isEmpty() || o.previews.any { glob(it).matches(p.name) }) && o.rule(p.name)?.skip != true }
+                .mapIndexed { i, p ->
+                    val systemUi = when (o.systemUi) { "always" -> true; "never" -> false; else -> p.showSystemUi }
+                    Shot(jvm, p, sized(device, p), o.languages.firstOrNull() ?: "en-US", false, 1.0, if (systemUi) "normal" else "shrink", systemUi, 0, File(dir, "$i.png"))
+                }
+        }
+    }
+
+    /** Compose Multiplatform iOS targets, with the previews their module has on a JVM target. */
+    private fun renderIos(iosModules: List<Module>, found: Map<Module, List<Preview>>, results: List<Pair<Shot, Result>>): List<Ios.Shot> {
+        if (iosModules.isEmpty()) return emptyList()
+        val ios = Ios(o, log, output)
+        if (!ios.available) {
+            log.warn("iOS targets need a Mac with Xcode and the swiftshot iOS renderer; skipped ${iosModules.joinToString { it.path }}")
+            return emptyList()
+        }
+        val shots = mutableListOf<Ios.Shot>()
+        for (m in iosModules) {
+            val previews = found.entries.filter { it.key.path == m.path }.sortedBy { if (it.key.desktop) 0 else 1 }.firstOrNull()?.value
+                ?.filter { p -> (o.previews.isEmpty() || o.previews.any { glob(it).matches(p.name) }) && o.rule(p.name)?.skip != true }
+            if (previews == null) { log.warn("${m.label}: no JVM target to find its previews on (add jvm() or android)"); continue }
+            // Values per @PreviewParameter provider, as the JVM renders found them (name_1.png…).
+            val counts = HashMap<String, Int>()
+            for ((s, r) in results) if (r.ok && s.preview.provider != null && s.module.path == m.path) {
+                val index = Regex("_(\\d+)\\.png$").find(r.file)?.groupValues?.get(1)?.toInt() ?: 1
+                counts.merge(s.preview.composable + "|" + s.preview.name, index, ::maxOf)
+            }
+            // Components (no system UI) at the size they measured, in points (= dp).
+            val sizes = HashMap<String, Pair<Int, Int>>()
+            for ((s, r) in results) if (r.ok && s.module.path == m.path && s.mode == "shrink") {
+                val (w, h) = r.size.split('x').map { it.toIntOrNull() ?: 0 }.let { it.getOrElse(0) { 0 } to it.getOrElse(1) { 0 } }
+                if (w > 0 && h > 0) sizes[s.preview.composable + "|" + s.preview.name] = (w * 160 / s.device.density) to (h * 160 / s.device.density)
+            }
+            val t0 = System.nanoTime()
+            val rendered = ios.run(m, previews, counts, sizes)
+            log.ok("${m.label}: ${rendered.size} screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s")
+            shots += rendered
+        }
+        return shots
+    }
+
+    private fun report(results: List<Pair<Shot, Result>>, iosShots: List<Ios.Shot> = emptyList()) {
         output.mkdirs()
         val sorted = results.sortedWith(compareBy({ it.first.language }, { it.first.device.name }, { it.first.preview.name }, { it.first.dark }))
         val shots = sorted.filter { it.second.ok }.map { (s, r) ->
@@ -301,6 +369,12 @@ class Runner(private val o: Options, private val log: Log) {
                 "file" to File(r.file).relativeTo(output).path, "module" to s.module.path, "preview" to s.preview.name,
                 "composable" to s.preview.composable, "device" to s.device.name, "language" to s.language,
                 "appearance" to if (s.dark) "dark" else "light", "fontScale" to s.fontScale, "width" to w, "height" to h, "millis" to r.millis,
+                "platform" to s.module.platform,
+            )
+        } + iosShots.map { i ->
+            linkedMapOf<String, Any?>(
+                "file" to i.file, "preview" to i.preview, "device" to i.device, "language" to i.language,
+                "appearance" to i.appearance, "width" to i.width, "height" to i.height, "platform" to "ios",
             )
         }
         val errors = sorted.filter { !it.second.ok }.map { (s, r) -> "${s.preview.name} · ${s.device.name} · ${s.language}: ${r.error}" }

@@ -28,6 +28,8 @@ class Options {
     var devices: List<String> = emptyList()
     var watchDevices: List<String> = emptyList()
     var desktopDevices: List<String> = emptyList()
+    var iosDevices: List<String> = emptyList()
+    var iosVersions: List<String> = emptyList()
     /** android, desktop (and ios for Compose Multiplatform); empty: every platform the project has. */
     var platforms: List<String> = emptyList()
     var languages = listOf("en-US")
@@ -80,6 +82,8 @@ class Options {
               --devices "Pixel 10 Pro,Pixel 9 Pro Fold,Pixel Tablet"   Phones, foldables, tablets (default: Pixel 10 Pro, Pixel Tablet)
               --watch-devices "Wear OS Large Round"                    For Wear OS modules (default: Wear OS Large Round)
               --desktop-devices "Desktop 1440×900 @2x"                 Window sizes for Compose Multiplatform desktop
+              --ios-devices "iPhone 17 Pro Max,iPad Pro 13-inch (M5)" Compose Multiplatform iOS devices (macOS)
+              --ios "27.0"                          iOS runtimes for Compose Multiplatform (default: newest installed)
               --platforms android,desktop,ios       Compose Multiplatform targets to render (default: all the project has)
               --languages "en-US,de-DE"             Default: en-US
               --appearances "light,dark"            Default: light
@@ -135,6 +139,8 @@ class Options {
                 "--devices" -> o.devices = list(v)
                 "--watch-devices" -> o.watchDevices = list(v)
                 "--desktop-devices" -> o.desktopDevices = list(v)
+                "--ios-devices" -> o.iosDevices = list(v)
+                "--ios" -> o.iosVersions = list(v)
                 "--platforms" -> o.platforms = list(v)
                 "--languages" -> o.languages = list(v)
                 "--appearances" -> o.appearances = list(v)
@@ -209,6 +215,8 @@ class Options {
         strings("devices")?.let { devices = it }
         strings("watch_devices")?.let { watchDevices = it }
         strings("desktop_devices")?.let { desktopDevices = it }
+        strings("ios_devices")?.let { iosDevices = it }
+        strings("ios_versions")?.let { iosVersions = it }
         strings("platforms")?.let { platforms = it }
         strings("languages")?.let { languages = it }
         strings("appearances")?.let { appearances = it }
@@ -243,7 +251,7 @@ class Options {
 
     /** The Android keys; iOS-only keys (scheme, ios_versions…) are rejected, so typos surface. */
     private val configKeys = setOf(
-        "project_dir", "modules", "variant", "devices", "watch_devices", "desktop_devices", "platforms", "languages", "appearances", "font_scales",
+        "project_dir", "modules", "variant", "devices", "watch_devices", "desktop_devices", "ios_devices", "ios_versions", "platforms", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",
         "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "screens",
         "platform", "android",

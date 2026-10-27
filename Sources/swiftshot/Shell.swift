@@ -51,11 +51,27 @@ func sh(_ args: [String], env: [String: String] = [:], cwd: String? = nil, allow
         // took the output: a large `simctl list -j` came back cut short.)
         let done = DispatchGroup()
         done.enter(); done.enter()
-        process.terminationHandler = { _ in done.leave() }
+        // Read until EOF, or until the process has exited and the pipe is drained: a process it
+        // started may outlive it holding the pipe (a no-boot app's shader compiler).
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal(); done.leave() }
         do { try process.run() } catch { continuation.resume(throwing: error); return }
         Thread.detachNewThread {
-            let handle = pipe.fileHandleForReading
-            while case let data = handle.availableData, !data.isEmpty { buffer.append(data) }
+            let fd = pipe.fileHandleForReading.fileDescriptor
+            var chunk = [UInt8](repeating: 0, count: 65536)
+            var hasExited = false
+            while true {
+                var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                let ready = poll(&p, 1, 100)
+                if ready > 0 {
+                    let n = read(fd, &chunk, chunk.count)
+                    if n <= 0 { break }
+                    buffer.append(Data(chunk[0..<n]))
+                    continue
+                }
+                if hasExited { break }   // exited, and nothing more came in a whole poll
+                hasExited = exited.wait(timeout: .now()) == .success
+            }
             done.leave()
         }
         done.notify(queue: .global()) {

@@ -11,6 +11,7 @@ import org.gradle.api.file.Directory
 import org.gradle.api.file.RegularFile
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFiles
@@ -117,7 +118,91 @@ allprojects { p ->
     ["com.android.application", "com.android.library", "com.android.kotlin.multiplatform.library"].each { id ->
         p.plugins.withId(id) { setupSwiftshot(p, variantName, paparazziVersion, layoutlibVersion) }
     }
-    p.plugins.withId("org.jetbrains.kotlin.multiplatform") { setupDesktop(p, variantName) }
+    p.plugins.withId("org.jetbrains.kotlin.multiplatform") { setupDesktop(p, variantName); setupIos(p, variantName) }
+}
+
+// A Kotlin Multiplatform module's iOS simulator target. Swiftshot links its own dynamic framework
+// (SwiftshotHost) from the module, with generated public wrappers returning each preview as a
+// Compose UIViewController, and renders those in a generated host app with its iOS pipeline.
+@UntrackedTask(because = "Writes a description of the build for the renderer")
+abstract class SwiftshotPrepareIos extends DefaultTask {
+    @Input abstract Property<String> getModulePath()
+    @Input abstract Property<String> getProjectDir()
+    @Input abstract MapProperty<String, List<String>> getSourceSets()
+    @Input abstract Property<String> getFramework()
+    @Input abstract Property<String> getLinkTask()
+    @Input abstract Property<String> getResourcesTask()
+    @Input abstract Property<String> getResources()
+    @Input abstract Property<String> getRegistry()
+    @Input abstract Property<String> getSources()
+    @OutputFile abstract RegularFileProperty getOutput()
+
+    @TaskAction
+    void write() {
+        def json = [
+            platform     : "ios",
+            module       : modulePath.get(),
+            projectDir   : projectDir.get(),
+            sourceSets   : sourceSets.get(),
+            framework    : framework.get(),
+            linkTask     : linkTask.get(),
+            resourcesTask: resourcesTask.get(),
+            resources    : resources.get(),
+            registry     : registry.get(),
+            sources      : sources.get(),
+        ]
+        def out = output.get().asFile
+        out.parentFile.mkdirs()
+        out.text = JsonOutput.prettyPrint(JsonOutput.toJson(json))
+        println "swiftshot-module ${out.absolutePath}"
+    }
+}
+
+def setupIos(p, String variantName) {
+    def kotlin = p.extensions.getByName("kotlin")
+    def hostBuild = startParameter.projectProperties["swiftshot.ios"] == "1"
+    def gc = startParameter.projectProperties["swiftshot.ios.gc"]
+    def base = p.layout.buildDirectory.dir("swiftshot/ios").get().asFile
+    def registry = new File(base, "registry")
+    def sources = new File(base, "src")
+    kotlin.targets.matching { it.name == "iosSimulatorArm64" }.all { t ->
+        def debug = t.class.classLoader.loadClass("org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType").getField("DEBUG").get(null)
+        t.binaries.framework("SwiftshotHost", [debug]) { f ->
+            f.baseName = "SwiftshotHost"
+            f.isStatic = false
+            if (gc) f.binaryOption("gc", gc)
+            f.binaryOption("bundleId", "dev.swiftshot.host.framework")
+        }
+        def compilation = t.compilations.getByName("main")
+        if (hostBuild) {
+            // The registry of wrappers, and Swiftshot's copies of the source sets in which private
+            // previews are internal (written by Swiftshot before this build).
+            compilation.defaultSourceSet.kotlin.srcDir(registry)
+            compilation.allKotlinSourceSets.each { ss ->
+                def dirs = ss.kotlin.srcDirs.collect { d ->
+                    def copy = new File(sources, d.absolutePath.md5())
+                    copy.isDirectory() ? copy : d
+                }
+                if (dirs != ss.kotlin.srcDirs as List) ss.kotlin.setSrcDirs(dirs)
+            }
+        }
+        def framework = t.binaries.getFramework("SwiftshotHost", debug)
+        def task = p.tasks.register("swiftshotPrepareIos", SwiftshotPrepareIos) { task ->
+            task.group = "swiftshot"
+            task.modulePath.set(p.path)
+            task.projectDir.set(p.projectDir.absolutePath)
+            // A plain map (configuration-cache safe), read when the task is configured.
+            task.sourceSets.set(compilation.allKotlinSourceSets.collectEntries { ss -> [(ss.name): ss.kotlin.srcDirs.collect { it.absolutePath }] })
+            task.framework.set(framework.outputFile.absolutePath)
+            task.linkTask.set(framework.linkTaskName)
+            task.resourcesTask.set("assembleIosSimulatorArm64MainResources")
+            task.resources.set(p.layout.buildDirectory.dir("generated/compose/resourceGenerator/assembledResources/iosSimulatorArm64Main").get().asFile.absolutePath)
+            task.registry.set(registry.absolutePath)
+            task.sources.set(sources.absolutePath)
+            task.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/ios.json"))
+        }
+        if (!hostBuild) aggregate(p, task)
+    }
 }
 
 /** `swiftshotPrepare` runs every platform's prepare task of the module. */

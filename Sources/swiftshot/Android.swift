@@ -3,14 +3,15 @@ import Foundation
 /// Android projects are rendered by the JVM renderer (`swiftshot-android`, next to this binary):
 /// a Gradle project with no Xcode project, or `--platform android`, hands over all arguments.
 enum Android {
-    static func handOffIfNeeded(_ args: [String]) {
+    /// Returns the arguments for the iOS side, without `--platform`.
+    static func handOffIfNeeded(_ args: [String]) -> [String] {
         var args = args
         var platform: String?
         if let i = args.firstIndex(of: "--platform"), i + 1 < args.count {
             platform = args[i + 1]; args.removeSubrange(i...(i + 1))
         }
-        if platform == "ios" { return }
-        guard platform == "android" || isAndroidProject(args) else { return }
+        if platform == "ios" { return args }
+        guard platform == "android" || isAndroidProject(args) else { return args }
         let dir = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath().deletingLastPathComponent()
         let launcher = dir.appendingPathComponent("swiftshot-android").path
         guard FileManager.default.isExecutableFile(atPath: launcher) else {

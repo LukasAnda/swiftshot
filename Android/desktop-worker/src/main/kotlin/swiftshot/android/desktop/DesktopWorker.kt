@@ -74,7 +74,8 @@ private fun runGroup(job: Map<*, *>, emit: (String) -> Unit, encoder: java.util.
             for (index in indices) {
                 val file = if (index < 0) base else base.removeSuffix(".png") + "_${index + 1}.png"
                 val arg = if (index < 0) null else values!![index]
-                val image = render(target, arg, width, height, Density(scale, fontScale), if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr, dark, shrink)
+                val image = render(target, arg, width, height, Density(scale, fontScale), if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr, dark, shrink,
+                    shot["fixedWidth"] == true, shot["fixedHeight"] == true)
                 val renderMs = (System.nanoTime() - t0) / 1_000_000
                 val background = shot.strOrNull("background")
                 pending += encoder.submit {
@@ -93,7 +94,8 @@ private fun runGroup(job: Map<*, *>, emit: (String) -> Unit, encoder: java.util.
     }
 }
 
-private fun render(target: Target, arg: Any?, width: Int, height: Int, density: Density, direction: LayoutDirection, dark: Boolean, shrink: Boolean): Image {
+private fun render(target: Target, arg: Any?, width: Int, height: Int, density: Density, direction: LayoutDirection, dark: Boolean, shrink: Boolean,
+                   fixedWidth: Boolean, fixedHeight: Boolean): Image {
     val content: @Composable () -> Unit = {
         CompositionLocalProvider(LocalSystemTheme provides if (dark) SystemTheme.Dark else SystemTheme.Light) {
             Invoke(target, arg)
@@ -106,8 +108,8 @@ private fun render(target: Target, arg: Any?, width: Int, height: Int, density: 
         val image = scene.render(16_000_000)
         if (!shrink) return image
         val size = scene.calculateContentSize()
-        val w = size.width.coerceIn(1, width)
-        val h = size.height.coerceIn(1, height)
+        val w = if (fixedWidth) width else size.width.coerceIn(1, width)
+        val h = if (fixedHeight) height else size.height.coerceIn(1, height)
         return Image.makeFromBitmap(org.jetbrains.skia.Bitmap().also { bitmap ->
             bitmap.allocN32Pixels(w, h)
             image.readPixels(bitmap, 0, 0)
