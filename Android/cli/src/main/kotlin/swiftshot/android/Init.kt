@@ -13,6 +13,7 @@ object Init {
         val root = File(o.projectDir).absoluteFile.normalize()
         val target = File(root, "swiftshot.json")
         if (target.exists() && !force) throw CliError("$target already exists. --force overwrites it.")
+        if (!File(root, "gradlew").isFile && Flutter.isProject(root)) return write(target, flutter(root), log)
         val settings = listOf("settings.gradle.kts", "settings.gradle").map { File(root, it) }.firstOrNull { it.isFile }
             ?: throw CliError("No settings.gradle(.kts) in $root.")
         val dir = { m: String -> File(root, m.trim(':').replace(':', '/')) }
@@ -37,10 +38,31 @@ object Init {
             "layout" to if (fastlane) "fastlane" else null,
             "clear_previous_screenshots" to true,
         ).filterValues { it != null }
+        return write(target, config, log)
+    }
+
+    private fun write(target: File, config: Map<String, Any?>, log: Log): Int {
         target.writeText(Json.write(config, "  ") + "\n")
         log.ok("Wrote $target")
         println(target.readText().trim())
         return 0
+    }
+
+    /** A Flutter project: the languages of its gen-l10n ARB files, an iPhone, an iPad, a Pixel and a Pixel tablet. */
+    fun flutter(root: File): Map<String, Any?> {
+        val arbDir = File(root, "l10n.yaml").takeIf { it.isFile }?.readText()
+            ?.let { Regex("""(?m)^arb-dir:\s*(\S+)""").find(it)?.groupValues?.get(1) } ?: "lib/l10n"
+        val languages = File(root, arbDir).listFiles { f -> f.extension == "arb" }.orEmpty()
+            .mapNotNull { Regex("""_([a-z]{2,3}(?:_[A-Za-z0-9]+)*)\.arb$""").find(it.name)?.groupValues?.get(1)?.replace('_', '-') }
+            .map { if (it == "en") "en-US" else it }.distinct()
+            .sortedWith(compareBy({ it != "en-US" }, { it })).ifEmpty { listOf("en-US") }
+        return linkedMapOf(
+            "devices" to listOf("iPhone 17 Pro Max", "iPad Pro 13-inch (M5)", "Pixel 10 Pro", "Pixel Tablet"),
+            "languages" to languages,
+            "appearances" to listOf("light", "dark"),
+            "output_directory" to "screenshots",
+            "clear_previous_screenshots" to true,
+        )
     }
 
     /** `include(":app", ":wear")`, `include ':app'`, one per line or several in one call. */

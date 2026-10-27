@@ -9,6 +9,8 @@ overwrites an existing file.
   folder. Nothing is built.
 - Compose Multiplatform: only the modules with `@Preview`s, the languages from
   `composeResources`, and `desktop_devices` / `ios_devices` when the module has those targets.
+- Flutter: the languages from the gen-l10n ARB files (`arb-dir` in `l10n.yaml`), iPhone 17 Pro
+  Max, iPad Pro 13-inch (M5), Pixel 10 Pro and Pixel Tablet, light and dark.
 
 Swiftshot reads `./swiftshot.json` automatically, or the file given with `--config`. Command-line
 flags override the file.
@@ -22,6 +24,7 @@ gives plain device frames.
 
 - [iOS](#example)
 - [Android](#android)
+- [Flutter](#flutter)
 
 ## Example
 
@@ -172,6 +175,8 @@ so `fastlane deliver` uploads it unchanged.
 | `variant` | `debug` | build variant; needs `ui-tooling` on its classpath |
 | `gradle_args` | `[]` | extra Gradle arguments |
 | `java_home` | | JDK 21+ for Gradle and the renderer, see [[Installation]] |
+| `flutter_root` | `FLUTTER_ROOT`, fvm, `flutter` on `PATH` | Flutter SDK, see [[Flutter]] |
+| `flutter_ios` | `exact` | Flutter on iPhones and iPads: `exact` (Flutter's iOS engine, Mac with Xcode) or `headless` |
 | `devices` | Pixel 10 Pro, Pixel Tablet | phones, foldables, tablets: names, ids or `*` globs (`swiftshot devices`) |
 | `watch_devices` | Wear OS Large Round | for Wear OS modules |
 | `desktop_devices` | Desktop 1440×900 @2x | Compose Multiplatform desktop window sizes |
@@ -228,3 +233,19 @@ fastlane/metadata/android/en-US/images/wearScreenshots/Wear OS Large Round-Watch
 
 Tablets and foldables up to 9" go to `sevenInchScreenshots`, TVs to `tvScreenshots`, desktop
 windows to `desktopScreenshots`. For Compose Multiplatform see [[Compose Multiplatform]].
+
+## Flutter
+
+A Flutter project (`pubspec.yaml` on the Flutter SDK) uses the Android keys, with iPhones and iPads
+in `devices` too, plus `flutter_root` and `flutter_ios`:
+
+```json
+{
+  "devices": ["iPhone 17 Pro Max", "iPad Pro 13-inch (M5)", "Pixel 10 Pro", "Pixel Tablet"],
+  "languages": ["en-US", "de", "ar"],
+  "appearances": ["light", "dark"],
+  "flutter_ios": "exact"
+}
+```
+
+Output: `<output_directory>/<language>/<device>-<preview>[-light|-dark].png`. See [[Flutter]].

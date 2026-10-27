@@ -1,0 +1,4 @@
+#include "Generated.xcconfig"
+
+// Apple silicon simulators only: the engine has no x86_64 simulator slice here.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64

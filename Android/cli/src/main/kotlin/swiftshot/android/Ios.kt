@@ -120,14 +120,20 @@ class Ios(private val o: Options, private val log: Log, private val output: File
     }
 
     /** Swiftshot's iOS pipeline on the host app, into the same output folder. */
-    private fun render(app: File): List<Shot> {
+    /**
+     * Renders a host app's previews with the iOS renderer into [iosOut]: its exit status and its
+     * report's screenshots (file relative to [iosOut], preview, device, language, appearance, size).
+     */
+    internal fun renderApp(app: File, devices: List<String>, iosOut: File, extra: List<String> = emptyList()): Pair<Int, List<Map<*, *>>> {
         val tool = swiftshot() ?: throw CliError("The iOS renderer (swiftshot) is not installed next to swiftshot-android.jar.")
-        val iosOut = File(output, ".ios")
         iosOut.deleteRecursively()
         val cmd = mutableListOf(tool.path, "--platform", "ios", "run", "--app", app.path,
-            "--devices", o.iosDevices.ifEmpty { defaultDevices }.joinToString(","),
+            "--devices", devices.joinToString(","),
             "--languages", o.languages.joinToString(","), "--appearances", o.appearances.joinToString(","),
             "--output", iosOut.path, "--no-html")
+        // Flutter's text-scale variants are "<name> @1.3x" in its host app.
+        if (o.previews.isNotEmpty()) cmd += listOf("--previews", o.previews.flatMap { listOf(it, "$it @*") }.joinToString(","))
+        cmd += extra
         if (o.iosVersions.isNotEmpty()) cmd += listOf("--ios", o.iosVersions.joinToString(","))
         if (o.verbose) cmd += "--verbose"
         log.step("Rendering for iOS")
@@ -136,7 +142,23 @@ class Ios(private val o: Options, private val log: Log, private val output: File
         val status = p.waitFor()
         val report = File(iosOut, "swiftshot-report.json")
         if (!report.isFile) throw CliError("The iOS renderer failed (exit $status).")
-        val shots = ((Json.parse(report.readText()) as Map<*, *>)["screenshots"] as List<*>).map { it as Map<*, *> }
+        return status to ((Json.parse(report.readText()) as Map<*, *>)["screenshots"] as List<*>).map { it as Map<*, *> }
+    }
+
+    /** Existing screenshots in [dir] into their device (plain frames) under [framed]. */
+    internal fun frame(dir: File, framed: File): Boolean {
+        val tool = swiftshot() ?: return false
+        val cmd = listOf(tool.path, "--platform", "ios", "frame", dir.path, "--frame", "plain", "--frame-output", framed.path) +
+            if (o.acceptBezelLicense) listOf("--accept-bezel-license") else emptyList()
+        val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        val out = p.inputStream.bufferedReader().readText()
+        if (p.waitFor() != 0) { log.warn("iOS frames failed:\n${out.lines().takeLast(10).joinToString("\n")}"); return false }
+        return true
+    }
+
+    private fun render(app: File): List<Shot> {
+        val iosOut = File(output, ".ios")
+        val (status, shots) = renderApp(app, o.iosDevices.ifEmpty { defaultDevices }, iosOut)
         val result = mutableListOf<Shot>()
         for (s in shots) {
             val rel = s["file"] as String

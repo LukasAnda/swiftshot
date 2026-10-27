@@ -57,6 +57,17 @@ jobs:
           export JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
           unset ANDROID_HOME ANDROID_SDK_ROOT
           Android/ci/multiplatform.sh ios "$RUNNER_TEMP/multiplatform-ios"
+      # Flutter on iPhones through Flutter's iOS engine, on the same runner (no simulator booted).
+      - uses: subosito/flutter-action@v2
+        if: matrix.key == 'No simulator booted'
+        with:
+          flutter-version: 3.41.7
+          channel: stable
+      - name: Flutter (iOS engine)
+        if: matrix.key == 'No simulator booted'
+        run: |
+          export JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
+          Android/ci/flutter.sh "$RUNNER_TEMP/flutter-ios"
       - name: Summary
         if: always()
         run: |
@@ -134,6 +145,35 @@ jobs:
         with:
           name: linux-host
           path: ${{ runner.temp }}/linux-host
+          if-no-files-found: ignore
+
+  flutter:
+    name: Flutter
+    if: ${{ !inputs.tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.7
+          channel: stable
+      # Fonts with the scripts Roboto lacks (Arabic, Japanese), as a Linux machine would have.
+      - name: Fonts
+        run: sudo apt-get install -y -q fonts-dejavu-core fonts-noto-cjk
+      - name: Render and check
+        run: Android/ci/flutter.sh "$RUNNER_TEMP/flutter"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: flutter-screenshots
+          path: |
+            ${{ runner.temp }}/flutter/a
+            ${{ runner.temp }}/flutter/a.log
           if-no-files-found: ignore
 
   multiplatform:

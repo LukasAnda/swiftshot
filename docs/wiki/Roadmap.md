@@ -9,8 +9,8 @@ to suggest something or to say what you need most.
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.4.0) | [Android: Jetpack Compose](#v040--android-jetpack-compose) | released |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.5.0) | [Compose Multiplatform](#v050--compose-multiplatform) | released |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | [Linux as a full host](#v060--linux-as-a-full-host) | released |
-| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/7) | [Migration from Paparazzi and Roborazzi](#v070--migration-from-paparazzi-and-roborazzi) | planned |
-| [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/4) | [Flutter](#v080--flutter) | planned |
+| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/4) | [Flutter](#v070--flutter) | released |
+| [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/7) | [Migration from Paparazzi and Roborazzi](#v080--migration-from-paparazzi-and-roborazzi) | planned |
 | [v0.9.0](https://github.com/LukasAnda/swiftshot/milestone/5) | [IDE plugins](#v090--ide-plugins) | planned |
 
 ## v0.3.0 · Homebrew
@@ -36,15 +36,16 @@ The same `swiftshot` command, `swiftshot init` and configuration on Linux as on 
 Android and the Android and desktop targets of Compose Multiplatform; iOS targets are skipped.
 Installs with Homebrew, a `.deb` or an `.rpm`. See [[Installation]].
 
-## v0.7.0 · Migration from Paparazzi and Roborazzi
+## v0.7.0 · Flutter
+
+Flutter widget `@Preview`s on iPhones, iPads and Android devices, every language and appearance,
+on a Mac or Linux. On a Mac with Xcode, iOS renders on Flutter's iOS engine, pixel identical to a
+booted simulator. See [[Flutter]].
+
+## v0.8.0 · Migration from Paparazzi and Roborazzi
 
 `swiftshot init` finds Paparazzi and Roborazzi setups (plugins, test rules, recorded snapshot
 folders) and sets Swiftshot up to match.
-
-## v0.8.0 · Flutter
-
-Screenshots of Flutter widgets on iOS and Android devices, with the same matrix of devices,
-languages, text sizes and appearances.
 
 ## v0.9.0 · IDE plugins
 

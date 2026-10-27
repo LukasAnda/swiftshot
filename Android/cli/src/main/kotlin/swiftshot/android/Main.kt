@@ -19,7 +19,8 @@ fun main(args: Array<String>) {
                 val jar = o.commandArgs.getOrNull(0) ?: "/Applications/Android Studio.app/Contents/plugins/android/lib/sdklib.jar"
                 Devices.emit(File(jar), File(o.commandArgs.getOrNull(1) ?: "devices.json")); 0
             }
-            else -> Runner(o, log).run()
+            // A Flutter project (pubspec.yaml on the Flutter SDK, no Gradle build at its root).
+            else -> if (!File(o.projectDir, "gradlew").isFile && Flutter.isProject(File(o.projectDir))) Flutter(o, log).run() else Runner(o, log).run()
         }
     } catch (e: CliError) {
         log.error(e.message ?: "failed"); 1
@@ -36,4 +37,7 @@ private fun devices() {
         println(type.replaceFirstChar { it.uppercase() })
         for (d in list) println(String.format(Locale.ROOT, "  %-34s %5d×%-5d px  %4d dpi  %5.0f×%-5.0f dp%s", d.name, d.width, d.height, d.density, d.widthDp, d.heightDp, if (d.round) "  round" else ""))
     }
+    println("iPhone and iPad (Flutter projects)")
+    for (d in AppleDevices.all) println(String.format(Locale.ROOT, "  %-34s %5d×%-5d pt  @%-4s safe area t%d b%d", d.name, d.width, d.height,
+        if (d.scale % 1.0 == 0.0) "${d.scale.toInt()}x" else "${d.scale}x", d.top, d.bottom))
 }

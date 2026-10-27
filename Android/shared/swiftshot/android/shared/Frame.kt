@@ -1,4 +1,4 @@
-package swiftshot.android.worker
+package swiftshot.android.shared
 
 import java.awt.image.BufferedImage
 import java.io.File

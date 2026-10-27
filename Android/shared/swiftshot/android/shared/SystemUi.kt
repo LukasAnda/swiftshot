@@ -1,4 +1,4 @@
-package swiftshot.android.worker
+package swiftshot.android.shared
 
 import java.awt.BasicStroke
 import java.awt.Color
@@ -38,9 +38,11 @@ object SystemUi {
         }
     }
 
-    fun init(runtimeRoot: String) {
+    fun init(runtimeRoot: String) = initFont(File(runtimeRoot, "data/fonts/Roboto-Regular.ttf"))
+
+    /** The clock's font: Roboto (layoutlib's, or the Flutter SDK's for Flutter projects). */
+    fun initFont(file: File) {
         if (font != null) return
-        val file = File(runtimeRoot, "data/fonts/Roboto-Regular.ttf")
         font = runCatching { Font.createFont(Font.TRUETYPE_FONT, file) }.getOrNull() ?: Font(Font.SANS_SERIF, Font.PLAIN, 12)
     }
 

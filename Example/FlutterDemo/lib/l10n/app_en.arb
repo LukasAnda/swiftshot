@@ -1,0 +1,172 @@
+{
+  "@@locale": "en",
+  "appName": "Habits",
+  "healthConnect": "Health Connect",
+  "backupSync": "Backup & sync",
+  "tabToday": "Today",
+  "tabStats": "Stats",
+  "tabHistory": "History",
+  "tabSettings": "Settings",
+  "statistics": "Statistics",
+  "habitWater": "Drink water",
+  "habitRun": "Morning run",
+  "habitRead": "Read 20 pages",
+  "habitMeditate": "Meditate",
+  "habitJournal": "Journal",
+  "detailWater": "3 of 8 glasses",
+  "detailRun": "5.2 km",
+  "detailRead": "8 of 20 pages",
+  "detailMeditate": "10 minutes",
+  "detailJournal": "Not yet today",
+  "greeting": "Good morning, Mara",
+  "summaryBody": "Three habits left today. You’re on a 31-day run streak.",
+  "filterAll": "All",
+  "filterMorning": "Morning",
+  "filterEvening": "Evening",
+  "newHabit": "New habit",
+  "upNext": "Up next",
+  "remindersOn": "Reminders on",
+  "noteNextGlass": "Next glass",
+  "notePagesToGo": "12 pages to go",
+  "noteThreeLines": "Three lines are enough",
+  "insightTitle": "Mornings work for you",
+  "insightBody": "You finish 94% of the habits you plan before 9:00, and 61% of those after 20:00. Try moving Journal to the morning.",
+  "nextMilestone": "Next milestone",
+  "milestoneTitle": "50-day run streak",
+  "completionRate": "Completion rate",
+  "vsLastWeek": "{delta} vs last week",
+  "@vsLastWeek": {
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "last7Days": "Last 7 days",
+  "last30Days": "Last 30 days",
+  "range": "Range",
+  "rangeWeek": "Week",
+  "rangeMonth": "Month",
+  "rangeYear": "Year",
+  "currentStreak": "Current streak",
+  "bestStreak": "Best streak",
+  "checkIns": "Check-ins",
+  "consistency": "Consistency",
+  "less": "Less",
+  "more": "More",
+  "byHabit": "By habit",
+  "highlights": "Highlights",
+  "bestDay": "Best day",
+  "bestDayValue": "Wednesday · 96%",
+  "bestTime": "Best time",
+  "bestTimeValue": "Before 9:00",
+  "mostConsistent": "Most consistent",
+  "needsAttention": "Needs attention",
+  "needsAttentionValue": "Journal · 47%",
+  "perfectDay": "Perfect day",
+  "inProgress": "In progress",
+  "allHabitsCompleted": "All habits completed",
+  "nOf5Habits": "{count} of 5 habits",
+  "@nOf5Habits": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nOfMDone": "{done} of {total} done",
+  "@nOfMDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "ofTotal": "of {total}",
+  "@ofTotal": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "sectionReminders": "Reminders",
+  "sectionGeneral": "General",
+  "sectionData": "Data",
+  "sectionAbout": "About",
+  "dailyReminder": "Daily reminder",
+  "reminderTime": "Reminder time",
+  "sounds": "Sounds",
+  "weekStartsOn": "Week starts on",
+  "monday": "Monday",
+  "sunday": "Sunday",
+  "appearance": "Appearance",
+  "appearanceSystem": "System",
+  "exportHistory": "Export history",
+  "rateHabits": "Rate Habits",
+  "privacy": "Privacy",
+  "version": "Version",
+  "dataFooter": "Your data stays on your devices.",
+  "planSince": "Habits Plus · since 2024",
+  "welcomeTitle": "A steady rhythm for the things that matter.",
+  "welcomeBody": "Check in once a day, keep your streaks honest and see your week take shape.",
+  "getStarted": "Get started",
+  "haveAccount": "I already have an account",
+  "personalBest": "Personal best",
+  "daysInARow": "days in a row",
+  "name": "Name",
+  "icon": "Icon",
+  "repeat": "Repeat",
+  "everyDay": "Every day",
+  "remindMe": "Remind me",
+  "time": "Time",
+  "add": "Add",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "deleteTitle": "Delete “Drink water”?",
+  "deleteBody": "Your 12-day streak and its history will be removed.",
+  "shareStreak": "Share your streak",
+  "days": "{count, plural, one{{count} day} other{{count} days}}",
+  "@days": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nCheckIns": "{count, plural, one{{count} check-in} other{{count} check-ins}}",
+  "@nCheckIns": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daysToGo": "{count, plural, one{{count} day to go} other{{count} days to go}}",
+  "@daysToGo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dayStreak": "{count, plural, one{{count}-day streak} other{{count}-day streak}}",
+  "@dayStreak": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lastNWeeks": "{count, plural, one{Last week} other{Last {count} weeks}}",
+  "@lastNWeeks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
+}
