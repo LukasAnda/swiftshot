@@ -37,4 +37,7 @@ private fun devices() {
         println(type.replaceFirstChar { it.uppercase() })
         for (d in list) println(String.format(Locale.ROOT, "  %-34s %5d×%-5d px  %4d dpi  %5.0f×%-5.0f dp%s", d.name, d.width, d.height, d.density, d.widthDp, d.heightDp, if (d.round) "  round" else ""))
     }
+    println("iPhone and iPad (Flutter projects)")
+    for (d in AppleDevices.all) println(String.format(Locale.ROOT, "  %-34s %5d×%-5d pt  @%-4s safe area t%d b%d", d.name, d.width, d.height,
+        if (d.scale % 1.0 == 0.0) "${d.scale.toInt()}x" else "${d.scale}x", d.top, d.bottom))
 }
