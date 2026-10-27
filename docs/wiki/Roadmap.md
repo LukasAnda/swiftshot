@@ -6,7 +6,7 @@ to suggest something or to say what you need most.
 | version | | status |
 |---|---|---|
 | [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | [Homebrew](#v030--homebrew) | released |
-| [v0.4.0](https://github.com/LukasAnda/swiftshot/milestone/2) | [Android: Jetpack Compose](#v040--android-jetpack-compose) | planned |
+| [v0.4.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.4.0) | [Android: Jetpack Compose](#v040--android-jetpack-compose) | released |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/milestone/3) | [Compose Multiplatform](#v050--compose-multiplatform) | planned |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/4) | [Flutter](#v060--flutter) | planned |
 | [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/5) | [IDE plugins](#v070--ide-plugins) | planned |
@@ -19,8 +19,8 @@ updates it. The GitHub Action and the install script stay.
 
 ## v0.4.0 · Android: Jetpack Compose
 
-Screenshots of `@Preview` composables for every device, locale, font scale and dark mode, from
-one command, with the same output layout and gallery.
+Screenshots of `@Preview` composables for phones, foldables, tablets and Wear OS, every locale,
+font scale and dark mode, from one command, on a Mac or Linux. See [[Android]].
 
 ## v0.5.0 · Compose Multiplatform
 

@@ -1,5 +1,9 @@
 ## Requirements
 
+For Android (Jetpack Compose) see [[Android]]: a JDK 21+ on macOS or Linux is enough.
+
+For iOS:
+
 - Apple silicon Mac
 - Xcode 26.6 or 27.x
 - The simulator runtimes you want to render (Xcode > Settings > Components)

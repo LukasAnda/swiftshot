@@ -1,7 +1,7 @@
 <h1 align="center">Swiftshot</h1>
 
 <p align="center">
-  App Store screenshots straight from your SwiftUI and UIKit <code>#Preview</code>s, without booting a simulator.
+  App Store and Google Play screenshots straight from your SwiftUI, UIKit and Jetpack Compose previews, without a simulator or emulator.
 </p>
 
 <p align="center">
@@ -10,12 +10,14 @@
   <a href="https://github.com/marketplace/actions/swiftshot-preview-screenshots"><img src="https://img.shields.io/badge/Marketplace-Swiftshot-blue?logo=github" alt="GitHub Marketplace"></a>
   <img src="https://img.shields.io/badge/macOS-Apple%20silicon-black?logo=apple" alt="macOS, Apple silicon">
   <img src="https://img.shields.io/badge/Xcode-26.6%20%7C%2027-147EFB?logo=xcode&logoColor=white" alt="Xcode 26.6 and 27">
+  <img src="https://img.shields.io/badge/Android-Jetpack%20Compose-3DDC84?logo=android&logoColor=white" alt="Android, Jetpack Compose">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/LukasAnda/swiftshot" alt="License: AGPL-3.0"></a>
 </p>
 
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#android">Android</a> ·
   <a href="#device-frames">Device frames</a> ·
   <a href="#ci">CI</a> ·
   <a href="#swiftshot-vs-fastlane">vs fastlane</a> ·
@@ -78,6 +80,31 @@ device, language and appearance. You get:
 
 Build with the Debug configuration (the default). The compiler only includes `#Preview` code in
 Debug builds.
+
+## Android
+
+The same tool renders Jetpack Compose `@Preview`s for phones, foldables (folded and unfolded),
+tablets and Wear OS, on a Mac or on Linux, with no emulator. In the folder with `gradlew`:
+
+```
+swiftshot init      # swiftshot.json: modules, languages, Play devices
+swiftshot           # renders every preview
+```
+
+<p align="center">
+  <img src="docs/assets/android-showcase.png" alt="Compose screenshots rendered by swiftshot on a Pixel 10 Pro, a Pixel 9 Pro Fold folded and unfolded, a Pixel Tablet in Arabic and a Wear OS watch">
+</p>
+
+- Every `@Preview` as Android Studio renders it: `showSystemUi`, `device`, `locale`, dark
+  `uiMode`, `fontScale`, multipreviews, `@PreviewParameter`, dialogs and bottom sheets.
+- Devices from Android Studio's catalog, with each Pixel's camera cutout: edge-to-edge apps get
+  real insets, a status bar and the gesture handle.
+- Output in the `fastlane supply` layout with `"layout": "fastlane"`, device frames with
+  `--frame plain`, full-length scrolling screens.
+- Needs a JDK 21+ and `debugImplementation("androidx.compose.ui:ui-tooling")`, as Android
+  Studio's previews do. Nothing is added to the project.
+
+Details on the [Android](https://github.com/LukasAnda/swiftshot/wiki/Android) wiki page.
 
 ## CI
 
@@ -262,9 +289,16 @@ explanation and diagrams.
 
 ## Requirements
 
+iOS:
+
 - Apple silicon Mac
 - Xcode 26.6 or 27.x with the simulator runtimes you want to render (Xcode > Settings > Components)
 - An app target with `#Preview`s (iOS 17+). Nothing has to be added to your project.
+
+Android:
+
+- macOS or Linux with a JDK 21+ (Android Studio's bundled JDK is found automatically)
+- A Gradle project with Compose `@Preview`s and `ui-tooling` on the debug classpath
 
 ## Development
 
@@ -282,7 +316,7 @@ simulators.
 | version | |
 |---|---|
 | [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | Homebrew: `brew install lukasanda/tap/swiftshot` (released) |
-| [v0.4.0](https://github.com/LukasAnda/swiftshot/milestone/2) | Android: Jetpack Compose previews |
+| [v0.4.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.4.0) | Android: Jetpack Compose previews (released) |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/milestone/3) | Compose Multiplatform |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
 | [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/5) | IDE plugins for Xcode, Android Studio and IntelliJ IDEA |
