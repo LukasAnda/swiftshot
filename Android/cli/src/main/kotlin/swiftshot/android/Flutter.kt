@@ -33,7 +33,9 @@ class Flutter(private val o: Options, private val log: Log) {
         val languages = o.languages.map { it.replace('_', '-') }
         val iosDevices = devices.filter { it["platform"] == "ios" }.map { it["name"] as String }
         val exact = if (iosDevices.isEmpty() || o.flutterIos == "headless") null else FlutterIos(o, log, root, File(root, ".dart_tool/swiftshot"), sdk, output).let { f ->
-            f.unavailable()?.let { why -> log.step("iPhones and iPads rendered headless ($why); on a Mac with Xcode they render exactly as on a device"); null } ?: f
+            val why = f.unavailable()
+            if (why != null) log.step("iPhones and iPads rendered headless ($why); on a Mac with Xcode they render exactly as on a device")
+            f.takeIf { why == null }
         }
         if (o.clear) output.listFiles()?.forEach { if (it.isDirectory) it.deleteRecursively() else if (it.name.endsWith(".png") || it.name == "screenshots.html" || it.name == "swiftshot-report.json") it.delete() }
         // Generated anew each run; ios/ keeps the host app and its build stamp between runs.
@@ -59,30 +61,25 @@ class Flutter(private val o: Options, private val log: Log) {
         fun results() = languages.flatMap { lang ->
             File(dir, "${file(lang)}.results.jsonl").takeIf { it.isFile }?.readLines().orEmpty().filter { it.isNotBlank() }.map { Json.parse(it) as Map<*, *> }
         }
-        var (status, out) = test(impeller = true)
-        if (results().isEmpty() && status != 0) {
-            log.warn("flutter test could not render with Impeller here; rendering with Skia")
-            test(impeller = false).let { status = it.first; out = it.second }
-        }
-        val results = results()
-        val ok = results.filter { it["ok"] == true }
-        for (r in results.filter { it["ok"] == true && it["warning"] != null }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["warning"]} (${r["script"]}:${r["line"]})")
-        for (r in results.filter { it["ok"] != true }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["error"]} (${r["script"]}:${r["line"]})")
-        if (status != 0 && results.isEmpty()) throw CliError("flutter test failed:\n${out.toString().lines().filter { it.isNotBlank() }.takeLast(40).joinToString("\n")}")
-        log.ok("${ok.size} screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (flutter test)")
-        var shots = ok
-        val manifest = File(dir, "previews.json").takeIf { it.isFile }?.let { (Json.parse(it.readText()) as List<*>).map { m -> m as Map<*, *> } }.orEmpty()
-        // The system bars over full screens (components have none), where no system drew them.
-        if (o.systemUi != "never") {
-            val components = manifest.filter { it["component"] == true }.map { it["name"] as String }.toSet()
-            val byName = devices.associateBy { it["name"] as String }
-            val roboto = File(sdk, "bin/cache/artifacts/material_fonts/Roboto-Regular.ttf")
-            for (r in ok) {
-                val d = byName[r["device"]] ?: continue
-                if ((r["preview"] as String) in components || (d["platform"] == "ios" && exact != null)) continue
-                FlutterBars.draw(File(r["file"] as String), d, rtl(r["language"] as String), roboto)
+        /** One headless pass over the generated jobs: Impeller, else Skia; its results. */
+        fun headless(): Pair<Int, List<Map<*, *>>> {
+            var (status, out) = test(impeller = true)
+            if (results().isEmpty() && status != 0) {
+                log.warn("flutter test could not render with Impeller here; rendering with Skia")
+                test(impeller = false).let { status = it.first; out = it.second }
             }
+            val results = results()
+            for (r in results.filter { it["ok"] == true && it["warning"] != null }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["warning"]} (${r["script"]}:${r["line"]})")
+            for (r in results.filter { it["ok"] != true }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["error"]} (${r["script"]}:${r["line"]})")
+            if (status != 0 && results.isEmpty()) throw CliError("flutter test failed:\n${out.lines().filter { it.isNotBlank() }.takeLast(40).joinToString("\n")}")
+            return status to results
         }
+        var results = headless().second
+        var ok = results.filter { it["ok"] == true }
+        log.ok("${ok.size} screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (flutter test)")
+        val manifest = File(dir, "previews.json").takeIf { it.isFile }?.let { (Json.parse(it.readText()) as List<*>).map { m -> m as Map<*, *> } }.orEmpty()
+        var shots = ok
+        var iosExact = false
         if (exact != null) {
             // Self-sizing components: their size in points from the headless iPhone renders.
             val ratios = devices.associate { (it["name"] as String) to (it["ratio"] as Number).toDouble() }
@@ -94,11 +91,31 @@ class Flutter(private val o: Options, private val log: Log) {
             val t1 = System.nanoTime()
             val rendered = exact.run(manifest, measured, iosDevices)
             if (rendered != null) {
+                iosExact = true
                 log.ok("${rendered.size} iOS screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t1) / 1e9)}s (Flutter's iOS engine, no simulator booted)")
                 shots = ok.filter { (it["device"] as String) !in iosDevices } + rendered.map { s ->
                     mapOf("ok" to true, "file" to File(output, s.file).path, "preview" to s.preview, "device" to s.device, "language" to s.language,
                         "appearance" to s.appearance, "fontScale" to 1.0, "size" to "${s.width}x${s.height}", "millis" to 0, "script" to null, "line" to null)
                 }
+            } else {
+                // The iOS engine couldn't render: iPhones and iPads headless after all.
+                log.step("Rendering iPhones and iPads headless")
+                val others = results.filter { (it["device"] as String) !in iosDevices }
+                generate(dir, pkg, public, pubspec, languages, devices.filter { it["platform"] == "ios" }, false)
+                results = others + headless().second
+                ok = results.filter { it["ok"] == true }
+                shots = ok
+            }
+        }
+        // The system bars over full screens (components have none), where no system drew them.
+        if (o.systemUi != "never") {
+            val components = manifest.filter { it["component"] == true }.map { it["name"] as String }.toSet()
+            val byName = devices.associateBy { it["name"] as String }
+            val roboto = File(sdk, "bin/cache/artifacts/material_fonts/Roboto-Regular.ttf")
+            for (r in ok) {
+                val d = byName[r["device"]] ?: continue
+                if ((r["preview"] as String) in components || (d["platform"] == "ios" && iosExact)) continue
+                FlutterBars.draw(File(r["file"] as String), d, rtl(r["language"] as String), roboto)
             }
         }
         if (o.frame == "plain") frame(shots, devices, manifest)
