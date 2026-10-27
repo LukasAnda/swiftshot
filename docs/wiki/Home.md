@@ -1,10 +1,12 @@
-Swiftshot renders store screenshots from the previews you already have, for every device, language
-and appearance, from one command:
+<img src="https://raw.githubusercontent.com/LukasAnda/swiftshot/main/docs/assets/logo.svg" width="72" height="72" alt="">
 
-- **iOS**: App Store screenshots from SwiftUI and UIKit `#Preview`s, for every iPhone, iPad and
-  Apple Watch and iOS version, without booting a simulator. Apple silicon Mac with Xcode.
-- **Android**: Google Play screenshots from Jetpack Compose `@Preview`s, for phones, foldables,
-  tablets and Wear OS, without an emulator. Mac or Linux with a JDK 21+.
+Swiftshot renders screenshots of the previews you already have, for every device, language and
+appearance, from one command: for screenshot tests, and as App Store and Google Play screenshots.
+
+- **iOS**: SwiftUI and UIKit `#Preview`s, for every iPhone, iPad and Apple Watch and iOS version,
+  without booting a simulator. Apple silicon Mac with Xcode.
+- **Android**: Jetpack Compose `@Preview`s, for phones, foldables, tablets and Wear OS, without an
+  emulator. Mac or Linux with a JDK 21+.
 - **Compose Multiplatform**: shared `@Preview`s for Android, desktop and iOS in one run.
 
 Run `swiftshot` in the project folder: an Xcode project renders iOS, a Gradle project Android.

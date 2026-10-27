@@ -1,7 +1,14 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img src="docs/assets/logo.svg" width="96" height="96" alt="">
+  </picture>
+</p>
+
 <h1 align="center">Swiftshot</h1>
 
 <p align="center">
-  App Store and Google Play screenshots straight from your SwiftUI, UIKit, Jetpack Compose and Compose Multiplatform previews, without a simulator or emulator.
+  Fast screenshot tests from your SwiftUI, UIKit, Jetpack Compose and Compose Multiplatform previews, without a simulator or emulator. Also makes App Store and Google Play screenshots.
 </p>
 
 <p align="center">
