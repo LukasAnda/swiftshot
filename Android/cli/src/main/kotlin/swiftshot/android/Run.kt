@@ -208,7 +208,8 @@ class Runner(private val o: Options, private val log: Log) {
                         "providerLimit" to shot.preview.providerLimit,
                         "offsetMs" to shot.delayMs,
                         "background" to background(shot.preview),
-                        "framed" to art(shot.device)?.let { framed(shot.file).path },
+                        // Only whole screens go into a frame; a component or a full-length capture would be stretched.
+                        "framed" to art(shot.device)?.takeIf { shot.mode == "normal" }?.let { framed(shot.file).path },
                     )
                 },
             )

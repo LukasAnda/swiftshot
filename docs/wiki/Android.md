@@ -12,11 +12,15 @@ a Mac or on Linux (CI).
 debugImplementation("androidx.compose.ui:ui-tooling")
 ```
 
+- `mavenCentral()` among the project's repositories: Swiftshot's task resolves Paparazzi's
+  layoutlib SDK from there
+
 Nothing else is added to the project: Swiftshot adds its Gradle task for its own run only.
 
 ## Install
 
-On a Mac, the regular install includes Android support ([[Installation]]). On Linux:
+On an Apple silicon Mac, the regular install includes Android support ([[Installation]]). On Linux
+or an Intel Mac:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | sh
@@ -37,7 +41,8 @@ open screenshots/screenshots.html
 
 ## Configuration
 
-`swiftshot.json` uses the same keys as on iOS where they mean the same thing:
+`swiftshot.json` uses the same keys as on iOS where they mean the same thing. It is a file of its
+own: keys only iOS knows, such as `scheme`, are rejected.
 
 ```json
 {
@@ -75,11 +80,16 @@ open screenshots/screenshots.html
 | `full_length` | `false` | grow scrolling screens to their whole content |
 | `delay` | `0` | seconds to advance the clock before capture |
 | `system_ui` | `preview` | status and navigation bars: as `showSystemUi` says, `always`, `never` |
-| `frame` | `none` | `plain`: the device around the screenshot |
-| `round_corners` | `black` | outside round watch screens; Play rejects transparency |
-| `parallel` | from cores and memory | renderer processes |
-| `java_home` | | JDK for the renderer |
-| `screens` | `[]` | per-screenshot settings, as on iOS, with `font_scales` |
+| `frame` | `none` | `plain`: the device around the screenshot, see [[Device frames]] |
+| `round_corners` | `black` | outside round watch screens: `black`, `transparent`; Play rejects transparency |
+| `android_theme` | the app's theme | window theme for every preview; default: the `<application>` theme in the module's manifest, else Material's |
+| `parallel` | from cores and memory | renderer processes: one per core and 1.5 GB, at most 8 |
+| `java_home` | | JDK 21+ for Gradle and the renderer |
+| `screens` | `[]` | per-screenshot settings, below |
+
+`screens` rules match previews by name or `*` glob; the first match wins. Keys: `preview`,
+`appearances`, `languages`, `devices`, `font_scales`, `full_length`, `delay`, `skip`. On the
+command line: `--screen "Stats: languages=de-DE,ja devices=Pixel*"`.
 
 ## Previews
 
@@ -111,9 +121,23 @@ render on `watch_devices`, once, dark (Wear OS has no light mode).
 <output_directory>/swiftshot-report.json
 ```
 
-With `"layout": "fastlane"`, screenshots go where `fastlane supply` uploads them from:
-`<locale>/images/phoneScreenshots`, `sevenInchScreenshots`, `tenInchScreenshots` and
-`wearScreenshots`.
+- `-light` / `-dark` when both are rendered, `-dark` also when only dark is. None when the preview
+  sets `uiMode` itself, and none on Wear OS.
+- `-1.3x` for a font scale other than 1, or when several are rendered.
+- `@PreviewParameter` values: `_1`, `_2`… Two previews with the same name: the second gets ` 2`.
+
+With `"layout": "fastlane"`, screenshots go where `fastlane supply` uploads them from, inside
+`output_directory` (use `fastlane/metadata/android`):
+
+| device | folder |
+|---|---|
+| phones | `<locale>/images/phoneScreenshots` |
+| tablets and foldables up to 9" | `<locale>/images/sevenInchScreenshots` |
+| larger tablets and foldables | `<locale>/images/tenInchScreenshots` |
+| Wear OS | `<locale>/images/wearScreenshots` |
+| TV | `<locale>/images/tvScreenshots` |
+
+`--frame plain` writes framed copies to `<output_directory>-framed/`, see [[Device frames]].
 
 ## CI
 
@@ -125,12 +149,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
       - uses: LukasAnda/swiftshot@v0.4.0
       - uses: actions/upload-artifact@v7
         with: { name: screenshots, path: screenshots }
 ```
+
+More in [[CI]].
 
 ## How it works
 
@@ -166,6 +192,8 @@ Paparazzi and Roborazzi run screenshots as unit tests: Gradle compiles a test so
 test task renders one screenshot per test, one at a time per JVM. Swiftshot skips the test
 machinery and renders in parallel processes that stay up for the whole run.
 
+More in [[How it works]].
+
 ## Speed
 
 The same 470 screenshots from each tool (the demo app's `:app` previews on a Pixel 10 Pro and a
@@ -190,3 +218,4 @@ What makes the difference:
 - `apiLevel` in `@Preview` is ignored: every preview renders with layoutlib's Android version.
 - Foldables render flat (no hinge posture), as in Android Studio.
 - Android TV and Automotive devices render, but get no system bars.
+- `swiftshot frame <dir>` and App Store-style frames are iOS only.

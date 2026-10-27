@@ -14,6 +14,7 @@ object Frame {
     fun compose(shot: BufferedImage, art: Map<*, *>): BufferedImage {
         val canvas = (art["canvas"] as List<*>).map { (it as Number).toInt() }
         val screen = (art["screen"] as List<*>).map { (it as Number).toInt() }
+        require(shot.width == screen[2] && shot.height == screen[3]) { "${shot.width}×${shot.height} isn't the device's screen" }
         val out = BufferedImage(canvas[0], canvas[1], BufferedImage.TYPE_INT_ARGB)
         val g = out.createGraphics()
         g.drawImage(shot, screen[0], screen[1], screen[2], screen[3], null)
