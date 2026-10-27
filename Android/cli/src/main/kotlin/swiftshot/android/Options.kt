@@ -52,6 +52,8 @@ class Options {
     var screens: List<ScreenRule> = emptyList()
     var verbose = false
     var force = false
+    /** Said once before the run (iOS-only settings this renderer leaves to the Mac tool). */
+    val notes = mutableListOf<String>()
     var frame = "none"
     var config: String? = null
 
@@ -59,7 +61,8 @@ class Options {
 
     companion object {
         val usage = """
-            swiftshot (Android) — Play Store screenshots straight from your Jetpack Compose @Previews.
+            swiftshot — screenshot tests and Play Store screenshots from Jetpack Compose and Compose
+            Multiplatform @Previews (Android and desktop; Compose Multiplatform iOS needs a Mac).
 
             USAGE
               swiftshot [run|list|devices|init] [options]
@@ -73,6 +76,7 @@ class Options {
 
             PROJECT
               --project-dir <path>                  Gradle project (default: .)
+              --platform android                    Accepted as on the Mac (iOS projects need the Mac tool)
               --modules ":app,:wear"                Modules to render (default: every Android module with previews)
               --variant <name>                      Build variant (default: debug)
               --gradle-arg <arg>                    Extra Gradle argument (repeatable)
@@ -142,6 +146,12 @@ class Options {
                 "--ios-devices" -> o.iosDevices = list(v)
                 "--ios" -> o.iosVersions = list(v)
                 "--platforms" -> o.platforms = list(v)
+                // As the Mac tool takes it: android is this renderer, ios needs the Mac one.
+                "--platform" -> when (v) {
+                    "android" -> {}
+                    "ios" -> throw CliError(iosOnly(null))
+                    else -> throw CliError("--platform: android or ios, not \"$v\"")
+                }
                 "--languages" -> o.languages = list(v)
                 "--appearances" -> o.appearances = list(v)
                 "--font-scales" -> o.fontScales = list(v).map(String::toDouble)
@@ -208,7 +218,15 @@ class Options {
 
     private fun applyConfig(c: Map<*, *>, base: File) {
         fun strings(k: String) = (c[k] as List<*>?)?.map { it.toString() }
-        for (k in c.keys) require(k in configKeys) { "swiftshot.json: unknown key \"$k\"" }
+        val ios = c.keys.map { it.toString() }.filter { it in iosKeys }
+        if (ios.isNotEmpty()) {
+            // A config written for the iOS tool: here, the Gradle project's targets are rendered
+            // and the iOS settings stay for a Mac.
+            if (!File(base, "gradlew").isFile && !File(projectDir, "gradlew").isFile) throw CliError(iosOnly(base))
+            notes += "swiftshot.json: ${ios.joinToString(", ")} ${if (ios.size == 1) "is" else "are"} for iOS on a Mac; ignored here"
+        }
+        for (k in c.keys) require(k in configKeys || k in iosKeys) { "swiftshot.json: unknown key \"$k\"" }
+        if (c["frame"] == "appstore") notes += "swiftshot.json: App Store frames are iOS only; Android screenshots are framed with plain device art"
         (c["project_dir"] as String?)?.let { projectDir = File(base, it).path }
         strings("modules")?.let { modules = it }
         (c["variant"] as String?)?.let { variant = it }
@@ -231,7 +249,7 @@ class Options {
         (c["system_ui"] as String?)?.let { systemUi = it }
         (c["android_theme"] as String?)?.let { theme = it }
         (c["round_corners"] as String?)?.let { roundCorners = it }
-        (c["frame"] as String?)?.let { frame = it }
+        (c["frame"] as String?)?.let { frame = if (it == "appstore") "plain" else it }
         (c["parallel"] as Number?)?.let { parallel = it.toInt() }
         strings("gradle_args")?.let { gradleArgs = it }
         (c["java_home"] as String?)?.let { javaHome = it }
@@ -239,6 +257,7 @@ class Options {
     }
 
     private fun validate() {
+        if (command in setOf("frame", "calibrate", "emit-table")) throw CliError("`swiftshot $command` is part of the iOS tool and needs a Mac with Xcode.")
         require(command in setOf("run", "list", "devices", "init", "auto-setup", "emit-devices")) { "Unknown command \"$command\"" }
         for (a in appearances) require(a == "light" || a == "dark") { "appearances: light or dark, not \"$a\"" }
         require(layout == "swiftshot" || layout == "fastlane") { "layout: swiftshot or fastlane" }
@@ -249,7 +268,16 @@ class Options {
         for (s in fontScales) require(s in 0.5..3.0) { "font_scales: $s is outside 0.5…3" }
     }
 
-    /** The Android keys; iOS-only keys (scheme, ios_versions…) are rejected, so typos surface. */
+    /** The iOS tool's keys that mean nothing here (its config can be shared with a Gradle project). */
+    private val iosKeys = setOf(
+        "project", "workspace", "scheme", "configuration", "app", "derived_data", "xcodebuild_args", "mode", "format",
+        "settle_frames", "shutdown_simulators", "download_missing_runtimes", "status_bar", "parallel_languages", "timeout",
+        "device_set", "watch_scheme", "watch_app", "watchos_versions", "content_size", "text_sizes",
+        "allow_unsupported_devices", "device_templates", "template_cache", "no_boot", "verbose", "frame_color", "framefile",
+        "frame_background", "frame_cache", "frame_output", "accept_bezel_license",
+    )
+
+    /** The Android keys; unknown ones are rejected, so typos surface. */
     private val configKeys = setOf(
         "project_dir", "modules", "variant", "devices", "watch_devices", "desktop_devices", "ios_devices", "ios_versions", "platforms", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",

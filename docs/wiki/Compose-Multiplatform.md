@@ -43,8 +43,11 @@ swiftshot --devices "Pixel 10 Pro,Pixel Tablet" \
 | iOS (`iosSimulatorArm64()`) | Swiftshot's iOS renderer, no simulator booted | `ios_devices` |
 
 All targets present are rendered. Pick some with `--platforms android,desktop` or
-`"platforms": ["android", "ios"]`. On Linux, or on a Mac without Xcode, iOS is skipped with a
-warning.
+`"platforms": ["android", "ios"]`. On a Mac without Xcode, iOS is skipped with a warning.
+
+On Linux, the Android and desktop targets render as on a Mac. iOS targets are not built:
+`Compose Multiplatform iOS targets need a Mac with Xcode; skipped here`. The same
+`swiftshot.json`, `ios_devices` included, works on both.
 
 Desktop devices: `Desktop 1280×800`, `Desktop 1366×768`, `Desktop 1440×900`, `Desktop 1920×1080`,
 and `@2x` versions of 1280×800, 1440×900 and 1920×1080. Default: `Desktop 1440×900 @2x`.
@@ -102,4 +105,4 @@ The output is pixel identical to a booted simulator.
 
 ## Limitations
 
-- iOS needs a Mac with Xcode.
+- iOS needs a Mac with Xcode. Linux renders the Android and desktop targets.

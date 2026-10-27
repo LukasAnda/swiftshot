@@ -1,7 +1,7 @@
 # Publishes a release: push a tag like v0.1.0 (or run by hand with a version). Builds the CLI and
-# its simulator agents on a hosted runner and attaches swiftshot-macos-arm64.tar.gz (+ .sha256)
-# to the GitHub release, which install.sh and the CI examples in the README download, then points
-# the Homebrew tap (LukasAnda/homebrew-tap) at it and installs from there.
+# its simulator agents on a hosted runner and attaches the Mac and Linux archives (+ .sha256) to
+# the GitHub release, writes the Homebrew formula (LukasAnda/homebrew-tap) for both, builds the
+# Linux .deb and .rpm, then installs each the way the docs say.
 name: release
 on:
   push:
@@ -48,11 +48,14 @@ jobs:
         env:
           TAP_KEY: ${{ secrets.HOMEBREW_TAP_KEY }}
         run: |
-          v=${{ steps.v.outputs.version }}; sha=$(cut -d' ' -f1 dist/swiftshot-macos-arm64.tar.gz.sha256)
+          v=${{ steps.v.outputs.version }}
+          mac=$(cut -d' ' -f1 dist/swiftshot-macos-arm64.tar.gz.sha256); linux=$(cut -d' ' -f1 dist/swiftshot-android.tar.gz.sha256)
           key="$RUNNER_TEMP/tap-key"; printf '%s\n' "$TAP_KEY" > "$key"; chmod 600 "$key"
           export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
-          git clone -q git@github.com:LukasAnda/homebrew-tap.git "$RUNNER_TEMP/tap" && cd "$RUNNER_TEMP/tap"
-          sed -i '' -E "s|/download/v[^/]+/|/download/v$v/|; s|sha256 \"[0-9a-f]{64}\"|sha256 \"$sha\"|" Formula/swiftshot.rb
+          git clone -q git@github.com:LukasAnda/homebrew-tap.git "$RUNNER_TEMP/tap"
+          # One formula for both systems: the Mac archive on macOS, the JVM one on Linux.
+          packaging/homebrew/render.sh "$v" "https://github.com/LukasAnda/swiftshot/releases/download/v$v" "$mac" "$linux" > "$RUNNER_TEMP/tap/Formula/swiftshot.rb"
+          cd "$RUNNER_TEMP/tap"
           git diff --quiet || { git -c user.name="Lukas Anda" -c user.email=lukas.anda@gmail.com commit -qam "swiftshot $v" && git push -q origin main; }
           rm -f "$key"
       - name: Install from Homebrew
@@ -61,9 +64,24 @@ jobs:
           cd "$RUNNER_TEMP" && test "$(swiftshot --version)" = "swiftshot ${{ steps.v.outputs.version }}"
           test -s "$(brew --prefix swiftshot)/libexec/swiftshot-desktop-worker.jar"
 
-  # The Linux package, installed the way the docs say, on a fresh Linux runner.
-  linux:
+  # The .deb and .rpm, built from the release's Linux archive and attached to the release.
+  packages:
     needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
+          gh release download "v$v" --pattern swiftshot-android.tar.gz --dir "$RUNNER_TEMP"
+          packaging/linux/build.sh "$RUNNER_TEMP/swiftshot-android.tar.gz" "$v" "$RUNNER_TEMP/packages"
+          gh release upload "v$v" "$RUNNER_TEMP"/packages/* --clobber
+
+  # Every Linux install the docs give, on fresh runners: install.sh, Homebrew, the .deb, the .rpm.
+  linux:
+    needs: packages
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -71,10 +89,26 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - name: Install and run
+      - name: install.sh
         run: |
           v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
           SWIFTSHOT_VERSION=$v SWIFTSHOT_PREFIX="$RUNNER_TEMP/s" sh install.sh
           test "$("$RUNNER_TEMP/s/bin/swiftshot" --version)" = "swiftshot $v (android)"
           test -s "$RUNNER_TEMP/s/bin/swiftshot-desktop-worker.jar"
           "$RUNNER_TEMP/s/bin/swiftshot" devices | head -5
+      - name: Homebrew
+        run: |
+          v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install lukasanda/tap/swiftshot
+          test "$("$(brew --prefix)/bin/swiftshot" --version)" = "swiftshot $v (android)"
+      - name: .deb and .rpm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
+          gh release download "v$v" --pattern '*.deb' --pattern '*.rpm' --dir "$RUNNER_TEMP/p"
+          sudo apt-get install -y -q "$RUNNER_TEMP/p/swiftshot_${v}_all.deb"
+          test "$(/usr/bin/swiftshot --version)" = "swiftshot $v (android)"
+          docker run --rm -v "$RUNNER_TEMP/p:/p" fedora:42 sh -c \
+            "dnf -y -q install java-21-openjdk-headless /p/swiftshot-$v-1.noarch.rpm && swiftshot --version | grep -q 'swiftshot $v'"

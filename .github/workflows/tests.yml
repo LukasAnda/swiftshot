@@ -102,6 +102,40 @@ jobs:
 
   # Compose Multiplatform on a free Linux runner: the shared @Previews of Example/MultiplatformDemo
   # rendered for Android and desktop, every expected screenshot at the device's size, no errors.
+  # Linux as a full host: the Linux archive through the Homebrew formula, the .deb on Ubuntu and
+  # the .rpm on Fedora, then init, list and run on the Android and Compose Multiplatform demos.
+  linux-host:
+    name: Linux host
+    if: ${{ !inputs.tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Homebrew, init, list, run
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          Android/ci/linux-host.sh "$RUNNER_TEMP/linux-host"
+      - name: .deb on Ubuntu
+        run: |
+          packaging/linux/build.sh dist/swiftshot-android.tar.gz 0.0.0 "$RUNNER_TEMP/packages"
+          sudo apt-get install -y -q "$RUNNER_TEMP/packages/swiftshot_0.0.0_all.deb"
+          test "$(/usr/bin/swiftshot --version)" = "swiftshot 0.0.0 (android)"
+          /usr/bin/swiftshot devices | grep -q "Pixel 10 Pro"
+      - name: .rpm on Fedora
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/packages:/p" fedora:42 sh -c \
+            'dnf -y -q install java-21-openjdk-headless /p/swiftshot-0.0.0-1.noarch.rpm && test "$(swiftshot --version)" = "swiftshot 0.0.0 (android)" && swiftshot devices | grep -q "Pixel 10 Pro"'
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: linux-host
+          path: ${{ runner.temp }}/linux-host
+          if-no-files-found: ignore
+
   multiplatform:
     name: Compose Multiplatform (Android, desktop)
     if: ${{ !inputs.tests }}

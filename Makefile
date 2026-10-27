@@ -77,15 +77,19 @@ dist:
 	cp README.md LICENSE dist/swiftshot/ 2>/dev/null || cp README.md dist/swiftshot/
 	tar -C dist -czf dist/swiftshot-macos-arm64.tar.gz swiftshot
 	shasum -a 256 dist/swiftshot-macos-arm64.tar.gz | sed 's| dist/| |' > dist/swiftshot-macos-arm64.tar.gz.sha256
-	# Android only, any OS with a JDK 21+ (Linux CI): the launcher is called swiftshot here.
-	mkdir -p dist/android/swiftshot/bin
+	$(MAKE) dist-linux-archive
+
+# The Linux (any OS with a JDK 21+) archive, from the jars in bin/: the launcher is called swiftshot.
+# Builds on Linux too (no Swift): make android dist-linux-archive.
+dist-linux-archive:
+	rm -rf dist/android && mkdir -p dist/android/swiftshot/bin
 	cp bin/swiftshot-android.jar bin/swiftshot-android-worker.jar bin/swiftshot-desktop-worker.jar dist/android/swiftshot/bin/
 	cp bin/swiftshot-android dist/android/swiftshot/bin/swiftshot
 	cp README.md LICENSE dist/android/swiftshot/
 	tar -C dist/android -czf dist/swiftshot-android.tar.gz swiftshot
-	shasum -a 256 dist/swiftshot-android.tar.gz | sed 's| dist/| |' > dist/swiftshot-android.tar.gz.sha256
+	(cd dist && (shasum -a 256 swiftshot-android.tar.gz 2>/dev/null || sha256sum swiftshot-android.tar.gz)) > dist/swiftshot-android.tar.gz.sha256
 
 clean:
 	rm -rf .build bin Android/cli/build Android/worker/build Android/desktop-worker/build
 
-.PHONY: all android install clean dist
+.PHONY: all android install clean dist dist-linux-archive

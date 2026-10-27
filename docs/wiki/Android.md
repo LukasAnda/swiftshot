@@ -21,8 +21,8 @@ Nothing else is added to the project: Swiftshot adds its Gradle task for its own
 
 ## Install
 
-On an Apple silicon Mac, the regular install includes Android support ([[Installation]]). On Linux
-or an Intel Mac:
+On an Apple silicon Mac, the regular install includes Android support. On Linux: Homebrew, a
+`.deb`, an `.rpm` or the install script, see [[Installation]]. On an Intel Mac:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | sh
@@ -153,7 +153,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.4.0
+      - uses: LukasAnda/swiftshot@v0.6.0
       - uses: actions/upload-artifact@v7
         with: { name: screenshots, path: screenshots }
 ```

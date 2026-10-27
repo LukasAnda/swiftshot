@@ -43,6 +43,11 @@ class Runner(private val o: Options, private val log: Log) {
         // Renderer processes for last run's classpath start now, while Gradle builds; they are
         // used if the classpath comes out the same.
         val warm = if (o.command == "run") warmPools(budgetAll) else emptyMap()
+        // Not on a Mac: iOS targets aren't prepared (Kotlin/Native can't build them here either).
+        if (!Host.mac) {
+            if ("ios" in o.platforms) throw CliError(iosOnly(null))
+            if (o.platforms.isEmpty()) o.platforms = listOf("android", "desktop")
+        }
         val prepared = try {
             Gradle.prepare(o, log).let { modules ->
                 // An iOS module without a desktop target: its previews come from the Android one.
@@ -57,6 +62,7 @@ class Runner(private val o: Options, private val log: Log) {
         val scanned = prepared.filter { !it.ios }
         val modules = scanned.filter { o.platforms.isEmpty() || it.platform in o.platforms }
         log.ok("Built ${(modules + iosModules).joinToString(", ") { it.label }} in ${"%.1f".format(Locale.ROOT, log.seconds)}s")
+        if (!Host.mac && prepared.any { it.desktop || it.json["multiplatform"] == true }) log.step("Compose Multiplatform iOS targets need a Mac with Xcode; skipped here")
         val allFound = scanned.associateWith { m -> PreviewScanner(m.classDirs + m.classpath).scan(m.classDirs) }
             .filterValues { it.isNotEmpty() }
         val found = allFound.filterKeys { it in modules }
@@ -66,7 +72,13 @@ class Runner(private val o: Options, private val log: Log) {
                 println("${m.label}${if (m.wear) " (Wear OS)" else ""}")
                 for (p in previews) println("  ${p.name}  ${p.composable}${describe(p)}")
             }
-            for (m in iosModules) println("${m.label}: the previews of ${m.path} above")
+            for (m in iosModules) {
+                val shared = allFound.entries.filter { it.key.path == m.path }.sortedBy { if (it.key.desktop) 0 else 1 }.firstOrNull()?.value.orEmpty()
+                if (found.keys.any { it.path == m.path }) { println("${m.label}: the previews of ${m.path} above"); continue }
+                println(m.label)
+                for (p in shared) println("  ${p.name}  ${p.composable}${describe(p)}")
+            }
+
             return 0
         }
         for (m in found.keys) if (!m.hasTooling) throw CliError(

@@ -7,7 +7,8 @@ appearance, from one command: for screenshot tests, and as App Store and Google 
   without booting a simulator. Apple silicon Mac with Xcode.
 - **Android**: Jetpack Compose `@Preview`s, for phones, foldables, tablets and Wear OS, without an
   emulator. Mac or Linux with a JDK 21+.
-- **Compose Multiplatform**: shared `@Preview`s for Android, desktop and iOS in one run.
+- **Compose Multiplatform**: shared `@Preview`s for Android, desktop and iOS in one run. Linux
+  renders the Android and desktop targets.
 
 Run `swiftshot` in the project folder: an Xcode project renders iOS, a Gradle project Android.
 

@@ -64,6 +64,7 @@ object Gradle {
     fun prepare(o: Options, log: Log, platforms: List<String> = gradlePlatforms(o.platforms)): List<Module> {
         val root = File(o.projectDir).absoluteFile.normalize()
         val gradlew = File(root, "gradlew")
+        if (!gradlew.isFile && root.listFiles()?.any { it.name.endsWith(".xcodeproj") || it.name.endsWith(".xcworkspace") } == true) throw CliError(iosOnly(root))
         require(gradlew.isFile) { "No gradlew in $root. Pass --project-dir or run from the Gradle project's root." }
         val init = initScript()
         val tasks = if (o.modules.isEmpty()) listOf("swiftshotPrepare") else o.modules.map { "${it.trimEnd(':')}:swiftshotPrepare" }

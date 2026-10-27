@@ -326,10 +326,35 @@ class OptionsTest {
         }
     }
 
-    @Test fun iosOnlyConfigKeysStillRejected() {
-        // ios_versions is accepted; the iOS tool's own keys are not.
-        config("""{"ios_versions": ["27.0"], "scheme": "App"}""")
-        assertTrue(assertFailsWith<IllegalArgumentException> { parse() }.message!!.contains("scheme"))
+    @Test fun iosConfigWithoutGradleProjectSaysIosNeedsTheMacTool() {
+        config("""{"project": "App.xcodeproj", "scheme": "App"}""")
+        assertTrue(assertFailsWith<CliError> { parse() }.message!!.contains("iOS"))
+    }
+
+    @Test fun iosKeysInAGradleProjectAreIgnoredWithANote() {
+        File(dir, "gradlew").writeText("")
+        config("""{"ios_versions": ["27.0"], "scheme": "App", "frame": "appstore", "languages": ["de-DE"]}""")
+        val o = parse()
+        assertEquals(listOf("de-DE"), o.languages)
+        assertEquals("plain", o.frame)
+        assertTrue(o.notes.any { "scheme" in it }, o.notes.toString())
+        assertTrue(o.notes.any { "App Store frames" in it }, o.notes.toString())
+    }
+
+    @Test fun unknownKeysStillRejected() {
+        config("""{"langauges": ["de-DE"]}""")
+        assertTrue(assertFailsWith<IllegalArgumentException> { parse() }.message!!.contains("langauges"))
+    }
+
+    @Test fun platformFlagAsOnTheMac() {
+        assertEquals("list", parse("--platform", "android", "list").command)
+        assertTrue(assertFailsWith<CliError> { parse("--platform", "ios", "list") }.message!!.contains("iOS"))
+        assertFailsWith<CliError> { parse("--platform", "web") }
+    }
+
+    @Test fun macOnlyCommandsSaySo() {
+        for (c in listOf("frame", "calibrate", "emit-table"))
+            assertTrue(assertFailsWith<CliError> { parse(c) }.message!!.contains("Mac"), c)
     }
 
     @Test fun explicitConfigPath() {
