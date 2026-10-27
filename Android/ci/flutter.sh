@@ -36,6 +36,23 @@ if [ "$(uname -s)" = Darwin ]; then
   xcrun simctl list devices booted | grep -q Booted && { echo "FAIL: a simulator was booted"; fail=1; }
 fi
 echo "time: first $((t1 - t0))s, second $((t2 - t1))s"
+
+# The options: screens rules, font scales, frames, the fastlane layout and full length.
+(cd Example/FlutterDemo && ../../Android/cli/build/libs/swiftshot-android run \
+  --devices "iPhone 17 Pro Max,Pixel 10 Pro" --languages "en-US,de" --font-scales 1,1.3 --frame plain --accept-bezel-license \
+  --layout fastlane --screen "Stats: devices=Pixel* languages=de" --screen "History: full_length=true" \
+  --previews "Root,Stats,History,Habit card" --output "$out/o" 2>&1) > "$out/o.log" || { echo "FAIL: the options run"; tail -20 "$out/o.log"; fail=1; }
+want() { [ -f "$out/$1" ] && echo "ok: $1" || { echo "FAIL: no $1"; fail=1; }; }
+nope() { [ ! -e "$out/$1" ] && echo "ok: no $1" || { echo "FAIL: $1 should not exist"; fail=1; }; }
+want "o/de/images/phoneScreenshots/Pixel 10 Pro-Stats-1.3x.png"
+nope "o/en-US/images/phoneScreenshots/Pixel 10 Pro-Stats-1x.png"
+nope "o/de/iPhone 17 Pro Max-Stats-1x.png"
+want "o/en-US/iPhone 17 Pro Max-Habit card-1.3x.png"
+want "o-framed/en-US/images/phoneScreenshots/Pixel 10 Pro-Root-1x_framed.png"
+nope "o-framed/en-US/images/phoneScreenshots/Pixel 10 Pro-Habit card-1x_framed.png"
+if [ "$(uname -s)" = Darwin ]; then want "o-framed/en-US/iPhone 17 Pro Max-Root-1x_framed.png"; fi
+tall=$(size "$out/o/en-US/images/phoneScreenshots/Pixel 10 Pro-History-1x.png" | cut -dx -f2)
+[ "$tall" -gt 4000 ] && echo "full length ok: $tall px" || { echo "FAIL: History is $tall px high, not full length"; fail=1; }
 [ "$count" -eq "$expected" ] || { echo "FAIL: $count screenshots, expected $expected"; fail=1; }
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   { echo "### Flutter"; echo "| | |"; echo "|---|---:|"; echo "| screenshots | $count |"; echo "| first run | $((t1 - t0)) s |"; echo "| second run | $((t2 - t1)) s |"; } >> "$GITHUB_STEP_SUMMARY"

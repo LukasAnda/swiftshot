@@ -7,7 +7,8 @@ One `swiftshot` binary covers both platforms. It renders Android when:
 - `--platform android` is given, or
 - the project folder (the current one, or `--project-dir`) has `gradlew` and a
   `settings.gradle(.kts)`, no `.xcodeproj` or `.xcworkspace`, no `--project`, `--workspace` or
-  `--app`, and no `project`, `workspace` or `scheme` in `swiftshot.json`.
+  `--app`, and no `project`, `workspace` or `scheme` in `swiftshot.json`, or
+- it has a `pubspec.yaml` on the Flutter SDK: a [[Flutter]] project.
 
 Otherwise it renders iOS. `--platform ios` forces iOS.
 
@@ -143,6 +144,9 @@ PROJECT
   --variant <name>                      Build variant (default: debug)
   --gradle-arg <arg>                    Extra Gradle argument (repeatable)
   --java-home <path>                    JDK 21+ for the renderer (default: JAVA_HOME, then Android Studio's)
+  --flutter-root <path>                 Flutter SDK for Flutter projects (default: FLUTTER_ROOT, fvm, then flutter on PATH)
+  --flutter-ios exact|headless          Flutter on iPhones and iPads: Flutter's iOS engine on a Mac with Xcode
+                                        (exact, the default) or the headless renderer (faster, any OS)
 
 MATRIX
   --devices "Pixel 10 Pro,Pixel 9 Pro Fold,Pixel Tablet"   Phones, foldables, tablets (default: Pixel 10 Pro, Pixel Tablet)
@@ -176,4 +180,5 @@ OUTPUT
 
 The same exit codes as on iOS. `swiftshot devices` lists every device with its size in px and dp
 and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs. Compose Multiplatform
-flags: [[Compose Multiplatform]].
+flags: [[Compose Multiplatform]]. In a Flutter project `--devices` also takes iPhones and iPads,
+see [[Flutter]].

@@ -34,6 +34,7 @@ class Options {
     var platforms: List<String> = emptyList()
     var flutterRoot: String? = null
     var flutterIos = "exact"
+    var acceptBezelLicense = false
     var languages = listOf("en-US")
     var appearances = listOf("light")
     var fontScales = listOf(1.0)
@@ -109,7 +110,9 @@ class Options {
               --full-length                         Grow scrolling screens to their whole content
               --delay <seconds>                     Advance the clock before capture (animations)
               --system-ui preview|always|never      Status and navigation bars (default: as the preview says)
-              --frame plain|none                    Put each screenshot in its device (Android Studio's device art)
+              --frame plain|none                    Put each screenshot in its device (Android Studio's device art;
+                                                    Apple's bezels for iPhones and iPads in Flutter projects, on a Mac)
+              --accept-bezel-license                Accept Apple's bezel license (asked once) for iPhone and iPad frames
               --round-corners black|transparent     Outside round watch screens (default: black, as Play requires)
               --parallel <n>                        Renderer processes (default: from cores and memory)
 
@@ -125,7 +128,7 @@ class Options {
             while (i < args.size) {
                 val a = args[i]
                 if (a.startsWith("-")) {
-                    val boolean = a in setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force")
+                    val boolean = a in setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license")
                     val (key, inline) = a.split('=', limit = 2).let { it[0] to it.getOrNull(1) }
                     val value = if (boolean || inline != null) inline else args.getOrNull(++i) ?: error("$a needs a value")
                     flags += key to value
@@ -153,6 +156,7 @@ class Options {
                 "--platforms" -> o.platforms = list(v)
                 "--flutter-root" -> o.flutterRoot = v
                 "--flutter-ios" -> o.flutterIos = v!!
+                "--accept-bezel-license" -> o.acceptBezelLicense = true
                 // As the Mac tool takes it: android is this renderer, ios needs the Mac one.
                 "--platform" -> when (v) {
                     "android" -> {}
@@ -262,6 +266,7 @@ class Options {
         (c["java_home"] as String?)?.let { javaHome = it }
         (c["flutter_root"] as String?)?.let { flutterRoot = File(base, it).path }
         (c["flutter_ios"] as String?)?.let { flutterIos = it }
+        (c["accept_bezel_license"] as Boolean?)?.let { acceptBezelLicense = it }
         (c["screens"] as List<*>?)?.let { l -> screens = l.map { val m = it as Map<*, *>; rule(m["preview"] as String, m.mapKeys { e -> e.key.toString() }) } }
     }
 
@@ -284,14 +289,14 @@ class Options {
         "settle_frames", "shutdown_simulators", "download_missing_runtimes", "status_bar", "parallel_languages", "timeout",
         "device_set", "watch_scheme", "watch_app", "watchos_versions", "content_size", "text_sizes",
         "allow_unsupported_devices", "device_templates", "template_cache", "no_boot", "verbose", "frame_color", "framefile",
-        "frame_background", "frame_cache", "frame_output", "accept_bezel_license",
+        "frame_background", "frame_cache", "frame_output",
     )
 
     /** The Android keys; unknown ones are rejected, so typos surface. */
     private val configKeys = setOf(
         "project_dir", "modules", "variant", "devices", "watch_devices", "desktop_devices", "ios_devices", "ios_versions", "platforms", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",
-        "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "flutter_root", "flutter_ios", "screens",
+        "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "flutter_root", "flutter_ios", "accept_bezel_license", "screens",
         "platform", "android",
     )
 }

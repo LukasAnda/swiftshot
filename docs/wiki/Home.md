@@ -9,15 +9,19 @@ appearance, from one command: for screenshot tests, and as App Store and Google 
   emulator. Mac or Linux with a JDK 21+.
 - **Compose Multiplatform**: shared `@Preview`s for Android, desktop and iOS in one run. Linux
   renders the Android and desktop targets.
+- **Flutter**: widget `@Preview`s for iPhones, iPads and Android devices. Mac or Linux; on a Mac
+  with Xcode, iOS renders on Flutter's iOS engine, pixel identical to a simulator.
 
-Run `swiftshot` in the project folder: an Xcode project renders iOS, a Gradle project Android.
+Run `swiftshot` in the project folder: an Xcode project renders iOS, a Gradle project Android, a
+`pubspec.yaml` Flutter.
 
 **Start here**
 
 - [[Installation]]: install on a Mac, Linux or a CI machine
 - [[Android]]: Jetpack Compose previews for phones, foldables, tablets and Wear OS
 - [[Compose Multiplatform]]: Android, desktop and iOS screenshots from shared previews
-- [[Configuration]]: `swiftshot.json` and per-screenshot settings, for both platforms
+- [[Flutter]]: widget previews on iPhones, iPads and Android devices
+- [[Configuration]]: `swiftshot.json` and per-screenshot settings, for every platform
 - [[Command line]]: every command and flag
 - [[CI]]: GitHub Actions and other CI systems
 - [[Device frames]]: Apple bezels, App Store titles and backgrounds, Android Studio's device art

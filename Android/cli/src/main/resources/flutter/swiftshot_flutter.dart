@@ -32,22 +32,26 @@ class _Device {
         platform = j['platform'] == 'ios' ? TargetPlatform.iOS : TargetPlatform.android,
         size = Size((j['width'] as num).toDouble(), (j['height'] as num).toDouble()),
         ratio = (j['ratio'] as num).toDouble(),
-        insets = [for (final v in j['insets'] as List) (v as num).toDouble()];
+        insets = [for (final v in j['insets'] as List) (v as num).toDouble()],
+        folder = j['folder'] as String?;
   _Device.native()
       : name = '',
         platform = defaultTargetPlatform,
         size = Size.zero,
         ratio = 1,
-        insets = const [0, 0, 0, 0];
+        insets = const [0, 0, 0, 0],
+        folder = null;
   final String name;
   final TargetPlatform platform;
   final Size size;
   final double ratio;
   final List<double> insets; // top, right, bottom, left (logical)
+  final String? folder; // fastlane supply's image folder (Android)
 }
 
 class _Shot {
-  _Shot(this.entry, this.preview, this.name, this.device, this.locale, this.brightness, this.scale, this.file);
+  _Shot(this.entry, this.preview, this.name, this.device, this.locale, this.brightness, this.scale, this.file,
+      {this.delay = Duration.zero, this.fullLength = false});
   final Entry entry;
   final Preview preview;
   final String name;
@@ -56,6 +60,8 @@ class _Shot {
   final Brightness brightness;
   final double scale;
   final String file;
+  final Duration delay;
+  final bool fullLength;
 }
 
 /// The previews of [entries] (each annotation that is a [Preview] or [MultiPreview], transformed).
@@ -111,8 +117,10 @@ Future<void> _appFonts() async {
   }
 }
 
-bool _matches(String name, List<String> globs) => globs.isEmpty ||
-    globs.any((g) => RegExp('^${RegExp.escape(g).replaceAll(r'\*', '.*').replaceAll(r'\?', '.')}\$').hasMatch(name));
+bool _glob(String pattern, String name) =>
+    RegExp('^${RegExp.escape(pattern).replaceAll(r'\*', '.*').replaceAll(r'\?', '.')}\$', caseSensitive: false).hasMatch(name);
+
+bool _matches(String name, List<String> globs) => globs.isEmpty || globs.any((g) => _glob(g, name));
 
 String _clean(String s) => s.replaceAll('/', '-').replaceAll(':', '-');
 
@@ -124,11 +132,18 @@ List<_Shot> _plan(List<Entry> entries, Map<String, dynamic> job) {
   final scales = [for (final s in job['fontScales'] as List) (s as num).toDouble()];
   final filter = [for (final p in job['previews'] as List) p as String];
   final output = job['output'] as String;
+  final fastlane = job['layout'] == 'fastlane';
+  final rules = [for (final r in job['rules'] as List? ?? const []) r as Map<String, dynamic>];
   final names = <String, int>{};
   final shots = <_Shot>[];
   for (final (entry, preview) in previewsOf(entries)) {
     final name = preview.name ?? entry.function;
     if (!_matches(name, filter)) continue;
+    // The first screens rule for this preview (as the Android and iOS renderers take them).
+    final rule = rules.where((r) => _glob(r['preview'] as String, name)).firstOrNull;
+    if (rule?['skip'] == true) continue;
+    final ruleLanguages = (rule?['languages'] as List?)?.cast<String>();
+    if (ruleLanguages != null && !ruleLanguages.any((l) => l.toLowerCase() == language.toLowerCase())) continue;
     // A preview's own locale, brightness and text scale win over the run's.
     // A pinned locale renders once: in its own language's process, else in the first one's.
     final own = preview.localizations?.call().locale;
@@ -137,9 +152,15 @@ List<_Shot> _plan(List<Entry> entries, Map<String, dynamic> job) {
       if (language != (languages.contains(_tag(own)) ? _tag(own) : languages.first)) continue;
     }
     final locale = own ?? _locale(language);
-    final brightnesses = preview.brightness != null ? [preview.brightness!] : appearances;
-    final textScales = preview.textScaleFactor != null ? [preview.textScaleFactor!] : scales;
+    final ruleAppearances = (rule?['appearances'] as List?)?.map((a) => a == 'dark' ? Brightness.dark : Brightness.light).toList();
+    final ruleScales = (rule?['fontScales'] as List?)?.map((v) => (v as num).toDouble()).toList();
+    final brightnesses = preview.brightness != null ? [preview.brightness!] : ruleAppearances ?? appearances;
+    final textScales = preview.textScaleFactor != null ? [preview.textScaleFactor!] : ruleScales ?? scales;
+    final delay = Duration(milliseconds: (((rule?['delay'] ?? job['delay'] ?? 0) as num) * 1000).round());
+    final fullLength = (rule?['fullLength'] ?? job['fullLength'] ?? false) as bool;
+    final ruleDevices = (rule?['devices'] as List?)?.cast<String>();
     for (final device in devices) {
+      if (ruleDevices != null && !ruleDevices.any((d) => _glob(d, device.name))) continue;
       // iPhones and iPads that render on the iOS engine: only the components it needs measured.
       final size = preview.size;
       if (job['iosMeasureOnly'] == true && device.platform == TargetPlatform.iOS && (size == null || (size.width.isFinite && size.height.isFinite))) continue;
@@ -147,10 +168,11 @@ List<_Shot> _plan(List<Entry> entries, Map<String, dynamic> job) {
         for (final s in textScales) {
           var base = '${_clean(device.name)}-${_clean(name)}';
           if (preview.brightness == null && (brightnesses.length > 1 || b == Brightness.dark)) base += b == Brightness.dark ? '-dark' : '-light';
-          if (preview.textScaleFactor == null && (textScales.length > 1 || s != 1.0)) base += '-x${s.toString().replaceAll(RegExp(r'\.0$'), '')}';
-          final dir = '$output/${_tag(locale)}';
+          if (preview.textScaleFactor == null && (textScales.length > 1 || s != 1.0)) base += '-${s.toString().replaceAll(RegExp(r'\.0$'), '')}x';
+          final dir = fastlane && device.folder != null ? '$output/${_tag(locale)}/images/${device.folder}' : '$output/${_tag(locale)}';
           final n = names.update('$dir/$base', (v) => v + 1, ifAbsent: () => 1);
-          shots.add(_Shot(entry, preview, name, device, locale, b, s, '$dir/$base${n > 1 ? ' $n' : ''}.png'));
+          shots.add(_Shot(entry, preview, name, device, locale, b, s, '$dir/$base${n > 1 ? ' $n' : ''}.png',
+              delay: delay, fullLength: fullLength && size == null));
         }
       }
     }
@@ -224,6 +246,45 @@ const _rtl = {'ar', 'fa', 'he', 'ur', 'ps', 'yi', 'dv', 'ku', 'sd', 'ug'};
 /// Whether [kDefaultLocalizations] are flutter_localizations' (every language).
 bool kHasGlobalLocalizations = false;
 
+/// How much taller the screen must be for its main scrollable to show all of it, in logical
+/// pixels: the vertical scrollable with the largest viewport.
+double scrollExtentToGrow() {
+  ScrollableState? main;
+  double viewport = 0;
+  void visit(Element e) {
+    if (e is StatefulElement && e.state is ScrollableState) {
+      final state = e.state as ScrollableState;
+      final position = state.position;
+      if (state.axisDirection == AxisDirection.down && position.hasContentDimensions && position.viewportDimension > viewport) {
+        viewport = position.viewportDimension;
+        main = state;
+      }
+    }
+    e.visitChildElements(visit);
+  }
+  WidgetsBinding.instance.rootElement?.visitChildElements(visit);
+  final p = main?.position;
+  return p == null ? 0 : (p.maxScrollExtent - p.minScrollExtent).clamp(0, double.infinity);
+}
+
+/// A full-length screen: taller until its main scrollable shows all of it (lazy lists build more
+/// as they grow, so a few rounds), at most 20 000 logical pixels.
+Future<void> _grow(WidgetTester tester, _Device d) async {
+  for (var i = 0; i < 8; i++) {
+    final extra = scrollExtentToGrow();
+    if (extra < 0.5) return;
+    final height = (tester.view.physicalSize.height / d.ratio + extra).clamp(0, 20000).toDouble();
+    tester.view.physicalSize = Size(tester.view.physicalSize.width, height * d.ratio);
+    await tester.pump();
+    try {
+      await tester.pumpAndSettle(const Duration(milliseconds: 16), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 10));
+    } on FlutterError {
+      await tester.pump();
+    }
+    if (height >= 20000) return;
+  }
+}
+
 /// Material, Cupertino and widgets localizations for every language (flutter_localizations when
 /// the project has it, which also gives right-to-left layouts), set by the generated file.
 List<LocalizationsDelegate<Object?>> Function() kDefaultLocalizations = () => const [
@@ -261,7 +322,6 @@ void run(List<Entry> entries, String jobPath) {
         }
         await _appFonts();
       });
-      final settle = Duration(milliseconds: ((job['delay'] as num? ?? 0) * 1000).round());
       for (final s in _plan(entries, job)) {
         final t0 = DateTime.now();
         final key = GlobalKey();
@@ -287,9 +347,19 @@ void run(List<Entry> entries, String jobPath) {
           } on FlutterError {
             await tester.pump();
           }
-          if (settle > Duration.zero) await tester.pump(settle);
+          if (s.delay > Duration.zero) await tester.pump(s.delay);
+          if (s.fullLength) await _grow(tester, d);
+          // A layout overflow is drawn (Flutter's stripes) and reported, not fatal: the screenshot
+          // shows it. Anything else (a build error) fails the screenshot.
           final error = tester.takeException();
-          if (error != null && !'$error'.contains("This application's locale")) throw error;
+          String? warning;
+          if (error != null && !'$error'.contains("This application's locale")) {
+            if ('$error'.contains('overflowed by')) {
+              warning = '$error'.split('\n').first;
+            } else {
+              throw error;
+            }
+          }
           final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
           final png = await tester.runAsync(() async {
             final image = await boundary.toImage(pixelRatio: d.ratio);
@@ -303,7 +373,7 @@ void run(List<Entry> entries, String jobPath) {
             ..writeAsBytesSync(png!.$1);
           result({'ok': true, 'file': s.file, 'preview': s.name, 'device': d.name, 'language': _tag(s.locale),
             'appearance': s.brightness == Brightness.dark ? 'dark' : 'light', 'fontScale': s.scale, 'size': png.$2,
-            'millis': DateTime.now().difference(t0).inMilliseconds, 'script': s.entry.script, 'line': s.entry.line});
+            'millis': DateTime.now().difference(t0).inMilliseconds, 'script': s.entry.script, 'line': s.entry.line, 'warning': warning});
         } on Object catch (e) {
           result({'ok': false, 'file': s.file, 'preview': s.name, 'device': s.device.name, 'language': _tag(s.locale),
             'error': e.toString().split('\n').first, 'script': s.entry.script, 'line': s.entry.line});
@@ -321,14 +391,21 @@ void run(List<Entry> entries, String jobPath) {
 }
 
 /// One preview as the app of a device: Swiftshot's iOS host app spawns an engine per screenshot
-/// with the preview's index in [previewsOf] as [args]. Brightness, locale and text scale are the
-/// device's own: the process is started with the language and the window with the appearance.
+/// with the preview's index in [previewsOf] and its text scale as [args]. Brightness and locale
+/// are the device's own: the process is started with the language and the window with the
+/// appearance. After each frame it hears how much a full-length screen still hides (`extent`).
 void runPreview(List<Entry> entries, List<String> args) {
   final (entry, preview) = previewsOf(entries)[int.parse(args.first)];
+  final scale = args.length > 1 ? double.tryParse(args[1]) : null;
+  const channel = MethodChannel('swiftshot');
+  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding.instance.addPersistentFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => channel.invokeMethod<void>('extent', scrollExtentToGrow()));
+  });
   runApp(Builder(builder: (context) {
     final dispatcher = ui.PlatformDispatcher.instance;
     final shot = _Shot(entry, preview, preview.name ?? entry.function, _Device.native(), dispatcher.locale,
-        preview.brightness ?? MediaQuery.platformBrightnessOf(context), preview.textScaleFactor ?? MediaQuery.textScalerOf(context).scale(1), '');
+        preview.brightness ?? MediaQuery.platformBrightnessOf(context), preview.textScaleFactor ?? scale ?? MediaQuery.textScalerOf(context).scale(1), '');
     return _tree(shot, GlobalKey());
   }));
 }

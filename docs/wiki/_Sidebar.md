@@ -3,6 +3,7 @@
 - [[Installation]]
 - [[Android]]
 - [[Compose Multiplatform]]
+- [[Flutter]]
 - [[Configuration]]
 - [[Command line]]
 - [[CI]]

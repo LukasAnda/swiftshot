@@ -8,7 +8,7 @@
 <h1 align="center">Swiftshot</h1>
 
 <p align="center">
-  Fast screenshot tests from your SwiftUI, UIKit, Jetpack Compose and Compose Multiplatform previews, without a simulator or emulator. Also makes App Store and Google Play screenshots.
+  Fast screenshot tests from your SwiftUI, UIKit, Jetpack Compose, Compose Multiplatform and Flutter previews, without a simulator or emulator. Also makes App Store and Google Play screenshots.
 </p>
 
 <p align="center">
@@ -61,6 +61,12 @@ a JSON report.
 - iOS through the same no-boot renderer, pixel identical to a booted simulator (Mac with Xcode).
 - On Linux, the Android and desktop targets; iOS is skipped.
 
+**Flutter**: widget `@Preview`s
+
+- iPhone, iPad and Android devices from one run, on a Mac or on Linux.
+- On a Mac with Xcode, iPhones and iPads render on Flutter's iOS engine, pixel identical to a
+  booted simulator.
+
 ## Install
 
 On a Mac (Apple silicon), for iOS and Android:
@@ -69,7 +75,7 @@ On a Mac (Apple silicon), for iOS and Android:
 brew install lukasanda/tap/swiftshot
 ```
 
-On Linux, for Android, desktop and Compose Multiplatform (no iOS), with a JDK 21+:
+On Linux, for Android, desktop, Compose Multiplatform and Flutter (no iOS), with a JDK 21+:
 
 | | |
 |---|---|
@@ -140,6 +146,17 @@ swiftshot --devices "Pixel 10 Pro" --desktop-devices "Desktop 1440×900 @2x" \
 See the [Compose Multiplatform](https://github.com/LukasAnda/swiftshot/wiki/Compose-Multiplatform)
 wiki page.
 
+### Flutter
+
+In the folder with `pubspec.yaml`. `init` takes the languages from the gen-l10n ARB files:
+
+```
+swiftshot --devices "iPhone 17 Pro Max,Pixel 10 Pro" --languages "en-US,de" --appearances light,dark
+```
+
+Needs Flutter 3.35+ (widget previews) and a JDK 21+. See the
+[Flutter](https://github.com/LukasAnda/swiftshot/wiki/Flutter) wiki page.
+
 ### Output
 
 - `screenshots/<language>/<device>-<preview>.png`
@@ -151,8 +168,8 @@ wiki page.
 ## CI
 
 iOS needs a Mac with Xcode and the runtimes you render; it runs on the free `macos-26` and
-`xcode-27` runners. Android, desktop and Compose Multiplatform (without iOS) run on any runner
-with a JDK 21+, including `ubuntu-latest`. Neither boots a simulator or an emulator.
+`xcode-27` runners. Android, desktop, Compose Multiplatform (without iOS) and Flutter run on any
+runner with a JDK 21+, including `ubuntu-latest`. Neither boots a simulator or an emulator.
 
 ```yaml
 jobs:
@@ -160,9 +177,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - uses: LukasAnda/swiftshot@v0.6.0
+      - uses: LukasAnda/swiftshot@v0.7.0
         with:
-          version: 0.6.0      # or "latest"
+          version: 0.7.0      # or "latest"
       - uses: actions/upload-artifact@v7
         with: { name: ios-screenshots, path: fastlane/screenshots }
 
@@ -172,9 +189,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.6.0
+      - uses: LukasAnda/swiftshot@v0.7.0
         with:
-          version: 0.6.0
+          version: 0.7.0
       - uses: actions/upload-artifact@v7
         with: { name: android-screenshots, path: fastlane/metadata/android }
 ```
@@ -185,7 +202,7 @@ The action installs the release and runs `swiftshot run` with your `swiftshot.js
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.6.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.7.0 sh
 ~/.swiftshot/bin/swiftshot run
 ```
 
@@ -241,6 +258,7 @@ Android:
 uploads from.
 
 Compose Multiplatform adds `platforms`, `desktop_devices`, `ios_devices` and `ios_versions`.
+Flutter adds `flutter_root` (the SDK) and `flutter_ios` (`exact` or `headless`).
 
 ### Per-screenshot settings
 
@@ -338,6 +356,10 @@ renders the previews directly, in parallel processes that stay up for the whole 
 **Compose Multiplatform.** `Example/MultiplatformDemo`, 9 previews in two languages on an
 Apple silicon Mac: 90 screenshots (Android phone and tablet, desktop, iPhone and iPad) in 19 s.
 
+**Flutter.** `Example/FlutterDemo`, 12 previews in five languages, light and dark: 204
+screenshots (iPhone and Pixel) in about 11 s headless on an Apple silicon Mac, 45 s on a 4-core
+Linux runner.
+
 ## How it works
 
 **iOS**
@@ -392,6 +414,12 @@ The Android target renders as above, the desktop target with Compose's own headl
 `ImageComposeScene`. For iOS, Swiftshot links a framework with a wrapper per preview, builds a
 small SwiftUI host app with a `#Preview` for each, and renders it like any iOS app.
 
+**Flutter**
+
+Previews are found in `lib/` without building. `flutter test` renders them headless, one process
+per language. On a Mac with Xcode, iPhones and iPads render instead on Flutter's iOS engine: the
+app's Flutter bundle in a small SwiftUI host app, through the same no-boot iOS renderer.
+
 The [How it works](https://github.com/LukasAnda/swiftshot/wiki/How-it-works) wiki page has the full
 explanation and diagrams.
 
@@ -412,6 +440,11 @@ Compose Multiplatform:
 
 - As Android, plus a Mac with Xcode for the iOS target. Linux renders the Android and desktop
   targets.
+
+Flutter:
+
+- macOS or Linux with a JDK 21+ and Flutter 3.35+, `flutter_test` among the dev dependencies
+- For exact iPhone and iPad screenshots: a Mac with Xcode and the project's `ios/` folder
 
 ## Development
 
@@ -435,8 +468,8 @@ the time budget.
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.4.0) | Android: Jetpack Compose previews (released) |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.5.0) | Compose Multiplatform: Android, desktop and iOS (released) |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | Linux as a full host: the same `swiftshot` command, setup and config as on a Mac (released) |
-| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/7) | Easy migration from Paparazzi and Roborazzi: `swiftshot init` sets Swiftshot up to match |
-| [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
+| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter: widget previews on iOS and Android devices (released) |
+| [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/7) | Easy migration from Paparazzi and Roborazzi: `swiftshot init` sets Swiftshot up to match |
 | [v0.9.0](https://github.com/LukasAnda/swiftshot/milestone/5) | IDE plugins for Xcode, Android Studio and IntelliJ IDEA |
 
 Version numbers are targets and can move. Details on the
@@ -447,7 +480,8 @@ Version numbers are targets and can move. Details on the
 
 The [wiki](https://github.com/LukasAnda/swiftshot/wiki) has the full configuration reference for
 every platform, the [Android](https://github.com/LukasAnda/swiftshot/wiki/Android) and
-[Compose Multiplatform](https://github.com/LukasAnda/swiftshot/wiki/Compose-Multiplatform) guides, CI
+[Compose Multiplatform](https://github.com/LukasAnda/swiftshot/wiki/Compose-Multiplatform) and
+[Flutter](https://github.com/LukasAnda/swiftshot/wiki/Flutter) guides, CI
 recipes, migration guides from fastlane and troubleshooting.
 
 ## Contributing

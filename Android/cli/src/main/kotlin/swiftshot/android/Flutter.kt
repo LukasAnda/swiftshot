@@ -66,6 +66,7 @@ class Flutter(private val o: Options, private val log: Log) {
         }
         val results = results()
         val ok = results.filter { it["ok"] == true }
+        for (r in results.filter { it["ok"] == true && it["warning"] != null }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["warning"]} (${r["script"]}:${r["line"]})")
         for (r in results.filter { it["ok"] != true }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["error"]} (${r["script"]}:${r["line"]})")
         if (status != 0 && results.isEmpty()) throw CliError("flutter test failed:\n${out.toString().lines().filter { it.isNotBlank() }.takeLast(40).joinToString("\n")}")
         log.ok("${ok.size} screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (flutter test)")
@@ -100,9 +101,53 @@ class Flutter(private val o: Options, private val log: Log) {
                 }
             }
         }
+        if (o.frame == "plain") frame(shots, devices, manifest)
         report(shots, results.filter { it["ok"] != true })
         log.ok("${shots.size} screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
         return if (shots.isNotEmpty() && ok.size == results.size) 0 else 1
+    }
+
+    /**
+     * Full screens in their device (`<output>-framed/<language>/<name>_framed.png`, as the
+     * Android and iOS renderers write them): Android Studio's device art for Android devices, the
+     * iOS renderer's Apple bezels for iPhones and iPads (on a Mac). Components and full-length
+     * screens stay unframed.
+     */
+    private fun frame(shots: List<Map<*, *>>, devices: List<Map<String, Any?>>, manifest: List<Map<*, *>>) {
+        val components = manifest.filter { it["component"] == true }.map { it["name"] as String }.toSet()
+        val byName = devices.associateBy { it["name"] as String }
+        val framed = File(output.path + "-framed")
+        fun target(file: File) = File(framed, file.relativeTo(output).path.removeSuffix(".png") + "_framed.png")
+        val full = shots.filter { (it["preview"] as String) !in components }.mapNotNull { r ->
+            val d = byName[r["device"]] ?: return@mapNotNull null
+            val (w, h) = (r["size"] as String).split('x').map { it.toInt() }
+            val ratio = (d["ratio"] as Number).toDouble()
+            // A full-length screen is taller than its device: no frame fits it.
+            if (Math.abs(h - (d["height"] as Number).toDouble() * ratio) > 2 || Math.abs(w - (d["width"] as Number).toDouble() * ratio) > 2) null else r to d
+        }
+        val arts = HashMap<String, FrameArt?>()
+        var n = 0
+        for ((r, d) in full.filter { it.second["platform"] == "android" }) {
+            val art = arts.getOrPut(d["name"] as String) { Devices.resolve(listOf(d["name"] as String)).firstOrNull()?.let { Frames.art(it, log) } } ?: continue
+            val file = File(r["file"] as String)
+            val image = javax.imageio.ImageIO.read(file) ?: continue
+            target(file).parentFile.mkdirs()
+            javax.imageio.ImageIO.write(swiftshot.android.shared.Frame.compose(image, art.toJson()), "png", target(file))
+            n++
+        }
+        val ios = full.filter { it.second["platform"] == "ios" }
+        if (ios.isNotEmpty()) {
+            val tool = Ios(o, log, output)
+            if (!tool.available) log.warn("iPhone and iPad frames need the iOS renderer on a Mac (Apple's bezels); left unframed")
+            else {
+                // The iOS renderer's frame command, on a copy of just these screenshots.
+                val stage = File(root, ".dart_tool/swiftshot/frames").apply { deleteRecursively(); mkdirs() }
+                for ((r, _) in ios) { val f = File(r["file"] as String); f.copyTo(File(stage, f.relativeTo(output).path), overwrite = true) }
+                if (tool.frame(stage, framed)) n += ios.size
+                stage.deleteRecursively()
+            }
+        }
+        if (n > 0) log.ok("$n framed → $framed")
     }
 
     /** The SDK: --flutter-root, FLUTTER_ROOT, the project's fvm version, then `flutter` on the PATH. */
@@ -130,9 +175,16 @@ class Flutter(private val o: Options, private val log: Log) {
                 val dp = d.density / 160.0
                 val status = SystemBars.statusDp(d)
                 linkedMapOf("name" to d.name, "platform" to "android", "width" to d.width / dp, "height" to d.height / dp, "ratio" to dp,
-                    "insets" to listOf(status, 0.0, if (d.type == "watch") 0.0 else 24.0, 0.0), "cutout" to d.cutout, "corner" to d.corner)
+                    "insets" to listOf(status, 0.0, if (d.type == "watch") 0.0 else 24.0, 0.0), "cutout" to d.cutout, "corner" to d.corner,
+                    "folder" to d.playFolder)
             }
         }
+    }
+
+    /** The screens rules, as the Dart renderer reads them (the first matching one applies). */
+    private fun rules() = o.screens.map { r ->
+        linkedMapOf("preview" to r.preview, "devices" to r.devices, "languages" to r.languages, "appearances" to r.appearances,
+            "fontScales" to r.fontScales, "fullLength" to r.fullLength, "delay" to r.delay, "skip" to r.skip)
     }
 
     private fun rtl(tag: String) = tag.substringBefore('-').substringBefore('_') in setOf("ar", "fa", "he", "iw", "ur", "ps", "sd", "ug", "yi", "dv", "ckb")
@@ -171,6 +223,7 @@ class Flutter(private val o: Options, private val log: Log) {
             val job = linkedMapOf(
                 "language" to lang, "languages" to languages, "devices" to devices, "appearances" to o.appearances,
                 "fontScales" to o.fontScales, "previews" to o.previews, "output" to output.path, "delay" to o.delay,
+                "fullLength" to o.fullLength, "layout" to o.layout, "rules" to rules(),
                 "results" to File(dir, "${file(lang)}.results.jsonl").path, "manifest" to File(dir, "previews.json").path,
                 // iPhones and iPads render on the iOS engine: here only the components it needs measured.
                 "iosMeasureOnly" to iosExact,

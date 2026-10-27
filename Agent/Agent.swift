@@ -410,6 +410,22 @@ final class AgentRunner {
     func growToContent(of vc: UIViewController, in window: UIWindow, size: CGSize, scale: CGFloat, name: String) -> CGSize {
         let maxHeight = floor(16384 / scale)
         var size = size
+        // Flutter draws its scrollables itself: Swiftshot's host app says how much is hidden.
+        if let extent = ServerCapture.flutterExtent, ServerCapture.hostsCompose(window) {
+            // Flutter draws into one Metal texture: at most 8192 pixels high.
+            let maxHeight = min(maxHeight, floor(8192 / scale))
+            for _ in 0..<8 {
+                let hidden = ceil(extent())
+                guard hidden > 0.5 else { break }
+                let target = min(size.height + hidden, maxHeight)
+                guard target > size.height else { log("warning: \(name): full length capped at \(Int(maxHeight)) pt"); break }
+                size.height = target
+                window.frame.size = size
+                window.setNeedsLayout(); window.layoutIfNeeded()
+                ServerCapture.composeIdle(window)
+            }
+            return size
+        }
         for _ in 0..<8 {
             func scrollViews(_ v: UIView) -> [UIScrollView] { (v as? UIScrollView).map { [$0] } ?? v.subviews.flatMap(scrollViews) }
             guard let scroll = scrollViews(vc.view).filter({ !$0.isHidden && $0.bounds.height > 0 })
@@ -1217,6 +1233,9 @@ enum ServerCapture {
         }
         if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("compose idle after \(Int(Date().timeIntervalSince(t0) * 1000)) ms (links \(running()), busy \(composeBusy?() ?? -1))") }
     }
+
+    static let flutterExtent: (@convention(c) () -> Double)? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_flutter_extent")
+        .map { unsafeBitCast($0, to: (@convention(c) () -> Double).self) }
 
     static let composeBusy: (@convention(c) () -> Int32)? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_compose_busy")
         .map { unsafeBitCast($0, to: (@convention(c) () -> Int32).self) }

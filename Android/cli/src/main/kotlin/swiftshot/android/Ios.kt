@@ -131,7 +131,8 @@ class Ios(private val o: Options, private val log: Log, private val output: File
             "--devices", devices.joinToString(","),
             "--languages", o.languages.joinToString(","), "--appearances", o.appearances.joinToString(","),
             "--output", iosOut.path, "--no-html")
-        if (o.previews.isNotEmpty()) cmd += listOf("--previews", o.previews.joinToString(","))
+        // Flutter's text-scale variants are "<name> @1.3x" in its host app.
+        if (o.previews.isNotEmpty()) cmd += listOf("--previews", o.previews.flatMap { listOf(it, "$it @*") }.joinToString(","))
         cmd += extra
         if (o.iosVersions.isNotEmpty()) cmd += listOf("--ios", o.iosVersions.joinToString(","))
         if (o.verbose) cmd += "--verbose"
@@ -142,6 +143,17 @@ class Ios(private val o: Options, private val log: Log, private val output: File
         val report = File(iosOut, "swiftshot-report.json")
         if (!report.isFile) throw CliError("The iOS renderer failed (exit $status).")
         return status to ((Json.parse(report.readText()) as Map<*, *>)["screenshots"] as List<*>).map { it as Map<*, *> }
+    }
+
+    /** Existing screenshots in [dir] into their device (plain frames) under [framed]. */
+    internal fun frame(dir: File, framed: File): Boolean {
+        val tool = swiftshot() ?: return false
+        val cmd = listOf(tool.path, "--platform", "ios", "frame", dir.path, "--frame", "plain", "--frame-output", framed.path) +
+            if (o.acceptBezelLicense) listOf("--accept-bezel-license") else emptyList()
+        val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        val out = p.inputStream.bufferedReader().readText()
+        if (p.waitFor() != 0) { log.warn("iOS frames failed:\n${out.lines().takeLast(10).joinToString("\n")}"); return false }
+        return true
     }
 
     private fun render(app: File): List<Shot> {

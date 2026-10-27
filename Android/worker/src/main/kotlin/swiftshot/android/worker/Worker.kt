@@ -2,6 +2,7 @@ package swiftshot.android.worker
 
 import app.cash.paparazzi.DeviceConfig
 import swiftshot.android.shared.SystemUi
+import swiftshot.android.shared.Frame
 import app.cash.paparazzi.Environment
 import app.cash.paparazzi.PaparazziSdk
 import android.view.View

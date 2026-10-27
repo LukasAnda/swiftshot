@@ -48,7 +48,7 @@ class FlutterTest {
         val swift = ios.hostMain(manifest, mapOf("Summary" to (400.0 to 212.5)), plugins = true)
         assertTrue("#Preview(\"Root\") { flutterPreview(0) }" in swift, swift)
         assertTrue("#Preview(\"Card \\\"big\\\"\", traits: .fixedLayout(width: 400, height: 120)) { flutterPreview(1) }" in swift, swift)
-        assertTrue("#Preview(\"Summary\", traits: .fixedLayout(width: 400, height: 212.50)) { flutterPreview(2) }" in swift, swift)
+        assertTrue("#Preview(\"Summary\", traits: .fixedLayout(width: 400, height: 212.5)) { flutterPreview(2) }" in swift, swift)
         assertTrue("#Preview(\"Free\", traits: .sizeThatFitsLayout) { flutterPreview(3) }" in swift, swift)
         assertTrue("registerWithRegistry:" in swift)
         assertFalse("registerWithRegistry:" in ios.hostMain(manifest, emptyMap(), plugins = false))

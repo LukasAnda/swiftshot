@@ -2,7 +2,8 @@ On iOS, Swiftshot runs your simulator app as a plain Mac process, gives it a vir
 the target device's exact geometry, and lets Core Animation render each preview into it. No
 simulator is created or booted. This page explains each step and how the output is kept identical
 to a booted simulator. On Android, it renders Compose previews with layoutlib, the engine of
-Android Studio's previews, in parallel processes: see [Android](#android).
+Android Studio's previews, in parallel processes: see [Android](#android). Flutter previews
+render with `flutter test`, or on Flutter's iOS engine: see [Flutter](#flutter).
 
 - [Overview](#overview)
 - [1. Build once](#1-build-once)
@@ -19,6 +20,7 @@ Android Studio's previews, in parallel processes: see [Android](#android).
 - [Why it's faster than fastlane](#why-its-faster-than-fastlane)
 - [Android](#android)
 - [Compose Multiplatform](#compose-multiplatform)
+- [Flutter](#flutter)
 
 ## Overview
 
@@ -400,3 +402,28 @@ A multiplatform module is prepared per target by the same init script:
 Component previews (no `showSystemUi`) render on iOS at the size the desktop renderer measured.
 The iOS output is pixel identical to a booted simulator (checked on iPhone 17 Pro Max and iPad
 Pro 13-inch, light and dark, left to right and right to left).
+
+## Flutter
+
+```mermaid
+flowchart LR
+    CLI["swiftshot"] --> S["find every @Preview<br/>(lib/, no build)"]
+    S --> H["flutter test<br/>one process per language"]
+    S -->|"Mac with Xcode"| I["Flutter bundle for the simulator<br/>in a SwiftUI host app"]
+    I --> R["iOS no-boot renderer"]
+    H & R --> OUT[("PNG per preview,<br/>device, language, appearance")]
+```
+
+1. Swiftshot reads the `@Preview`s from the Dart sources in `lib/`, without building, and
+   generates a test file per language that imports them.
+2. **Headless.** `flutter test` renders each preview with Impeller (Skia as a fallback), with
+   the previewer's layers (wrapper, theme, size, brightness, text scale, localizations) in a
+   `MaterialApp`, at the device's size, scale and safe areas. Each language gets its own process
+   and fonts. Full screens get system bars drawn over the frame, as on Android.
+3. **Exact iOS.** On a Mac with Xcode, iPhones and iPads render on Flutter's iOS engine instead:
+   `flutter build ios --simulator` builds the app's Flutter bundle (skipped when nothing
+   changed), a generated SwiftUI host app gets a `#Preview` per preview, and the no-boot iOS
+   renderer renders it like any app. The status bar is the system's own; components render at
+   their declared size, or the size the headless pass measured.
+
+The exact iOS output is pixel identical to a booted simulator, and every run is byte identical.
