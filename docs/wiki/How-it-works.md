@@ -18,6 +18,7 @@ Android Studio's previews, in parallel processes: see [Android](#android).
 - [11. Device table](#11-device-table)
 - [Why it's faster than fastlane](#why-its-faster-than-fastlane)
 - [Android](#android)
+- [Compose Multiplatform](#compose-multiplatform)
 
 ## Overview
 
@@ -382,3 +383,20 @@ The same 470 screenshots on a free 4-core `ubuntu-latest` runner
 |---|---:|---:|---:|
 | first run | **57.7 s** | 87.4 s | 93.0 s |
 | warm run | **38.0 s** | 66.1 s | 70.8 s |
+
+## Compose Multiplatform
+
+A multiplatform module is prepared per target by the same init script:
+
+- **Android** (`com.android.library` or `com.android.kotlin.multiplatform.library`): layoutlib,
+  as above, labelled `:shared (android)`.
+- **Desktop** (the first `jvm()` target): Compose's own `ImageComposeScene`, rendered by Skia
+  headless, with no window.
+- **iOS** (`iosSimulatorArm64()`): previews are found on the JVM target. The init script adds a
+  `SwiftshotHost` framework with a generated wrapper per preview (`ComposeUIViewController`);
+  private previews are made internal in copies of the sources. A small SwiftUI host app gets a
+  `#Preview` per preview, and the iOS no-boot renderer renders it as it does any app.
+
+Component previews (no `showSystemUi`) render on iOS at the size the desktop renderer measured.
+The iOS output is pixel identical to a booted simulator (checked on iPhone 17 Pro Max and iPad
+Pro 13-inch, light and dark, left to right and right to left).

@@ -48,6 +48,15 @@ jobs:
               [ "$n" -gt "$s" ] && { sed -n "$((s+1)),${n}p" "$f" | sed "s|^|[$(basename "$f" .log)] |"; echo "$n" > "$f.seen"; }
             done; done ) &
           swift test --skip-build --filter "IntegrationTests.ParityAndPerformanceTests/${{ matrix.test }}" 2>&1 | tee "$RUNNER_TEMP/integration.log"
+      # Compose Multiplatform's iOS target, on the runner that already checks nothing boots: the
+      # shared previews of Example/MultiplatformDemo through Swiftshot's iOS pipeline.
+      - name: Compose Multiplatform (iOS)
+        if: matrix.key == 'No simulator booted'
+        run: |
+          # No Android SDK needed: an iOS-only run prepares the iOS and desktop targets only.
+          export JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
+          unset ANDROID_HOME ANDROID_SDK_ROOT
+          Android/ci/multiplatform.sh ios "$RUNNER_TEMP/multiplatform-ios"
       - name: Summary
         if: always()
         run: |
@@ -56,7 +65,9 @@ jobs:
         if: failure() || cancelled()
         with:
           name: integration-screenshots-${{ matrix.key }}
-          path: ${{ runner.temp }}/swiftshot-it-*
+          path: |
+            ${{ runner.temp }}/swiftshot-it-*
+            ${{ runner.temp }}/multiplatform-ios*
           if-no-files-found: ignore
           include-hidden-files: true
 
@@ -87,4 +98,30 @@ jobs:
             ${{ runner.temp }}/android-it/a/en-US
             ${{ runner.temp }}/android-it/a/ar
             ${{ runner.temp }}/android-it/*.log
+          if-no-files-found: ignore
+
+  # Compose Multiplatform on a free Linux runner: the shared @Previews of Example/MultiplatformDemo
+  # rendered for Android and desktop, every expected screenshot at the device's size, no errors.
+  multiplatform:
+    name: Compose Multiplatform (Android, desktop)
+    if: ${{ !inputs.tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Machine
+        run: nproc; free -g; java -version; echo "ANDROID_HOME=$ANDROID_HOME"
+      - name: Render and check
+        run: Android/ci/multiplatform.sh android,desktop "$RUNNER_TEMP/multiplatform"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: multiplatform-screenshots
+          path: |
+            ${{ runner.temp }}/multiplatform
+            ${{ runner.temp }}/multiplatform.log
           if-no-files-found: ignore

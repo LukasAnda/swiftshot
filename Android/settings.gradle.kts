@@ -9,4 +9,5 @@ dependencyResolutionManagement {
 
 // cli: the orchestrator (JDK + Kotlin stdlib only, shipped as one jar).
 // worker: runs inside the app's classpath and renders through layoutlib (Paparazzi's SDK).
-include(":cli", ":worker")
+// desktop-worker: renders Compose Multiplatform desktop previews with Compose's own ImageComposeScene.
+include(":cli", ":worker", ":desktop-worker")

@@ -10,6 +10,7 @@ import SwiftUI
 import ObjectiveC
 import Metal
 import IOSurface
+import MachO
 
 
 @_cdecl("SwiftshotAgentStart")
@@ -19,6 +20,10 @@ public func SwiftshotAgentStart() {
     // no simulator, so there is no app scene to wait for. Render right away, before the app's main.
     if NoBoot.enabled {
         NoBoot.install()
+        NoBoot.initializeAppImages()
+        // A host app that starts the agent from its main (Swiftshot's Compose Multiplatform host):
+        // its frameworks are then fully initialized, which Kotlin/Native's runtime needs.
+        if dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_host_main") != nil { return }
         MainActor.assumeIsolated { AgentRunner.startOnce(jobPath: jobPath) }
         return
     }
@@ -26,6 +31,17 @@ public func SwiftshotAgentStart() {
     _ = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated { AgentRunner.startOnce(jobPath: jobPath) }
     }
+}
+
+/// Called by a host app's main in no-boot mode (see SwiftshotAgentStart); does nothing otherwise.
+@_cdecl("SwiftshotAgentStartNow")
+public func SwiftshotAgentStartNow() {
+    guard NoBoot.enabled, let jobPath = ProcessInfo.processInfo.environment["SWIFTSHOT_JOB"] else { return }
+    // Compose renders only while the app and its scene are in the foreground (it pauses
+    // otherwise, a dialog's fade-in stops halfway); without a simulator they never get there.
+    // As on a device, the app being shown is the active one.
+    NoBoot.reportForeground()
+    MainActor.assumeIsolated { AgentRunner.startOnce(jobPath: jobPath) }
 }
 
 @MainActor
@@ -228,6 +244,7 @@ final class AgentRunner {
                     swiftshot_set_exclusion_rect(rect(device.display?.exclusionArea), rect(device.display?.cameraRegion ?? device.display?.exclusionArea))
                     if let corners = device.display?.cornerInsets, corners.count == 8 { corners.withUnsafeBufferPointer { swiftshot_set_corner_insets($0.baseAddress) } } else { swiftshot_set_corner_insets(nil) }
                     defer { DeviceIdiom.current = nil }
+                    ServerCapture.composeMark?()
                     guard let vc = controller(fromBody: preview.body()) else {
                         result.errors.append("\(preview.name): could not build preview body"); return
                     }
@@ -276,6 +293,9 @@ final class AgentRunner {
                         func animated(_ l: CALayer) -> [String] { ((l.animationKeys() ?? []).isEmpty ? [] : ["\(type(of: l.delegate as AnyObject? ?? l)):\(l.animationKeys()!)"]) + (l.sublayers ?? []).flatMap(animated) }
                         log("animations before capture: \(animated(window.layer).prefix(12))")
                     }
+                    // Compose's dialogs and sheets fade their scrim in: the status bar's automatic
+                    // style is judged from what is under it once that has finished.
+                    ServerCapture.composeIdle(window)
                     // The system status bar over the app, as a device shows it.
                     // SpringBoard's status bar and home indicator, in their own window composited over
                     // the app's (as on a device, the app's materials don't see them).
@@ -1151,6 +1171,10 @@ enum ServerCapture {
         do {
             keepAttached = true
             defer { keepAttached = false; detach?(); detach = nil }
+            // Compose Multiplatform draws at display-link ticks, and its enter animations (a
+            // dialog's fade) run on real time. They play out before the capture: frames drawn
+            // while the window is hosted for capturing don't reach it.
+            composeIdle(window)
             guard var last = pixels(of: window, w, h, scale, background: background) else { return nil }
             guard legacySettle else { return last }
             // iOS 26: until two quiet-time results agree. Its glass reaches its final look
@@ -1169,6 +1193,37 @@ enum ServerCapture {
             }
             return last
         }
+    }
+
+    /// Until Compose has nothing left to do, a few ticks in a row: no recomposition or animation
+    /// pending (its recomposers, through the host app's swiftshot_compose_busy) and no display
+    /// link asking for frames. An endless animation (a spinner) gets 5 s.
+    static func composeIdle(_ window: UIWindow) {
+        guard hostsCompose(window), let running = displayLinksRunning else { return }
+        let t0 = Date()
+        var idle = 0
+        while idle < 3 && Date().timeIntervalSince(t0) < 5 {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0 / 60.0))
+            idle = running() == 0 && (composeBusy?() ?? 0) == 0 ? idle + 1 : 0
+        }
+        if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { log("compose idle after \(Int(Date().timeIntervalSince(t0) * 1000)) ms (links \(running()), busy \(composeBusy?() ?? -1))") }
+    }
+
+    static let composeBusy: (@convention(c) () -> Int32)? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_compose_busy")
+        .map { unsafeBitCast($0, to: (@convention(c) () -> Int32).self) }
+    /// Before each preview: the recomposers of earlier previews don't count (theirs never get
+    /// another frame, so their pending work never finishes).
+    static let composeMark: (@convention(c) () -> Void)? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_compose_mark")
+        .map { unsafeBitCast($0, to: (@convention(c) () -> Void).self) }
+
+    static let displayLinksRunning: (@convention(c) () -> Int32)? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "swiftshot_display_links_running")
+        .map { unsafeBitCast($0, to: (@convention(c) () -> Int32).self) }
+
+    /// A view of Compose Multiplatform's UIKit host in the window (CMPViewController's views).
+    static func hostsCompose(_ view: UIView) -> Bool {
+        let name = NSStringFromClass(type(of: view))
+        if name.hasPrefix("CMP") || name.contains("ComposeSceneLayerView") || name.contains("ComposeContainerView") { return true }
+        return view.subviews.contains { hostsCompose($0) }
     }
 
     /// iOS 26's glass settles through a server ↔ UIKit luma feedback loop (see settled(_:)).
@@ -1707,7 +1762,39 @@ enum NoBoot {
         unsafeBitCast(method_getImplementation(method), to: Setter.self)(overrides, selector, radius, trait)
     }
 
+    /// This runs from the agent's own initializer, which dyld may call before the app's
+    /// frameworks have run theirs. Frameworks that need their static initializers before any call
+    /// (Kotlin/Native's runtime: its mutexes and thread-locals) get them now: dlopen of a loaded
+    /// image runs its pending initializers before it returns.
+    static func initializeAppImages() {
+        let bundle = Bundle.main.bundlePath
+        for i in 0..<_dyld_image_count() {
+            guard let name = _dyld_get_image_name(i) else { continue }
+            let path = String(cString: name)
+            if path.hasPrefix(bundle + "/Frameworks/") {
+                let handle = dlopen(name, RTLD_NOW | RTLD_NOLOAD)
+                if ProcessInfo.processInfo.environment["SWIFTSHOT_DEBUG"] != nil { FileHandle.standardError.write("[swiftshot] initialized \(path): \(handle != nil)\n".data(using: .utf8)!) }
+            }
+        }
+    }
+
+    static func reportForeground() {
+        if let m = class_getInstanceMethod(UIApplication.self, NSSelectorFromString("applicationState")) {
+            let active: @convention(block) (AnyObject) -> Int = { _ in UIApplication.State.active.rawValue }
+            method_setImplementation(m, imp_implementationWithBlock(active))
+        }
+        if let m = class_getInstanceMethod(UIScene.self, NSSelectorFromString("activationState")) {
+            let foreground: @convention(block) (AnyObject) -> Int = { _ in UIScene.ActivationState.foregroundActive.rawValue }
+            method_setImplementation(m, imp_implementationWithBlock(foreground))
+        }
+    }
+
     static func install() {
+        // Display links tick from a timer (Agent/DisplayLink.m): without a render server that
+        // answers for displays, CADisplay.mainDisplay would wait forever (Compose Multiplatform).
+        for name in ["swiftshot_install_display_link", "swiftshot_install_no_key_window"] {
+            if let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) { unsafeBitCast(sym, to: (@convention(c) () -> Void).self)() }
+        }
         // QuartzCore polls ~5 s for a render server's displays that will never appear.
         if let cls = NSClassFromString("CADisplay"), let m = class_getClassMethod(cls, NSSelectorFromString("displays")) {
             let none: @convention(block) (AnyObject) -> NSArray = { _ in NSArray() }

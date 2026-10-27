@@ -7,8 +7,14 @@ import java.util.zip.ZipFile
 /** What the init script reports for one module (see swiftshot-android.init.gradle). */
 class Module(val json: Map<*, *>) {
     val path = json["module"] as String
-    val packageName = json["packageName"] as String
-    val wear = json["wear"] as Boolean
+    /** android (layoutlib) or desktop (a Compose Multiplatform JVM target). */
+    val platform = json["platform"] as String? ?: "android"
+    val desktop get() = platform == "desktop"
+    /** How the module is named in logs: `:shared` for Android, `:shared (desktop)` for its desktop target. */
+    /** `:app`; a multiplatform module's targets as `:shared (android)`, `:shared (desktop)`… */
+    val label get() = if (platform == "android" && json["multiplatform"] != true) path else "$path ($platform)"
+    val packageName = json["packageName"] as String? ?: ""
+    val wear = json["wear"] as Boolean? ?: false
     val projectDir = (json["projectDir"] as String?)?.let(::File)
 
     /**
@@ -25,14 +31,15 @@ class Module(val json: Map<*, *>) {
             else -> null
         }
     }
-    val classDirs = (json["classDirs"] as List<*>).map { File(it as String) }
-    val classpath = (json["classpath"] as List<*>).map { File(it as String) }
+    val classDirs = (json["classDirs"] as List<*>? ?: emptyList<Any>()).map { File(it as String) }
+    val classpath = (json["classpath"] as List<*>? ?: emptyList<Any>()).map { File(it as String) }
+    val ios get() = platform == "ios"
     /** The SDK's android.jar: classes layoutlib leaves out (android.os.Build). Last, so layoutlib wins. */
     val bootClasspath = (json["bootClasspath"] as List<*>? ?: emptyList<Any>()).map { File(it as String) }
-    val layoutlibRuntime = File(json["layoutlibRuntime"] as String)
-    val layoutlibResources = File(json["layoutlibResources"] as String)
-    val hasTooling get() = classpath.any { it.path.contains("ui-tooling") && !it.path.contains("ui-tooling-preview") && !it.path.contains("ui-tooling-data") } ||
-        (json["components"] as List<*>).any { (it as String).startsWith("androidx.compose.ui:ui-tooling:") || (it as String).startsWith("androidx.compose.ui:ui-tooling-android:") }
+    val layoutlibRuntime get() = File(json["layoutlibRuntime"] as String)
+    val layoutlibResources get() = File(json["layoutlibResources"] as String)
+    val hasTooling get() = desktop || classpath.any { it.path.contains("ui-tooling") && !it.path.contains("ui-tooling-preview") && !it.path.contains("ui-tooling-data") } ||
+        (json["components"] as List<*>? ?: emptyList<Any>()).any { (it as String).startsWith("androidx.compose.ui:ui-tooling:") || (it as String).startsWith("androidx.compose.ui:ui-tooling-android:") }
 
     fun environment(appTestDir: File) = linkedMapOf(
         "appTestDir" to appTestDir.path,
@@ -49,18 +56,20 @@ class Module(val json: Map<*, *>) {
 }
 
 object Gradle {
+    /** The targets to prepare: iOS previews are found and measured on the desktop target. */
+    fun gradlePlatforms(platforms: List<String>): List<String> =
+        if (platforms.isEmpty()) emptyList() else (platforms + if ("ios" in platforms) listOf("desktop") else emptyList()).distinct()
+
     /** Runs `swiftshotPrepare` in the project and returns the modules it described. */
-    fun prepare(o: Options, log: Log): List<Module> {
+    fun prepare(o: Options, log: Log, platforms: List<String> = gradlePlatforms(o.platforms)): List<Module> {
         val root = File(o.projectDir).absoluteFile.normalize()
         val gradlew = File(root, "gradlew")
         require(gradlew.isFile) { "No gradlew in $root. Pass --project-dir or run from the Gradle project's root." }
-        // A stable path, so the project's configuration cache stays valid between runs.
-        val text = Gradle::class.java.getResourceAsStream("/swiftshot-android.init.gradle")!!.bufferedReader().readText()
-        val init = File(Cache.root, "swiftshot-android.init.gradle")
-        if (!init.isFile || init.readText() != text) { init.parentFile.mkdirs(); init.writeText(text) }
+        val init = initScript()
         val tasks = if (o.modules.isEmpty()) listOf("swiftshotPrepare") else o.modules.map { "${it.trimEnd(':')}:swiftshotPrepare" }
         val cmd = listOf(gradlew.path, "-I", init.path) + tasks +
-            listOf("-Pswiftshot.variant=${o.variant}", "--console=plain", "-q") + o.gradleArgs
+            listOf("-Pswiftshot.variant=${o.variant}", "--console=plain", "-q") +
+            (if (platforms.isEmpty()) emptyList() else listOf("-Pswiftshot.platforms=${platforms.joinToString(",")}")) + o.gradleArgs
         log.step("Building ${tasks.joinToString(" ")} (${o.variant})…")
         val p = ProcessBuilder(cmd).directory(root).redirectErrorStream(true).apply {
             o.javaHome?.let { environment()["JAVA_HOME"] = it }
@@ -75,6 +84,27 @@ object Gradle {
         if (status != 0) throw CliError("Gradle failed (exit $status):\n${output.toString().trim().lines().takeLast(40).joinToString("\n")}")
         if (modules.isEmpty()) throw CliError("No Android application or library module found in $root.")
         return modules.map { Module(Json.parse(it.readText()) as Map<*, *>) }
+    }
+
+    /** Runs Gradle tasks with Swiftshot's init script (the second pass for iOS). */
+    fun run(o: Options, log: Log, tasks: List<String>, properties: List<String>, what: String) {
+        val root = File(o.projectDir).absoluteFile.normalize()
+        val cmd = listOf(File(root, "gradlew").path, "-I", initScript().path) + tasks +
+            listOf("-Pswiftshot.variant=${o.variant}", "--console=plain", "-q") + properties + o.gradleArgs
+        log.step("$what…")
+        val p = ProcessBuilder(cmd).directory(root).redirectErrorStream(true).apply { o.javaHome?.let { environment()["JAVA_HOME"] = it } }.start()
+        val output = StringBuilder()
+        p.inputStream.bufferedReader().forEachLine { line -> output.appendLine(line); if (o.verbose) System.err.println("  $line") }
+        val status = p.waitFor()
+        if (status != 0) throw CliError("Gradle failed (exit $status):\n${output.toString().trim().lines().takeLast(40).joinToString("\n")}")
+    }
+
+    /** A stable path, so the project's configuration cache stays valid between runs. */
+    fun initScript(): File {
+        val text = Gradle::class.java.getResourceAsStream("/swiftshot-android.init.gradle")!!.bufferedReader().readText()
+        val init = File(Cache.root, "swiftshot-android.init.gradle")
+        if (!init.isFile || init.readText() != text) { init.parentFile.mkdirs(); init.writeText(text) }
+        return init
     }
 
     /** layoutlib's runtime and resources jars, unpacked once into the cache. */

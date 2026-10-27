@@ -28,6 +28,10 @@ data class Preview(
     val apiLevel: Int = -1,
     val provider: String? = null,
     val providerLimit: Int = Int.MAX_VALUE,
+    /** Private in source: callable only from its own file (iOS wrappers make it internal). */
+    val isPrivate: Boolean = false,
+    /** The Kotlin file it is declared in (the class file's SourceFile), e.g. `HabitsApp.kt`. */
+    val sourceFile: String? = null,
 ) {
     val night: Boolean? get() = when (uiMode and 0x30) { 0x20 -> true; 0x10 -> false; else -> null }
     val isWatchDevice get() = device.contains("wearos") || device.contains("isRound=true")
@@ -94,7 +98,9 @@ class PreviewScanner(private val classpath: List<File>) {
         if (reader.access and Opcodes.ACC_ANNOTATION != 0) return emptyList()
         val owner = reader.className.replace('/', '.')
         val found = mutableListOf<Preview>()
+        var source: String? = null
         reader.accept(object : ClassVisitor(Opcodes.ASM9) {
+            override fun visitSource(file: String?, debug: String?) { source = file }
             override fun visitMethod(access: Int, name: String, descriptor: String, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
                 // Composables take a Composer; synthetic and bridge methods are never previews.
                 if (access and (Opcodes.ACC_SYNTHETIC or Opcodes.ACC_BRIDGE) != 0) return null
@@ -136,12 +142,14 @@ class PreviewScanner(private val classpath: List<File>) {
                                 apiLevel = (values["apiLevel"] as Int?) ?: -1,
                                 provider = (p?.values?.get("provider") as Type?)?.className,
                                 providerLimit = (p?.values?.get("limit") as Int?) ?: Int.MAX_VALUE,
+                                isPrivate = access and Opcodes.ACC_PRIVATE != 0,
+                                sourceFile = source,
                             )
                         }
                     }
                 }
             }
-        }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+        }, ClassReader.SKIP_CODE or ClassReader.SKIP_FRAMES)
         return found.distinct()
     }
 

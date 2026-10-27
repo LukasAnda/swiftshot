@@ -2,6 +2,8 @@ Swiftshot renders Google Play screenshots from your Jetpack Compose `@Preview`s 
 foldables, tablets and Wear OS, in every language and appearance, without an emulator. It runs on
 a Mac or on Linux (CI).
 
+For Compose Multiplatform modules (Android, desktop and iOS) see [[Compose Multiplatform]].
+
 ## Requirements
 
 - JDK 21 or later (Android Studio's bundled one is found automatically)

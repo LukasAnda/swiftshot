@@ -1,7 +1,7 @@
 <h1 align="center">Swiftshot</h1>
 
 <p align="center">
-  App Store and Google Play screenshots straight from your SwiftUI, UIKit and Jetpack Compose previews, without a simulator or emulator.
+  App Store and Google Play screenshots straight from your SwiftUI, UIKit, Jetpack Compose and Compose Multiplatform previews, without a simulator or emulator.
 </p>
 
 <p align="center">
@@ -47,6 +47,11 @@ folders `fastlane deliver` and `fastlane supply` upload from.
 
 Both get device frames, full-length scrolling screens, per-screenshot settings, an HTML gallery and
 a JSON report.
+
+**Compose Multiplatform**: shared `@Preview`s
+
+- Android, desktop and iOS screenshots from one module, in one run.
+- iOS through the same no-boot renderer, pixel identical to a booted simulator (Mac with Xcode).
 
 ## Install
 
@@ -105,6 +110,19 @@ debugImplementation("androidx.compose.ui:ui-tooling")
 ```
 
 Nothing else is added to the project.
+
+### Compose Multiplatform
+
+Also in the folder with `gradlew`. Every target the module has is rendered: Android, desktop
+(`jvm()`) and iOS (`iosSimulatorArm64()`, on a Mac with Xcode):
+
+```
+swiftshot --devices "Pixel 10 Pro" --desktop-devices "Desktop 1440×900 @2x" \
+  --ios-devices "iPhone 17 Pro Max,iPad Pro 13-inch (M5)" --platforms android,desktop,ios
+```
+
+See the [Compose Multiplatform](https://github.com/LukasAnda/swiftshot/wiki/Compose-Multiplatform)
+wiki page.
 
 ### Output
 
@@ -203,7 +221,10 @@ Android:
 ```
 
 `"layout": "fastlane"` writes `<locale>/images/phoneScreenshots`, `sevenInchScreenshots`,
-`tenInchScreenshots` and `wearScreenshots`, the folders `fastlane supply` uploads from.
+`tenInchScreenshots`, `wearScreenshots` and `desktopScreenshots`, the folders `fastlane supply`
+uploads from.
+
+Compose Multiplatform adds `platforms`, `desktop_devices`, `ios_devices` and `ios_versions`.
 
 ### Per-screenshot settings
 
@@ -298,6 +319,9 @@ fastlane boots a simulator per device and runs a UI-test session per device and 
 Paparazzi and Roborazzi render screenshots as unit tests, one at a time per test JVM. Swiftshot
 renders the previews directly, in parallel processes that stay up for the whole run.
 
+**Compose Multiplatform.** `Example/MultiplatformDemo`, 9 previews in two languages on an
+Apple silicon Mac: 90 screenshots (Android phone and tablet, desktop, iPhone and iPad) in 19 s.
+
 ## How it works
 
 **iOS**
@@ -346,6 +370,12 @@ flowchart LR
 4. Content gets the device's real insets; the status bar and gesture handle are drawn over the
    frame, as system windows are on a device.
 
+**Compose Multiplatform**
+
+The Android target renders as above, the desktop target with Compose's own headless
+`ImageComposeScene`. For iOS, Swiftshot links a framework with a wrapper per preview, builds a
+small SwiftUI host app with a `#Preview` for each, and renders it like any iOS app.
+
 The [How it works](https://github.com/LukasAnda/swiftshot/wiki/How-it-works) wiki page has the full
 explanation and diagrams.
 
@@ -361,6 +391,10 @@ Android:
 
 - macOS or Linux with a JDK 21+
 - A Gradle project with Compose `@Preview`s and `ui-tooling` on the debug classpath
+
+Compose Multiplatform:
+
+- As Android, plus a Mac with Xcode for the iOS target
 
 ## Development
 
@@ -382,9 +416,11 @@ the time budget.
 |---|---|
 | [v0.3.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.3.0) | Homebrew: `brew install lukasanda/tap/swiftshot` (released) |
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.4.0) | Android: Jetpack Compose previews (released) |
-| [v0.5.0](https://github.com/LukasAnda/swiftshot/milestone/3) | Compose Multiplatform |
-| [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
-| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/5) | IDE plugins for Xcode, Android Studio and IntelliJ IDEA |
+| [v0.5.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.5.0) | Compose Multiplatform: Android, desktop and iOS (released) |
+| [v0.6.0](https://github.com/LukasAnda/swiftshot/milestone/6) | Linux as a full host: the same `swiftshot` command, setup and config as on a Mac (iOS skipped) |
+| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/7) | Easy migration from Paparazzi and Roborazzi: `swiftshot init` sets Swiftshot up to match |
+| [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter |
+| [v0.9.0](https://github.com/LukasAnda/swiftshot/milestone/5) | IDE plugins for Xcode, Android Studio and IntelliJ IDEA |
 
 Version numbers are targets and can move. Details on the
 [Roadmap](https://github.com/LukasAnda/swiftshot/wiki/Roadmap) wiki page; suggestions are welcome as
@@ -393,7 +429,8 @@ Version numbers are targets and can move. Details on the
 ## Documentation
 
 The [wiki](https://github.com/LukasAnda/swiftshot/wiki) has the full configuration reference for
-both platforms, the [Android](https://github.com/LukasAnda/swiftshot/wiki/Android) guide, CI
+every platform, the [Android](https://github.com/LukasAnda/swiftshot/wiki/Android) and
+[Compose Multiplatform](https://github.com/LukasAnda/swiftshot/wiki/Compose-Multiplatform) guides, CI
 recipes, migration guides from fastlane and troubleshooting.
 
 ## Contributing

@@ -168,6 +168,10 @@ so `fastlane deliver` uploads it unchanged.
 | `java_home` | | JDK 21+ for Gradle and the renderer, see [[Installation]] |
 | `devices` | Pixel 10 Pro, Pixel Tablet | phones, foldables, tablets: names, ids or `*` globs (`swiftshot devices`) |
 | `watch_devices` | Wear OS Large Round | for Wear OS modules |
+| `desktop_devices` | Desktop 1440×900 @2x | Compose Multiplatform desktop window sizes |
+| `ios_devices` | iPhone 17 Pro Max, iPad Pro 13-inch (M5) | Compose Multiplatform iOS devices (Mac with Xcode) |
+| `ios_versions` | newest installed | iOS runtimes for Compose Multiplatform |
+| `platforms` | every target | Compose Multiplatform targets: `android`, `desktop`, `ios` |
 | `languages` | `["en-US"]` | BCP 47 tags |
 | `appearances` | `["light"]` | `light`, `dark` |
 | `font_scales` | `[1]` | 0.5 to 3, e.g. `[1, 1.3, 2]` |
@@ -216,4 +220,5 @@ fastlane/metadata/android/en-US/images/tenInchScreenshots/Pixel Tablet-Welcome-l
 fastlane/metadata/android/en-US/images/wearScreenshots/Wear OS Large Round-Watch list.png
 ```
 
-Tablets and foldables up to 9" go to `sevenInchScreenshots`, TVs to `tvScreenshots`.
+Tablets and foldables up to 9" go to `sevenInchScreenshots`, TVs to `tvScreenshots`, desktop
+windows to `desktopScreenshots`. For Compose Multiplatform see [[Compose Multiplatform]].

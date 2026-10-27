@@ -300,6 +300,101 @@ class RunnerPlanTest {
         assertTrue(plan(emptyList()).isEmpty())
     }
 
+    /** A Compose Multiplatform target of `:shared`, as the init script reports it. */
+    private fun target(platform: String, path: String = ":shared", wear: Boolean = false) = Module(
+        mapOf(
+            "module" to path, "platform" to platform, "multiplatform" to true, "packageName" to "com.example", "wear" to wear,
+            "classDirs" to listOf("$dir/classes"), "classpath" to emptyList<String>(),
+        ),
+    )
+
+    @Test fun desktopPlansDesktopDevices() {
+        val shots = plan(listOf(preview("Welcome")), module = target("desktop"))
+        assertEquals(listOf("en-US/Desktop 1440×900 @2x-Welcome.png"), shots.files())
+        assertEquals(listOf("window"), shots.map { it.device.type })
+        val chosen = plan(listOf(preview("Welcome")), "--desktop-devices", "Desktop 1280×800,desktop_1920x1080", module = target("desktop"))
+        assertEquals(listOf("Desktop 1280×800", "Desktop 1920×1080"), chosen.map { it.device.name })
+    }
+
+    @Test fun desktopIgnoresAndroidDevices() {
+        val m = target("desktop")
+        // --devices and a preview's own device are Android screens; a desktop target has windows.
+        val shots = plan(listOf(preview("Welcome").copy(device = "id:pixel_9")), "--devices", "Pixel 9", module = m)
+        assertEquals(listOf("Desktop 1440×900 @2x"), shots.map { it.device.name })
+        // A rule's devices count only when they name desktop sizes.
+        assertEquals(listOf("Desktop 1440×900 @2x"), plan(listOf(preview("Stats")), "--screen", "Stats: devices=Pixel*", module = m).map { it.device.name })
+        assertEquals(
+            listOf("Desktop 1366×768"),
+            plan(listOf(preview("Stats")), "--screen", "Stats: devices=Pixel*,desktop_1366x768", module = m).map { it.device.name },
+        )
+        assertEquals(
+            listOf("desktop_1280x800_2x", "desktop_1440x900_2x", "desktop_1920x1080_2x"),
+            plan(listOf(preview("Stats")), "--screen", "Stats: devices=*@2x", module = m).map { it.device.id },
+        )
+    }
+
+    @Test fun desktopHasNoVscroll() {
+        val m = target("desktop")
+        assertEquals(listOf("shrink"), plan(listOf(preview("Welcome")), "--full-length", module = m).map { it.mode })
+        assertEquals(listOf("normal"), plan(listOf(preview("Welcome")), "--full-length", "--system-ui", "always", module = m).map { it.mode })
+        assertEquals(listOf("shrink"), plan(listOf(preview("Welcome")), "--screen", "Welcome: full_length=true", module = m).map { it.mode })
+        // The Android target of the same project still grows.
+        assertEquals(listOf("vscroll"), plan(listOf(preview("Welcome")), "--full-length", "--devices", "Pixel 9", module = target("android")).map { it.mode })
+    }
+
+    @Test fun desktopIsNeverAWatch() {
+        val m = target("desktop", wear = true)
+        val shots = plan(listOf(preview("Face").copy(device = "spec:width=227dp,height=227dp,isRound=true")), "--appearances", "light,dark", module = m)
+        assertEquals(listOf("Desktop 1440×900 @2x"), shots.map { it.device.name }.distinct())
+        assertEquals(listOf(false, true), shots.map { it.dark })
+    }
+
+    @Test fun desktopSizedPreview() {
+        val shots = plan(listOf(preview("Card").copy(widthDp = 400, heightDp = 300)), module = target("desktop"))
+        // At @2x: 2 px per dp.
+        assertEquals(800 to 600, shots.single().device.width to shots.single().device.height)
+    }
+
+    @Test fun desktopFastlaneFolder() {
+        val shots = plan(listOf(preview("Welcome")), "--layout", "fastlane", module = target("desktop"))
+        assertEquals(listOf("en-US/images/desktopScreenshots/Desktop 1440×900 @2x-Welcome.png"), shots.files())
+    }
+
+    @Test fun iosMeasuresAreNotScreenshots() {
+        val desktop = target("desktop")
+        val android = target("android")
+        val previews = listOf(preview("Welcome"), preview("Debug"), preview("Card").copy(widthDp = 200))
+        val shots = runner("--screen", "Debug: skip=true", "--languages", "de-DE,fr", "--appearances", "light,dark")
+            .measures(listOf(target("ios")), mapOf(android to previews, desktop to previews))
+        // One render per preview that would be shot, on the desktop target when there is one.
+        assertEquals(listOf("Welcome", "Card"), shots.map { it.preview.name })
+        for (s in shots) {
+            assertEquals(desktop, s.module)
+            assertEquals("de-DE", s.language)
+            assertFalse(s.dark)
+            assertEquals(1.0, s.fontScale)
+            assertEquals("shrink", s.mode)
+            // Outside the output folder: never reported or counted.
+            assertFalse(s.file.startsWith(out), s.file.path)
+            assertTrue(s.file.startsWith(Cache.root))
+        }
+        assertEquals(listOf(804, 400), shots.map { it.device.width }) // an iPhone's width; Card at its own 200 dp
+        assertEquals(2, shots.map { it.file }.toSet().size)
+    }
+
+    @Test fun iosMeasuresFallBackToAndroid() {
+        val android = target("android")
+        val shots = runner("--previews", "Wel*").measures(listOf(target("ios")), mapOf(android to listOf(preview("Welcome"), preview("Stats"))))
+        assertEquals(listOf("Welcome"), shots.map { it.preview.name })
+        assertEquals(android, shots.single().module)
+        assertEquals(Devices.defaults.first(), shots.single().device.name)
+    }
+
+    @Test fun iosMeasuresNeedAJvmTarget() {
+        assertTrue(runner().measures(listOf(target("ios")), mapOf(target("desktop", ":other") to listOf(preview("Welcome")))).isEmpty())
+        assertTrue(runner().measures(emptyList(), mapOf(target("desktop") to listOf(preview("Welcome")))).isEmpty())
+    }
+
     @Test fun qualifiers() {
         val r = runner()
         assertEquals("en-rUS", r.qualifier("en-US"))

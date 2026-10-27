@@ -34,6 +34,7 @@ data class Device(
     val playFolder: String
         get() = when (type) {
             "watch" -> "wearScreenshots"
+            "window" -> "desktopScreenshots"
             "tv" -> "tvScreenshots"
             "tablet", "foldable", "desktop", "xr" -> if (diagonal in 0.1..9.0) "sevenInchScreenshots" else "tenInchScreenshots"
             else -> "phoneScreenshots"
@@ -68,6 +69,28 @@ object Devices {
 
     val defaults = listOf("Pixel 10 Pro", "Pixel Tablet")
     val defaultWatch = listOf("Wear OS Large Round")
+    val defaultDesktop = listOf("Desktop 1440×900 @2x")
+
+    /**
+     * Window sizes for Compose Multiplatform's desktop target, at the screenshot sizes the Mac App
+     * Store (1280×800 to 2880×1800) and the Microsoft Store (1366×768 and up) accept.
+     */
+    val desktop: List<Device> = listOf(
+        Device("desktop_1280x800", "Desktop 1280×800", "window", 1280, 800, 160, 160, 160, "xlarge"),
+        Device("desktop_1440x900", "Desktop 1440×900", "window", 1440, 900, 160, 160, 160, "xlarge"),
+        Device("desktop_1280x800_2x", "Desktop 1280×800 @2x", "window", 2560, 1600, 320, 320, 320, "xlarge"),
+        Device("desktop_1440x900_2x", "Desktop 1440×900 @2x", "window", 2880, 1800, 320, 320, 320, "xlarge"),
+        Device("desktop_1366x768", "Desktop 1366×768", "window", 1366, 768, 160, 160, 160, "xlarge"),
+        Device("desktop_1920x1080", "Desktop 1920×1080", "window", 1920, 1080, 160, 160, 160, "xlarge"),
+        Device("desktop_1920x1080_2x", "Desktop 1920×1080 @2x", "window", 3840, 2160, 320, 320, 320, "xlarge"),
+    )
+
+    fun resolveDesktop(names: List<String>): List<Device> = names.flatMap { name ->
+        val matches = if (name.contains('*')) desktop.filter { glob(name).matches(it.name) || glob(name).matches(it.id) }
+        else desktop.filter { it.name.equals(name, true) || it.id.equals(name, true) || it.name.replace('×', 'x').equals(name, true) }
+        require(matches.isNotEmpty()) { "Unknown desktop size \"$name\". `swiftshot devices` lists them." }
+        matches
+    }
 
     /** Devices by name, id or `*` glob, in the order asked for. */
     fun resolve(names: List<String>): List<Device> = names.flatMap { name ->

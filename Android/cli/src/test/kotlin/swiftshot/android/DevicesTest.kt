@@ -253,6 +253,69 @@ class DevicesTest {
         for (d in Devices.all) assertTrue(d.playFolder.endsWith("Screenshots"))
     }
 
+    @Test fun desktopSizes() {
+        val d = Devices.desktop
+        assertEquals(d.size, d.map { it.id }.toSet().size, "duplicate ids")
+        assertEquals(d.size, d.map { it.name }.toSet().size, "duplicate names")
+        for (w in d) {
+            assertEquals("window", w.type, w.name)
+            assertEquals("desktopScreenshots", w.playFolder, w.name)
+            assertEquals(w.density, w.xdpi)
+            assertEquals(w.density, w.ydpi)
+            assertFalse(w.round)
+            // Not in Android Studio's catalog: a desktop window is never an Android device.
+            assertTrue(Devices.all.none { it.id == w.id || it.name == w.name }, w.name)
+        }
+        // @2x is the same window in dp, twice the pixels.
+        val x2 = d.single { it.name == "Desktop 1440×900 @2x" }
+        assertEquals(2880 to 1800, x2.width to x2.height)
+        assertEquals(1440.0, x2.widthDp)
+        assertEquals(900.0, x2.heightDp)
+        val x1 = d.single { it.name == "Desktop 1440×900" }
+        assertEquals(x1.widthDp to x1.heightDp, x2.widthDp to x2.heightDp)
+    }
+
+    @Test fun defaultDesktopResolves() {
+        assertEquals(Devices.defaultDesktop, Devices.resolveDesktop(Devices.defaultDesktop).map { it.name })
+    }
+
+    @Test fun resolveDesktopByNameIdAndAsciiX() {
+        assertEquals(listOf("desktop_1440x900"), Devices.resolveDesktop(listOf("Desktop 1440×900")).map { it.id })
+        assertEquals(listOf("desktop_1440x900"), Devices.resolveDesktop(listOf("desktop 1440×900")).map { it.id })
+        assertEquals(listOf("desktop_1920x1080_2x"), Devices.resolveDesktop(listOf("DESKTOP_1920X1080_2X")).map { it.id })
+        assertEquals(listOf("desktop_1366x768"), Devices.resolveDesktop(listOf("Desktop 1366x768")).map { it.id })
+        assertEquals(listOf("desktop_1280x800_2x"), Devices.resolveDesktop(listOf("Desktop 1280x800 @2x")).map { it.id })
+    }
+
+    @Test fun resolveDesktopKeepsOrderAndGlobs() {
+        assertEquals(
+            listOf("Desktop 1920×1080", "Desktop 1280×800"),
+            Devices.resolveDesktop(listOf("Desktop 1920×1080", "Desktop 1280×800")).map { it.name },
+        )
+        assertEquals(
+            listOf("desktop_1280x800_2x", "desktop_1440x900_2x", "desktop_1920x1080_2x"),
+            Devices.resolveDesktop(listOf("*@2x")).map { it.id },
+        )
+        assertEquals(listOf("desktop_1440x900", "desktop_1440x900_2x"), Devices.resolveDesktop(listOf("desktop_1440*")).map { it.id })
+        assertEquals(Devices.desktop, Devices.resolveDesktop(listOf("Desktop*")))
+    }
+
+    @Test fun resolveDesktopUnknown() {
+        val e = assertFailsWith<IllegalArgumentException> { Devices.resolveDesktop(listOf("Desktop 1440×900", "Desktop 800×600")) }
+        assertTrue(e.message!!.contains("Desktop 800×600"))
+        assertFailsWith<IllegalArgumentException> { Devices.resolveDesktop(listOf("Pixel 9")) } // phones are not windows
+        assertFailsWith<IllegalArgumentException> { Devices.resolveDesktop(listOf("iMac*")) }
+        assertEquals(emptyList(), Devices.resolveDesktop(emptyList()))
+    }
+
+    @Test fun windowPlayFolderIgnoresDiagonal() {
+        val w = Devices.desktop.first()
+        assertEquals("desktopScreenshots", w.copy(diagonal = 5.0).playFolder)
+        assertEquals("desktopScreenshots", w.copy(diagonal = 27.0).playFolder)
+        // Android Studio's desktop devices stay tablet-sized Play images.
+        assertEquals("tenInchScreenshots", w.copy(type = "desktop", diagonal = 15.0).playFolder)
+    }
+
     @Test fun landscapeAndPortrait() {
         val p = named("Pixel 9")
         // Rotating drops the cutout (it is measured in portrait); everything else round-trips.

@@ -1,12 +1,12 @@
 import Foundation
 
 setvbuf(stdout, nil, _IOLBF, 0)
-Android.handOffIfNeeded(Array(CommandLine.arguments.dropFirst()))
+let arguments = Android.handOffIfNeeded(Array(CommandLine.arguments.dropFirst()))
 let semaphore = DispatchSemaphore(value: 0)
 var exitCode: Int32 = 0
 Task {
     do {
-        let options = try Options.parse(Array(CommandLine.arguments.dropFirst()))
+        let options = try Options.parse(arguments)
         Log.verbose = options.verbose
         if options.command == "init" { try await Setup.run(options); semaphore.signal(); return }
         if options.command == "frame" { try await FrameRun.command(options); semaphore.signal(); return }

@@ -142,6 +142,10 @@ PROJECT
 MATRIX
   --devices "Pixel 10 Pro,Pixel 9 Pro Fold,Pixel Tablet"   Phones, foldables, tablets (default: Pixel 10 Pro, Pixel Tablet)
   --watch-devices "Wear OS Large Round"                    For Wear OS modules (default: Wear OS Large Round)
+  --desktop-devices "Desktop 1440×900 @2x"                 Window sizes for Compose Multiplatform desktop
+  --ios-devices "iPhone 17 Pro Max,iPad Pro 13-inch (M5)" Compose Multiplatform iOS devices (macOS)
+  --ios "27.0"                          iOS runtimes for Compose Multiplatform (default: newest installed)
+  --platforms android,desktop,ios       Compose Multiplatform targets to render (default: all the project has)
   --languages "en-US,de-DE"             Default: en-US
   --appearances "light,dark"            Default: light
   --font-scales "1,1.3,2"               Default: 1
@@ -166,4 +170,5 @@ OUTPUT
 ```
 
 The same exit codes as on iOS. `swiftshot devices` lists every device with its size in px and dp
-and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs.
+and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs. Compose Multiplatform
+flags: [[Compose Multiplatform]].

@@ -33,6 +33,9 @@ jobs:
       - name: Smoke test
         run: |
           dist/swiftshot/bin/swiftshot --version
+          for f in swiftshot-android.jar swiftshot-android-worker.jar swiftshot-desktop-worker.jar; do
+            test -s "dist/swiftshot/bin/$f" && test -s "dist/android/swiftshot/bin/$f" || { echo "missing $f"; exit 1; }
+          done
           JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}" dist/swiftshot/bin/swiftshot-android --version
       - name: Publish
         env:
@@ -56,6 +59,7 @@ jobs:
         run: |
           HOMEBREW_NO_AUTO_UPDATE=1 brew install lukasanda/tap/swiftshot
           cd "$RUNNER_TEMP" && test "$(swiftshot --version)" = "swiftshot ${{ steps.v.outputs.version }}"
+          test -s "$(brew --prefix swiftshot)/libexec/swiftshot-desktop-worker.jar"
 
   # The Linux package, installed the way the docs say, on a fresh Linux runner.
   linux:
@@ -72,4 +76,5 @@ jobs:
           v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
           SWIFTSHOT_VERSION=$v SWIFTSHOT_PREFIX="$RUNNER_TEMP/s" sh install.sh
           test "$("$RUNNER_TEMP/s/bin/swiftshot" --version)" = "swiftshot $v (android)"
+          test -s "$RUNNER_TEMP/s/bin/swiftshot-desktop-worker.jar"
           "$RUNNER_TEMP/s/bin/swiftshot" devices | head -5

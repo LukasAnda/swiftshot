@@ -11,6 +11,7 @@ import org.gradle.api.file.Directory
 import org.gradle.api.file.RegularFile
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFiles
@@ -33,6 +34,8 @@ abstract class SwiftshotPrepare extends DefaultTask {
     @InputFiles abstract ConfigurableFileCollection getLayoutlibRuntime()
     @InputFiles abstract ConfigurableFileCollection getLayoutlibResources()
     @InputFiles abstract ConfigurableFileCollection getBootClasspath()
+    @InputFiles abstract ConfigurableFileCollection getResourceClasses()
+    @InputFiles abstract ConfigurableFileCollection getOwnSymbols()
     @Internal abstract ListProperty<Directory> getLocalRes()
     @Internal abstract ListProperty<Directory> getLocalAssets()
     @Input abstract Property<String> getModulePath()
@@ -41,6 +44,8 @@ abstract class SwiftshotPrepare extends DefaultTask {
     @Input abstract Property<Integer> getCompileSdk()
     @Input abstract Property<Integer> getTargetSdk()
     @Input abstract Property<Boolean> getWear()
+    @Input abstract Property<Boolean> getIsApplication()
+    @Input abstract Property<Boolean> getIsMultiplatform()
     @Input abstract ListProperty<String> getComponents()
     @OutputFile abstract RegularFileProperty getOutput()
 
@@ -48,16 +53,21 @@ abstract class SwiftshotPrepare extends DefaultTask {
     void write() {
         def packages = [namespace.get()] + symbols.files.collect { f -> f.withReader { it.readLine() } }.findAll { it }
         def json = [
+            platform            : "android",
             module              : modulePath.get(),
             projectDir          : projectDir.get(),
             packageName         : namespace.get(),
             compileSdk          : compileSdk.get(),
             targetSdk           : targetSdk.get(),
             wear                : wear.get(),
-            classDirs           : dirs.get().collect { it.asFile.absolutePath } + jars.get().collect { it.asFile.absolutePath },
+            classDirs           : dirs.get().collect { it.asFile.absolutePath } + jars.get().collect { it.asFile.absolutePath } + resourceClasses.files.findAll { it.exists() }.collect { it.absolutePath },
             classpath           : classpath.files.collect { it.absolutePath },
             bootClasspath       : bootClasspath.files.collect { it.absolutePath },
             resourcePackageNames: packages.unique(),
+            symbolFiles         : symbols.files.collect { it.absolutePath },
+            ownSymbolFiles      : ownSymbols.files.findAll { it.exists() }.collect { it.absolutePath },
+            application         : isApplication.get(),
+            multiplatform       : isMultiplatform.get(),
             localResourceDirs   : localRes.getOrElse([]).collect { it.asFile.absolutePath }.findAll { new File(it).exists() },
             moduleResourceDirs  : moduleRes.files.collect { it.absolutePath },
             libraryResourceDirs : libraryRes.files.collect { it.absolutePath },
@@ -78,9 +88,154 @@ def variantName = startParameter.projectProperties["swiftshot.variant"] ?: "debu
 def paparazziVersion = startParameter.projectProperties["swiftshot.paparazzi"] ?: "2.0.0-alpha05.1"
 def layoutlibVersion = startParameter.projectProperties["swiftshot.layoutlib"] ?: "16.2.3"
 
+// A Kotlin Multiplatform module's JVM desktop target: compiled classes, processed resources
+// (Compose resources included) and runtime classpath, for the desktop renderer.
+@UntrackedTask(because = "Writes a description of the build for the renderer")
+abstract class SwiftshotPrepareDesktop extends DefaultTask {
+    @InputFiles abstract ConfigurableFileCollection getClassDirs()
+    @InputFiles abstract ConfigurableFileCollection getClasspath()
+    @Input abstract Property<String> getModulePath()
+    @Input abstract Property<String> getProjectDir()
+    @Input abstract Property<String> getTarget()
+    @OutputFile abstract RegularFileProperty getOutput()
+
+    @TaskAction
+    void write() {
+        def json = [
+            platform  : "desktop",
+            module    : modulePath.get(),
+            projectDir: projectDir.get(),
+            target    : target.get(),
+            classDirs : classDirs.files.findAll { it.exists() }.collect { it.absolutePath },
+            classpath : classpath.files.collect { it.absolutePath },
+        ]
+        def out = output.get().asFile
+        out.parentFile.mkdirs()
+        out.text = JsonOutput.prettyPrint(JsonOutput.toJson(json))
+        println "swiftshot-module ${out.absolutePath}"
+    }
+}
+
 allprojects { p ->
-    ["com.android.application", "com.android.library"].each { id ->
+    ["com.android.application", "com.android.library", "com.android.kotlin.multiplatform.library"].each { id ->
         p.plugins.withId(id) { setupSwiftshot(p, variantName, paparazziVersion, layoutlibVersion) }
+    }
+    p.plugins.withId("org.jetbrains.kotlin.multiplatform") { setupDesktop(p, variantName); setupIos(p, variantName) }
+}
+
+// A Kotlin Multiplatform module's iOS simulator target. Swiftshot links its own dynamic framework
+// (SwiftshotHost) from the module, with generated public wrappers returning each preview as a
+// Compose UIViewController, and renders those in a generated host app with its iOS pipeline.
+@UntrackedTask(because = "Writes a description of the build for the renderer")
+abstract class SwiftshotPrepareIos extends DefaultTask {
+    @Input abstract Property<String> getModulePath()
+    @Input abstract Property<String> getProjectDir()
+    @Input abstract MapProperty<String, List<String>> getSourceSets()
+    @Input abstract Property<String> getFramework()
+    @Input abstract Property<String> getLinkTask()
+    @Input abstract Property<String> getResourcesTask()
+    @Input abstract Property<String> getResources()
+    @Input abstract Property<String> getRegistry()
+    @Input abstract Property<String> getSources()
+    @OutputFile abstract RegularFileProperty getOutput()
+
+    @TaskAction
+    void write() {
+        def json = [
+            platform     : "ios",
+            module       : modulePath.get(),
+            projectDir   : projectDir.get(),
+            sourceSets   : sourceSets.get(),
+            framework    : framework.get(),
+            linkTask     : linkTask.get(),
+            resourcesTask: resourcesTask.get(),
+            resources    : resources.get(),
+            registry     : registry.get(),
+            sources      : sources.get(),
+        ]
+        def out = output.get().asFile
+        out.parentFile.mkdirs()
+        out.text = JsonOutput.prettyPrint(JsonOutput.toJson(json))
+        println "swiftshot-module ${out.absolutePath}"
+    }
+}
+
+def setupIos(p, String variantName) {
+    def kotlin = p.extensions.getByName("kotlin")
+    def hostBuild = startParameter.projectProperties["swiftshot.ios"] == "1"
+    def gc = startParameter.projectProperties["swiftshot.ios.gc"]
+    def base = p.layout.buildDirectory.dir("swiftshot/ios").get().asFile
+    def registry = new File(base, "registry")
+    def sources = new File(base, "src")
+    kotlin.targets.matching { it.name == "iosSimulatorArm64" }.all { t ->
+        def debug = t.class.classLoader.loadClass("org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType").getField("DEBUG").get(null)
+        t.binaries.framework("SwiftshotHost", [debug]) { f ->
+            f.baseName = "SwiftshotHost"
+            f.isStatic = false
+            if (gc) f.binaryOption("gc", gc)
+            f.binaryOption("bundleId", "dev.swiftshot.host.framework")
+        }
+        def compilation = t.compilations.getByName("main")
+        if (hostBuild) {
+            // The registry of wrappers, and Swiftshot's copies of the source sets in which private
+            // previews are internal (written by Swiftshot before this build).
+            compilation.defaultSourceSet.kotlin.srcDir(registry)
+            compilation.allKotlinSourceSets.each { ss ->
+                def dirs = ss.kotlin.srcDirs.collect { d ->
+                    def copy = new File(sources, d.absolutePath.md5())
+                    copy.isDirectory() ? copy : d
+                }
+                if (dirs != ss.kotlin.srcDirs as List) ss.kotlin.setSrcDirs(dirs)
+            }
+        }
+        def framework = t.binaries.getFramework("SwiftshotHost", debug)
+        def task = p.tasks.register("swiftshotPrepareIos", SwiftshotPrepareIos) { task ->
+            task.group = "swiftshot"
+            task.modulePath.set(p.path)
+            task.projectDir.set(p.projectDir.absolutePath)
+            // A plain map (configuration-cache safe), read when the task is configured.
+            task.sourceSets.set(compilation.allKotlinSourceSets.collectEntries { ss -> [(ss.name): ss.kotlin.srcDirs.collect { it.absolutePath }] })
+            task.framework.set(framework.outputFile.absolutePath)
+            task.linkTask.set(framework.linkTaskName)
+            task.resourcesTask.set("assembleIosSimulatorArm64MainResources")
+            task.resources.set(p.layout.buildDirectory.dir("generated/compose/resourceGenerator/assembledResources/iosSimulatorArm64Main").get().asFile.absolutePath)
+            task.registry.set(registry.absolutePath)
+            task.sources.set(sources.absolutePath)
+            task.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/ios.json"))
+        }
+        if (!hostBuild) aggregate(p, task, "ios")
+    }
+}
+
+/**
+ * `swiftshotPrepare` runs the prepare task of each platform asked for (`-Pswiftshot.platforms`,
+ * default all): an iOS-only run doesn't build, or need an SDK for, the Android target.
+ */
+def aggregate(p, task, String platform) {
+    def wanted = startParameter.projectProperties["swiftshot.platforms"]
+    if (!p.tasks.names.contains("swiftshotPrepare")) p.tasks.register("swiftshotPrepare") { it.group = "swiftshot" }
+    if (wanted && !(platform in wanted.split(",")*.trim())) return
+    p.tasks.named("swiftshotPrepare") { it.dependsOn(task) }
+}
+
+def setupDesktop(p, String variantName) {
+    def kotlin = p.extensions.getByName("kotlin")
+    def registered = false
+    kotlin.targets.all { target ->
+        if (registered || target.platformType.name != "jvm") return
+        registered = true
+        def compilation = target.compilations.getByName("main")
+        def task = p.tasks.register("swiftshotPrepareDesktop", SwiftshotPrepareDesktop) { t ->
+            t.group = "swiftshot"
+            t.description = "Prepares the ${target.name} target for Swiftshot's desktop renderer"
+            t.modulePath.set(p.path)
+            t.projectDir.set(p.projectDir.absolutePath)
+            t.target.set(target.name)
+            t.classDirs.from(compilation.output.allOutputs)
+            t.classpath.from(compilation.runtimeDependencyFiles)
+            t.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/desktop.json"))
+        }
+        aggregate(p, task, "desktop")
     }
 }
 
@@ -99,13 +254,19 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
     runtime.transitive = false
     resources.transitive = false
 
-    components.onVariants(components.selector().withName(variantName)) { variant ->
+    // The KMP Android library plugin has one variant; app and library modules pick by name.
+    def kmpAndroid = p.plugins.hasPlugin("com.android.kotlin.multiplatform.library")
+    components.onVariants(kmpAndroid ? components.selector().all() : components.selector().withName(variantName)) { variant ->
         def source = variant.runtimeConfiguration
         def cp = p.configurations.create("swiftshot${variant.name.capitalize()}Classpath")
         cp.canBeConsumed = false
         cp.canBeResolved = true
         source.attributes.keySet().each { key -> cp.attributes.attribute(key, source.attributes.getAttribute(key)) }
         source.extendsFrom.each { cp.extendsFrom(it) }
+        // Dependencies declared on the runtime classpath itself (the KMP Android library plugin's
+        // documented `androidRuntimeClasspath(ui-tooling)`).
+        source.dependencies.all { d -> cp.dependencies.add(d.copy()) }
+        source.dependencyConstraints.all { c -> cp.dependencyConstraints.add(c) }
         p.dependencies.add(cp.name, "app.cash.paparazzi:paparazzi:${paparazziVersion}")
 
         def view = { conf, String type, Closure filter ->
@@ -117,7 +278,7 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
         }
         def isProject = { it instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier }
 
-        def task = p.tasks.register("swiftshotPrepare", SwiftshotPrepare) { t ->
+        def task = p.tasks.register("swiftshotPrepareAndroid", SwiftshotPrepare) { t ->
             t.group = "swiftshot"
             t.description = "Prepares the ${variantName} variant for Swiftshot's renderer"
             t.modulePath.set(p.path)
@@ -126,9 +287,12 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             // Plain values and configuration-cache-safe providers only: nothing here may hold on to
             // the Project, so the project's configuration cache keeps working.
             def compileSdk = compileSdkOf(p)
+            // Libraries have no target SDK of their own: they run in apps that target the
+            // current SDK, so they render like one (edge-to-edge from 35).
             def target = null
-            try { target = variant.targetSdk?.apiLevel } catch (ignored) { }
-            if (target == null) try { target = variant.minSdk?.apiLevel } catch (ignored) { }
+            if (p.plugins.hasPlugin("com.android.application")) {
+                try { target = variant.targetSdk?.apiLevel } catch (ignored) { }
+            }
             t.compileSdk.set(compileSdk)
             t.targetSdk.set(target instanceof Number && target > 0 ? target.intValue() : compileSdk)
             t.classpath.from(view(cp, "android-classes-jar", { true }))
@@ -140,6 +304,20 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             t.layoutlibRuntime.from(runtime)
             t.layoutlibResources.from(resources)
             t.bootClasspath.from(components.sdkComponents.bootClasspath)
+            // A library's own R class isn't in its classes (an app's is): AGP's compile R jar.
+            t.isApplication.set(p.plugins.hasPlugin("com.android.application"))
+            t.isMultiplatform.set(p.plugins.hasPlugin("org.jetbrains.kotlin.multiplatform"))
+            if (!p.plugins.hasPlugin("com.android.application")) {
+                try {
+                    def rType = loader.loadClass('com.android.build.gradle.internal.scope.InternalArtifactType$COMPILE_R_CLASS_JAR').getField("INSTANCE").get(null)
+                    t.resourceClasses.from(variant.artifacts.get(rType))
+                } catch (ignored) { }
+                // The library's own symbols, so Swiftshot can build one R jar for every package as an app has.
+                try {
+                    def symType = loader.loadClass('com.android.build.gradle.internal.scope.InternalArtifactType$SYMBOL_LIST_WITH_PACKAGE_NAME').getField("INSTANCE").get(null)
+                    t.ownSymbols.from(variant.artifacts.get(symType))
+                } catch (ignored) { }
+            }
             def res = variant.sources.res
             if (res != null) t.localRes.set(res.all.map { layers -> layers.flatten().reverse() })
             def assets = variant.sources.assets
@@ -159,18 +337,25 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             }
             t.components.set(ids)
             t.wear.set(ids.map { list -> list.any { it.startsWith("androidx.wear.compose:") } })
-            t.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/module.json"))
+            t.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/android.json"))
         }
+        aggregate(p, task, "android")
         variant.artifacts.forScope(scope).use(task).toGet(classesArtifact, { it.jars }, { it.dirs })
     }
 }
 
 def compileSdkOf(p) {
-    def android = p.extensions.getByName("android")
+    // com.android.application/library: the android extension; the KMP Android library plugin:
+    // kotlin { android { compileSdk } }.
+    def android = p.extensions.findByName("android")
+    if (android == null) {
+        def kotlin = p.extensions.findByName("kotlin")
+        android = kotlin?.targets?.findByName("android")
+    }
     def v = null
-    try { v = android.compileSdk } catch (ignored) { }
+    try { v = android?.compileSdk } catch (ignored) { }
     if (v instanceof Number) return v.intValue()
-    try { v = android.compileSdkVersion } catch (ignored) { }
+    try { v = android?.compileSdkVersion } catch (ignored) { }
     def m = (v?.toString() ?: "") =~ /(\d+)/
     return m.find() ? m.group(1).toInteger() : 36
 }

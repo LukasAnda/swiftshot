@@ -134,6 +134,7 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
         return
     }
     BuildInfo.fill(job.map("device").str("name"), type == "watch")
+    job.strOrNull("languageTag")?.let { SystemLocale.apply(it) }
     emit("ready\t${(System.nanoTime() - start) / 1_000_000}\tjvm ${java.lang.management.ManagementFactory.getRuntimeMXBean().uptime}, ${phases.joinToString(", ")}")
     for (s in job.list("shots")) {
         val shot = s as Map<*, *>
@@ -329,6 +330,24 @@ object Png {
             writer.write(null, javax.imageio.IIOImage(image, null, null), param)
         }
         writer.dispose()
+    }
+}
+
+/**
+ * The preview's language for code that reads the system's configuration rather than the
+ * context's: Compose Multiplatform resources read `Resources.getSystem()`, plain JVM code
+ * `Locale.getDefault()`.
+ */
+object SystemLocale {
+    fun apply(tag: String) {
+        val locale = java.util.Locale.forLanguageTag(tag)
+        java.util.Locale.setDefault(locale)
+        runCatching {
+            val system = android.content.res.Resources.getSystem()
+            val config = android.content.res.Configuration(system.configuration)
+            config.setLocales(android.os.LocaleList(locale))
+            @Suppress("DEPRECATION") system.updateConfiguration(config, system.displayMetrics)
+        }
     }
 }
 
