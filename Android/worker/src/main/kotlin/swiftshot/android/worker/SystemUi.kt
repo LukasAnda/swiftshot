@@ -21,6 +21,23 @@ object SystemUi {
 
     private var font: Font? = null
 
+    /**
+     * A device's status bar: as tall as its camera cutout plus a little (24 dp without one), the
+     * clock centred on the cutout, the content clear of the rounded corners.
+     */
+    data class Bars(val status: Int, val centerY: Float, val edge: Float, val cutoutLeft: Float? = null, val cutoutRight: Float? = null) {
+        companion object {
+            fun of(device: Map<*, *>, dp: Float): Bars {
+                val cutout = (device["cutout"] as List<*>?)?.map { (it as Number).toFloat() }
+                val corner = (device["corner"] as Number?)?.toFloat() ?: 0f
+                val base = STATUS_DP * dp
+                val status = if (cutout != null) maxOf(base, cutout[1] + cutout[3] + 4 * dp) else base
+                val center = if (cutout != null) cutout[1] + cutout[3] / 2 else status / 2
+                return Bars(Math.round(status), center, maxOf(16 * dp, corner * 0.65f), cutout?.get(0), cutout?.let { it[0] + it[2] })
+            }
+        }
+    }
+
     fun init(runtimeRoot: String) {
         if (font != null) return
         val file = File(runtimeRoot, "data/fonts/Roboto-Regular.ttf")
@@ -28,7 +45,7 @@ object SystemUi {
     }
 
     /** [dark] content: light icons. [rtl] mirrors the bar, as Android does. */
-    fun draw(image: BufferedImage, density: Int, dark: Boolean, rtl: Boolean, handle: Boolean): BufferedImage {
+    fun draw(image: BufferedImage, density: Int, bars: Bars, dark: Boolean, rtl: Boolean, handle: Boolean): BufferedImage {
         val out = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_ARGB)
         val g = out.createGraphics()
         g.drawImage(image, 0, 0, null)
@@ -39,9 +56,8 @@ object SystemUi {
         val dp = density / 160f
         val ink = if (dark) Color(0xF2, 0xF2, 0xF2) else Color(0x1F, 0x1F, 0x1F)
         g.color = ink
-        val barH = STATUS_DP * dp
-        val mid = barH / 2
-        val edge = 16 * dp
+        val mid = bars.centerY
+        val edge = bars.edge
 
         // Clock
         g.font = font!!.deriveFont(Font.PLAIN, 14 * dp)
@@ -54,7 +70,14 @@ object SystemUi {
         val icon = 16 * dp
         val gap = 4 * dp
         val battery = RoundRectangle2D.Float(0f, 0f, 9 * dp, 15 * dp, 2.2f * dp, 2.2f * dp)
-        var x = if (rtl) edge else image.width - edge - battery.width
+        // A corner camera (unfolded foldables) pushes the icons inwards, as on the device.
+        val gapCam = 8 * dp
+        val endEdge = when {
+            !rtl && bars.cutoutLeft != null && bars.cutoutLeft > image.width / 2f -> image.width - bars.cutoutLeft + gapCam
+            rtl && bars.cutoutRight != null && bars.cutoutRight < image.width / 2f -> bars.cutoutRight + gapCam
+            else -> edge
+        }
+        var x = if (rtl) endEdge else image.width - endEdge - battery.width
         g.translate(x.toDouble(), (mid - battery.height / 2).toDouble())
         g.fill(battery)
         g.fill(RoundRectangle2D.Float(3 * dp, -1.4f * dp, 3 * dp, 2f * dp, 0.8f * dp, 0.8f * dp))

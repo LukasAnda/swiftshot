@@ -62,22 +62,28 @@ class Runner(private val o: Options, private val log: Log) {
         val done = java.util.concurrent.atomic.AtomicInteger()
         val cores = Runtime.getRuntime().availableProcessors()
         val memory = (java.lang.management.ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
-        for ((m, moduleShots) in shots.groupBy { it.module }) {
-            val groups = groups(m, moduleShots)
-            val auto = minOf(maxOf(1, cores / 2), maxOf(1, (memory / (2L shl 30)).toInt()), 8)
-            val processes = if (o.parallel > 0) o.parallel else minOf(auto, groups.size)
-            log.step("${m.path}: ${moduleShots.size} screenshots in ${groups.size} groups, $processes renderer processes")
-            val t0 = System.nanoTime()
-            val readyMs = Pool(m, javaBin, workerJar, log).run(groups, processes) { r ->
-                val shot = byFile[r.file] ?: byFile[r.file.replace(Regex("_\\d+\\.png$"), ".png")]
-                if (shot != null) results += shot to r
-                val n = done.incrementAndGet()
-                if (!r.ok) log.warn("${shot?.let { "${it.preview.name} · ${it.device.name} · ${it.language}" } ?: r.file}: ${r.error}")
-                else if (o.verbose) log.step("[$n/$total] ${File(r.file).name} ${r.millis} ms")
+        // Every module at once: the renderer processes are shared out by how much each has to do.
+        val byModule = shots.groupBy { it.module }.mapValues { (m, list) -> groups(m, list) }
+        val auto = minOf(maxOf(1, cores / 2), maxOf(1, (memory / (2L shl 30)).toInt()), 8)
+        val budget = maxOf(if (o.parallel > 0) o.parallel else auto, byModule.size)
+        val totalGroups = byModule.values.sumOf { it.size }
+        val threads = byModule.map { (m, groups) ->
+            val processes = maxOf(1, minOf(groups.size, Math.round(budget * groups.size.toDouble() / totalGroups).toInt()))
+            log.step("${m.path}: ${groups.sumOf { (it["shots"] as List<*>).size }} screenshots in ${groups.size} groups, $processes renderer processes")
+            kotlin.concurrent.thread(name = m.path) {
+                val t0 = System.nanoTime()
+                val readyMs = Pool(m, javaBin, workerJar, log).run(groups, processes) { r ->
+                    val shot = byFile[r.file] ?: byFile[r.file.replace(Regex("_\\d+\\.png$"), ".png")]
+                    if (shot != null) results += shot to r
+                    val n = done.incrementAndGet()
+                    if (!r.ok) log.warn("${shot?.let { "${it.preview.name} · ${it.device.name} · ${it.language}" } ?: r.file}: ${r.error}")
+                    else if (o.verbose) log.step("[$n/$total] ${File(r.file).name} ${r.millis} ms")
+                }
+                val ok = results.count { it.first.module == m && it.second.ok }
+                log.ok("${m.path}: $ok screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (renderer start ${readyMs} ms)")
             }
-            val ok = results.count { it.first.module == m && it.second.ok }
-            log.ok("${m.path}: $ok screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (renderer start ${readyMs} ms)")
         }
+        threads.forEach { it.join() }
         val failed = results.filter { !it.second.ok }
         report(results)
         val ok = results.count { it.second.ok }
@@ -109,7 +115,7 @@ class Runner(private val o: Options, private val log: Log) {
                 watch -> Devices.resolve(o.watchDevices.ifEmpty { Devices.defaultWatch })
                 else -> Devices.resolve(o.devices.ifEmpty { Devices.defaults })
             }.let { list -> if (p.widthDp > 0 || p.heightDp > 0) list.map { sized(it, p) } else list }
-            val languages = if (p.locale.isNotEmpty()) listOf(p.locale.replace('_', '-')) else rule?.languages ?: o.languages
+            val languages = if (p.locale.isNotEmpty()) listOf(bcp47(p.locale)) else rule?.languages ?: o.languages
             // Wear OS has no light mode: watch screens render once, dark, with no appearance suffix.
             val dark = p.night?.let { listOf(it) } ?: if (watch) listOf(true) else (rule?.appearances ?: o.appearances).map { it == "dark" }
             val scales = if (p.fontScale != 1.0) listOf(p.fontScale) else rule?.fontScales ?: o.fontScales
@@ -169,6 +175,7 @@ class Runner(private val o: Options, private val log: Log) {
                 "gestureNav" to (s.device.type != "watch" && s.device.type != "tv"),
                 "theme" to if (s.dark) o.theme.replace(".Light.", ".") else o.theme,
                 "roundCorners" to o.roundCorners,
+                "frame" to art(s.device)?.toJson(),
                 "shots" to list.map { shot ->
                     linkedMapOf(
                         "composable" to shot.preview.composable,
@@ -177,10 +184,20 @@ class Runner(private val o: Options, private val log: Log) {
                         "providerLimit" to shot.preview.providerLimit,
                         "offsetMs" to shot.delayMs,
                         "background" to background(shot.preview),
+                        "framed" to art(shot.device)?.let { framed(shot.file).path },
                     )
                 },
             )
         }
+    }
+
+    private val arts = HashMap<String, FrameArt?>()
+    private fun art(d: Device): FrameArt? = if (o.frame != "plain") null else synchronized(arts) { arts.getOrPut(d.id) { Frames.art(d, log) } }
+
+    /** `<output>-framed/<lang>/<name>_framed.png`, as on iOS. */
+    private fun framed(file: File): File {
+        val rel = file.relativeTo(output).path.removeSuffix(".png")
+        return File(output.path + "-framed", "${rel}_framed.png")
     }
 
     private fun background(p: Preview): String? {
@@ -189,8 +206,15 @@ class Runner(private val o: Options, private val log: Log) {
         return "#%08X".format(p.backgroundColor and 0xFFFFFFFFL)
     }
 
+    /** `@Preview(locale = …)` is a resource qualifier (fr-rFR, b+sr+Latn); a BCP 47 tag passes through. */
+    internal fun bcp47(locale: String): String {
+        val l = locale.replace('_', '-')
+        if (l.startsWith("b+")) return l.removePrefix("b+").replace('+', '-')
+        return Regex("([a-zA-Z]{2,3})-r([a-zA-Z]{2})").matchEntire(l)?.let { "${it.groupValues[1]}-${it.groupValues[2].uppercase()}" } ?: l
+    }
+
     /** BCP 47 to Android's resource qualifier: en-US → en-rUS, zh-Hans-CN → b+zh+Hans+CN. */
-    private fun qualifier(tag: String): String {
+    internal fun qualifier(tag: String): String {
         val parts = tag.replace('_', '-').split('-')
         return when {
             parts.size == 1 -> parts[0]
@@ -199,7 +223,7 @@ class Runner(private val o: Options, private val log: Log) {
         }
     }
 
-    private fun rtl(tag: String) = tag.substringBefore('-').substringBefore('_') in setOf("ar", "fa", "he", "iw", "ur", "ps", "sd", "ug", "yi", "dv", "ckb")
+    internal fun rtl(tag: String) = tag.substringBefore('-').substringBefore('_') in setOf("ar", "fa", "he", "iw", "ur", "ps", "sd", "ug", "yi", "dv", "ckb")
 
     private fun clear() {
         if (!output.isDirectory) return

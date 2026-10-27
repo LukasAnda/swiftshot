@@ -72,9 +72,10 @@ private fun environment(e: Map<*, *>) = Environment(
 
 private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
     val device = deviceConfig(job.map("device"), job)
+    // Full length: rendered at the device size, then on a taller screen until nothing scrolls.
+    val fullLength = job.str("mode") == "vscroll"
     val mode = when (job.str("mode")) {
         "shrink" -> RenderingMode.SHRINK
-        "vscroll" -> RenderingMode.V_SCROLL
         else -> RenderingMode.NORMAL
     }
     val round = device.screenRound == ScreenRound.ROUND
@@ -84,12 +85,11 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
     // the system bars drawn on top afterwards (see SystemUi). Older apps keep layoutlib's decor.
     val ownBars = job.bool("systemUi") && targetSdk >= 35 && type !in setOf("watch", "tv", "car")
     val dp = device.density.dpiValue / 160f
-    Insets.synthetic = if (ownBars) intArrayOf(
-        device.screenWidth, device.screenHeight,
-        Math.round(SystemUi.STATUS_DP * dp), Math.round(SystemUi.NAV_DP * dp),
-    ) else null
+    val bars = SystemUi.Bars.of(job.map("device"), dp)
+    Insets.synthetic = if (ownBars) intArrayOf(device.screenWidth, device.screenHeight, bars.status, Math.round(SystemUi.NAV_DP * dp)) else null
     SystemUi.init(job.str("layoutlibRuntime"))
     var frame: BufferedImage? = null
+    var remaining = 0
     val sdk = PaparazziSdk(
         environment = env,
         deviceConfig = device,
@@ -98,7 +98,7 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
         supportsRtl = true,
         showSystemUi = job.bool("systemUi") && !ownBars && type != "watch",
         useDeviceResolution = true,
-        onNewFrame = { frame = it; Debug.frame() },
+        onNewFrame = { frame = it; Debug.frame(); if (fullLength) remaining = Debug.view?.let { v -> Scroll.remaining(v.rootView) } ?: 0 },
     )
     val start = System.nanoTime()
     val flags = linkedMapOf<Any, Any>(
@@ -132,13 +132,34 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
             val t0 = System.nanoTime()
             try {
                 frame = null
-                val view = previewView(sdk, shot, mode, index, ownBars)
-                Debug.view = view
-                sdk.snapshot(view, shot.long("offsetMs"))
+                var extra = 0
+                for (pass in 0 until if (fullLength) 8 else 1) {
+                    remaining = 0
+                    val view = previewView(sdk, shot, mode, index, ownBars)
+                    Debug.view = view
+                    sdk.snapshot(view, shot.long("offsetMs"))
+                    if (!fullLength || remaining <= 0 || extra + remaining > 30_000) break
+                    extra += remaining
+                    val taller = device.copy(screenHeight = device.screenHeight + extra)
+                    Insets.synthetic = Insets.synthetic?.let { intArrayOf(it[0], taller.screenHeight, it[2], it[3]) }
+                    sdk.unsafeUpdateConfig(deviceConfig = taller)
+                }
+                if (extra > 0) {
+                    Insets.synthetic = Insets.synthetic?.let { intArrayOf(it[0], device.screenHeight, it[2], it[3]) }
+                    sdk.unsafeUpdateConfig(deviceConfig = device)
+                }
                 var image = frame ?: error("no frame rendered")
-                if (ownBars) image = SystemUi.draw(image, device.density.dpiValue, job.bool("night"), job.bool("rtl"), handle = true)
+                if (ownBars) image = SystemUi.draw(image, device.density.dpiValue, bars, job.bool("night"), job.bool("rtl"), handle = true)
                 File(target).parentFile.mkdirs()
-                ImageIO.write(opaque(image, round, job.str("roundCorners")), "png", File(target))
+                val final = opaque(image, round, job.str("roundCorners"))
+                ImageIO.write(final, "png", File(target))
+                shot.strOrNull("framed")?.let { framed ->
+                    val f = File(if (index < 0) framed else framed.removeSuffix("_framed.png") + "_${index + 1}_framed.png")
+                    runCatching {
+                        f.parentFile.mkdirs()
+                        ImageIO.write(Frame.compose(final, job.map("frame")), "png", f)
+                    }.onFailure { System.err.println("swiftshot: no frame for $target: ${message(it)}") }
+                }
                 emit("ok\t$target\t${(System.nanoTime() - t0) / 1_000_000}\t${image.width}x${image.height}")
             } catch (t: Throwable) {
                 emit("error\t$target\t${message(t)}")

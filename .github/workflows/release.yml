@@ -27,16 +27,20 @@ jobs:
           v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
           echo "version=$v" >> "$GITHUB_OUTPUT"
       - name: Build
-        run: xcodebuild -version && make dist VERSION=${{ steps.v.outputs.version }}
+        run: |
+          export JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
+          xcodebuild -version && java -version && make dist VERSION=${{ steps.v.outputs.version }}
       - name: Smoke test
-        run: dist/swiftshot/bin/swiftshot --version
+        run: |
+          dist/swiftshot/bin/swiftshot --version
+          JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}" dist/swiftshot/bin/swiftshot-android --version
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag=v${{ steps.v.outputs.version }}
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "swiftshot $tag" $([ -f "docs/releases/$tag.md" ] && echo "--notes-file docs/releases/$tag.md" || echo "--generate-notes")
-          gh release upload "$tag" dist/swiftshot-macos-arm64.tar.gz dist/swiftshot-macos-arm64.tar.gz.sha256 --clobber
+          gh release upload "$tag" dist/swiftshot-macos-arm64.tar.gz dist/swiftshot-macos-arm64.tar.gz.sha256 dist/swiftshot-android.tar.gz dist/swiftshot-android.tar.gz.sha256 --clobber
       - name: Update the Homebrew tap
         env:
           TAP_KEY: ${{ secrets.HOMEBREW_TAP_KEY }}

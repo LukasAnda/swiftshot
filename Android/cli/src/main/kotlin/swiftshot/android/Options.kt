@@ -45,6 +45,8 @@ class Options {
     var javaHome: String? = null
     var screens: List<ScreenRule> = emptyList()
     var verbose = false
+    var force = false
+    var frame = "none"
     var config: String? = null
 
     fun rule(preview: String) = screens.firstOrNull { it.matches(preview) }
@@ -60,6 +62,8 @@ class Options {
               run       Build, render every preview for every device × language × appearance (default)
               list      Build and print the previews that were found
               devices   List the devices and their screens
+              init      Write a swiftshot.json for the project here: modules, languages and Play devices
+                        detected (alias auto-setup; --force overwrites an existing one)
 
             PROJECT
               --project-dir <path>                  Gradle project (default: .)
@@ -86,6 +90,7 @@ class Options {
               --full-length                         Grow scrolling screens to their whole content
               --delay <seconds>                     Advance the clock before capture (animations)
               --system-ui preview|always|never      Status and navigation bars (default: as the preview says)
+              --frame plain|none                    Put each screenshot in its device (Android Studio's device art)
               --round-corners black|transparent     Outside round watch screens (default: black, as Play requires)
               --parallel <n>                        Renderer processes (default: from cores and memory)
 
@@ -101,7 +106,7 @@ class Options {
             while (i < args.size) {
                 val a = args[i]
                 if (a.startsWith("-")) {
-                    val boolean = a in setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help")
+                    val boolean = a in setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force")
                     val (key, inline) = a.split('=', limit = 2).let { it[0] to it.getOrNull(1) }
                     val value = if (boolean || inline != null) inline else args.getOrNull(++i) ?: error("$a needs a value")
                     flags += key to value
@@ -115,6 +120,8 @@ class Options {
             val configFile = File(o.config ?: File(o.projectDir, "swiftshot.json").path)
             if (configFile.isFile) o.applyConfig(Json.parse(configFile.readText()) as Map<*, *>, configFile.absoluteFile.parentFile)
             else require(o.config == null) { "No config at ${o.config}" }
+            // An explicit --config's project_dir is only a default: --project-dir still wins.
+            if (o.config != null) flags.lastOrNull { it.first == "--project-dir" }?.second?.let { o.projectDir = it }
             val rules = mutableListOf<ScreenRule>()
             for ((k, v) in flags) when (k) {
                 "--modules" -> o.modules = list(v)
@@ -139,6 +146,8 @@ class Options {
                 "--theme" -> o.theme = v!!
                 "--screen" -> rules += screenFlag(v!!)
                 "-v", "--verbose" -> o.verbose = true
+                "--force" -> o.force = true
+                "--frame" -> o.frame = v!!
                 "--config", "--project-dir" -> Unit
                 else -> error("Unknown option $k. `swiftshot --help` lists them.")
             }
@@ -204,6 +213,7 @@ class Options {
         (c["system_ui"] as String?)?.let { systemUi = it }
         (c["android_theme"] as String?)?.let { theme = it }
         (c["round_corners"] as String?)?.let { roundCorners = it }
+        (c["frame"] as String?)?.let { frame = it }
         (c["parallel"] as Number?)?.let { parallel = it.toInt() }
         strings("gradle_args")?.let { gradleArgs = it }
         (c["java_home"] as String?)?.let { javaHome = it }
@@ -211,10 +221,11 @@ class Options {
     }
 
     private fun validate() {
-        require(command in setOf("run", "list", "devices", "emit-devices")) { "Unknown command \"$command\"" }
+        require(command in setOf("run", "list", "devices", "init", "auto-setup", "emit-devices")) { "Unknown command \"$command\"" }
         for (a in appearances) require(a == "light" || a == "dark") { "appearances: light or dark, not \"$a\"" }
         require(layout == "swiftshot" || layout == "fastlane") { "layout: swiftshot or fastlane" }
         require(systemUi in setOf("preview", "always", "never")) { "system_ui: preview, always or never" }
+        require(frame == "none" || frame == "plain") { "frame: plain or none (App Store-style frames are iOS only)" }
         require(roundCorners == "black" || roundCorners == "transparent") { "round_corners: black or transparent" }
         for (s in fontScales) require(s in 0.5..3.0) { "font_scales: $s is outside 0.5…3" }
     }
@@ -223,7 +234,7 @@ class Options {
     private val configKeys = setOf(
         "project_dir", "modules", "variant", "devices", "watch_devices", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",
-        "system_ui", "android_theme", "round_corners", "parallel", "gradle_args", "java_home", "screens",
+        "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "screens",
         "platform", "android",
     )
 }

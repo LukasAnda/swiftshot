@@ -10,7 +10,9 @@
     "ydpi": 145,
     "size": "small",
     "round": false,
-    "diagonal": 2.7
+    "diagonal": 2.7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "2.7in QVGA slider",
@@ -23,7 +25,9 @@
     "ydpi": 145,
     "size": "small",
     "round": false,
-    "diagonal": 2.7
+    "diagonal": 2.7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "3.2in HVGA slider (ADP1)",
@@ -36,7 +40,9 @@
     "ydpi": 182,
     "size": "normal",
     "round": false,
-    "diagonal": 3.2
+    "diagonal": 3.2,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "3.2in QVGA (ADP2)",
@@ -49,7 +55,9 @@
     "ydpi": 182,
     "size": "normal",
     "round": false,
-    "diagonal": 3.2
+    "diagonal": 3.2,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "3.3in WQVGA",
@@ -62,7 +70,9 @@
     "ydpi": 141,
     "size": "normal",
     "round": false,
-    "diagonal": 3.3
+    "diagonal": 3.3,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "3.4in WQVGA",
@@ -75,7 +85,9 @@
     "ydpi": 145,
     "size": "normal",
     "round": false,
-    "diagonal": 3.4
+    "diagonal": 3.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "3.7 FWVGA slider",
@@ -88,7 +100,9 @@
     "ydpi": 265,
     "size": "normal",
     "round": false,
-    "diagonal": 3.7
+    "diagonal": 3.7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "3.7in WVGA (Nexus One)",
@@ -101,7 +115,9 @@
     "ydpi": 254,
     "size": "normal",
     "round": false,
-    "diagonal": 3.4
+    "diagonal": 3.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "4in WVGA (Nexus S)",
@@ -114,7 +130,9 @@
     "ydpi": 235,
     "size": "normal",
     "round": false,
-    "diagonal": 4
+    "diagonal": 4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "4.65in 720p (Galaxy Nexus)",
@@ -127,7 +145,9 @@
     "ydpi": 316,
     "size": "normal",
     "round": false,
-    "diagonal": 4.65
+    "diagonal": 4.65,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "4.7in WXGA",
@@ -140,7 +160,9 @@
     "ydpi": 320,
     "size": "normal",
     "round": false,
-    "diagonal": 4.7
+    "diagonal": 4.7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "6.7in Foldable",
@@ -153,7 +175,9 @@
     "ydpi": 445,
     "size": "normal",
     "round": false,
-    "diagonal": 6.7
+    "diagonal": 6.7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "7.4in Rollable:folded",
@@ -166,7 +190,9 @@
     "ydpi": 413,
     "size": "normal",
     "round": false,
-    "diagonal": 6.762717609377662
+    "diagonal": 6.762717609377662,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "7.6in Foldable:folded",
@@ -179,7 +205,9 @@
     "ydpi": 376,
     "size": "normal",
     "round": false,
-    "diagonal": 6.381894103098338
+    "diagonal": 6.381894103098338,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "8in Foldable:folded",
@@ -192,7 +220,9 @@
     "ydpi": 413,
     "size": "normal",
     "round": false,
-    "diagonal": 6.619417741693371
+    "diagonal": 6.619417741693371,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "medium_phone",
@@ -205,7 +235,9 @@
     "ydpi": 420,
     "size": "normal",
     "round": false,
-    "diagonal": 6.4
+    "diagonal": 6.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "Nexus 5",
@@ -218,7 +250,9 @@
     "ydpi": 445,
     "size": "normal",
     "round": false,
-    "diagonal": 4.95
+    "diagonal": 4.95,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "Nexus 5X",
@@ -231,7 +265,9 @@
     "ydpi": 424,
     "size": "normal",
     "round": false,
-    "diagonal": 5.2
+    "diagonal": 5.2,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "Nexus 6",
@@ -244,7 +280,9 @@
     "ydpi": 493,
     "size": "normal",
     "round": false,
-    "diagonal": 5.96
+    "diagonal": 5.96,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "Nexus 6P",
@@ -257,7 +295,9 @@
     "ydpi": 537,
     "size": "normal",
     "round": false,
-    "diagonal": 5.7
+    "diagonal": 5.7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel",
@@ -270,7 +310,9 @@
     "ydpi": 441,
     "size": "normal",
     "round": false,
-    "diagonal": 5
+    "diagonal": 5,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_10",
@@ -283,7 +325,14 @@
     "ydpi": 422,
     "size": "normal",
     "round": false,
-    "diagonal": 6.3
+    "diagonal": 6.3,
+    "cutout": [
+      500,
+      50,
+      78,
+      78
+    ],
+    "corner": 87
   },
   {
     "id": "pixel_10_pro",
@@ -296,7 +345,14 @@
     "ydpi": 495,
     "size": "normal",
     "round": false,
-    "diagonal": 6.3
+    "diagonal": 6.3,
+    "cutout": [
+      595,
+      57,
+      91,
+      92
+    ],
+    "corner": 99
   },
   {
     "id": "pixel_10_pro_fold:folded",
@@ -309,7 +365,14 @@
     "ydpi": 373,
     "size": "normal",
     "round": false,
-    "diagonal": 6.953591718770836
+    "diagonal": 6.953591718770836,
+    "cutout": [
+      507,
+      45,
+      67,
+      67
+    ],
+    "corner": 75
   },
   {
     "id": "pixel_10_pro_xl",
@@ -322,7 +385,14 @@
     "ydpi": 486,
     "size": "normal",
     "round": false,
-    "diagonal": 6.8
+    "diagonal": 6.8,
+    "cutout": [
+      627,
+      59,
+      90,
+      90
+    ],
+    "corner": 108
   },
   {
     "id": "pixel_10a",
@@ -335,7 +405,14 @@
     "ydpi": 422,
     "size": "normal",
     "round": false,
-    "diagonal": 6.3
+    "diagonal": 6.3,
+    "cutout": [
+      497,
+      48,
+      78,
+      78
+    ],
+    "corner": 87
   },
   {
     "id": "pixel_2",
@@ -348,7 +425,9 @@
     "ydpi": 443,
     "size": "normal",
     "round": false,
-    "diagonal": 5
+    "diagonal": 5,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_2_xl",
@@ -361,7 +440,9 @@
     "ydpi": 538,
     "size": "normal",
     "round": false,
-    "diagonal": 5.99
+    "diagonal": 5.99,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_3",
@@ -374,7 +455,9 @@
     "ydpi": 442,
     "size": "normal",
     "round": false,
-    "diagonal": 5.46
+    "diagonal": 5.46,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_3_xl",
@@ -387,7 +470,9 @@
     "ydpi": 522,
     "size": "normal",
     "round": false,
-    "diagonal": 6.3
+    "diagonal": 6.3,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_3a",
@@ -400,7 +485,9 @@
     "ydpi": 444,
     "size": "normal",
     "round": false,
-    "diagonal": 5.6
+    "diagonal": 5.6,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_3a_xl",
@@ -413,7 +500,14 @@
     "ydpi": 400,
     "size": "normal",
     "round": false,
-    "diagonal": 6
+    "diagonal": 6,
+    "cutout": [
+      331,
+      385,
+      739,
+      28
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_4",
@@ -426,7 +520,9 @@
     "ydpi": 444,
     "size": "normal",
     "round": false,
-    "diagonal": 5.7
+    "diagonal": 5.7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_4_xl",
@@ -439,7 +535,9 @@
     "ydpi": 537,
     "size": "normal",
     "round": false,
-    "diagonal": 6.3
+    "diagonal": 6.3,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_4a",
@@ -452,7 +550,14 @@
     "ydpi": 444,
     "size": "normal",
     "round": false,
-    "diagonal": 5.8
+    "diagonal": 5.8,
+    "cutout": [
+      35,
+      36,
+      75,
+      75
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_5",
@@ -465,7 +570,14 @@
     "ydpi": 444,
     "size": "normal",
     "round": false,
-    "diagonal": 6
+    "diagonal": 6,
+    "cutout": [
+      35,
+      32,
+      75,
+      75
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_6",
@@ -478,7 +590,14 @@
     "ydpi": 411,
     "size": "normal",
     "round": false,
-    "diagonal": 6.4
+    "diagonal": 6.4,
+    "cutout": [
+      510,
+      32,
+      61,
+      61
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_6_pro",
@@ -491,7 +610,14 @@
     "ydpi": 512,
     "size": "normal",
     "round": false,
-    "diagonal": 6.7
+    "diagonal": 6.7,
+    "cutout": [
+      678,
+      30,
+      85,
+      85
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_6a",
@@ -504,7 +630,14 @@
     "ydpi": 429,
     "size": "normal",
     "round": false,
-    "diagonal": 6.13
+    "diagonal": 6.13,
+    "cutout": [
+      509,
+      34,
+      64,
+      64
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_7",
@@ -517,7 +650,14 @@
     "ydpi": 418,
     "size": "normal",
     "round": false,
-    "diagonal": 6.31
+    "diagonal": 6.31,
+    "cutout": [
+      507,
+      39,
+      65,
+      65
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_7_pro",
@@ -530,7 +670,14 @@
     "ydpi": 383,
     "size": "normal",
     "round": false,
-    "diagonal": 6.71
+    "diagonal": 6.71,
+    "cutout": [
+      679,
+      32,
+      82,
+      82
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_7a",
@@ -543,7 +690,14 @@
     "ydpi": 440,
     "size": "normal",
     "round": false,
-    "diagonal": 6.1
+    "diagonal": 6.1,
+    "cutout": [
+      509,
+      34,
+      61,
+      61
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_8",
@@ -556,7 +710,14 @@
     "ydpi": 427,
     "size": "normal",
     "round": false,
-    "diagonal": 6.17
+    "diagonal": 6.17,
+    "cutout": [
+      508,
+      33,
+      65,
+      65
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_8_pro",
@@ -569,7 +730,14 @@
     "ydpi": 491,
     "size": "normal",
     "round": false,
-    "diagonal": 6.7
+    "diagonal": 6.7,
+    "cutout": [
+      631,
+      35,
+      82,
+      82
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_8a",
@@ -582,7 +750,14 @@
     "ydpi": 440,
     "size": "normal",
     "round": false,
-    "diagonal": 6.1
+    "diagonal": 6.1,
+    "cutout": [
+      508,
+      33,
+      65,
+      65
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_9",
@@ -595,7 +770,14 @@
     "ydpi": 424,
     "size": "normal",
     "round": false,
-    "diagonal": 6.24
+    "diagonal": 6.24,
+    "cutout": [
+      500,
+      46,
+      80,
+      80
+    ],
+    "corner": 87
   },
   {
     "id": "pixel_9_pro",
@@ -608,7 +790,14 @@
     "ydpi": 497,
     "size": "normal",
     "round": false,
-    "diagonal": 6.3
+    "diagonal": 6.3,
+    "cutout": [
+      594,
+      55,
+      92,
+      93
+    ],
+    "corner": 109
   },
   {
     "id": "pixel_9_pro_fold:folded",
@@ -621,7 +810,14 @@
     "ydpi": 380,
     "size": "normal",
     "round": false,
-    "diagonal": 7.099917321832794
+    "diagonal": 7.099917321832794,
+    "cutout": [
+      499,
+      44,
+      82,
+      81
+    ],
+    "corner": 75
   },
   {
     "id": "pixel_9_pro_xl",
@@ -634,7 +830,14 @@
     "ydpi": 481,
     "size": "normal",
     "round": false,
-    "diagonal": 6.8
+    "diagonal": 6.8,
+    "cutout": [
+      626,
+      52,
+      92,
+      92
+    ],
+    "corner": 108
   },
   {
     "id": "pixel_9a",
@@ -647,7 +850,14 @@
     "ydpi": 424,
     "size": "normal",
     "round": false,
-    "diagonal": 6.24
+    "diagonal": 6.24,
+    "cutout": [
+      499,
+      46,
+      80,
+      80
+    ],
+    "corner": 87
   },
   {
     "id": "pixel_fold:folded",
@@ -660,7 +870,14 @@
     "ydpi": 380,
     "size": "normal",
     "round": false,
-    "diagonal": 6.209027464587189
+    "diagonal": 6.209027464587189,
+    "cutout": [
+      505,
+      31,
+      69,
+      69
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_xl",
@@ -673,7 +890,9 @@
     "ydpi": 534,
     "size": "normal",
     "round": false,
-    "diagonal": 5.5
+    "diagonal": 5.5,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "resizable:folded",
@@ -686,7 +905,9 @@
     "ydpi": 420,
     "size": "normal",
     "round": false,
-    "diagonal": 5.367407609737167
+    "diagonal": 5.367407609737167,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "small_phone",
@@ -699,7 +920,9 @@
     "ydpi": 320,
     "size": "normal",
     "round": false,
-    "diagonal": 4.65
+    "diagonal": 4.65,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "7.4in Rollable",
@@ -712,7 +935,9 @@
     "ydpi": 413,
     "size": "xlarge",
     "round": false,
-    "diagonal": 7.4
+    "diagonal": 7.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "7.6in Foldable",
@@ -725,7 +950,9 @@
     "ydpi": 376,
     "size": "normal",
     "round": false,
-    "diagonal": 7.59
+    "diagonal": 7.59,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "8in Foldable",
@@ -738,7 +965,9 @@
     "ydpi": 413,
     "size": "normal",
     "round": false,
-    "diagonal": 8.03
+    "diagonal": 8.03,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_10_pro_fold",
@@ -751,7 +980,14 @@
     "ydpi": 373,
     "size": "large",
     "round": false,
-    "diagonal": 8
+    "diagonal": 8,
+    "cutout": [
+      1947,
+      48,
+      72,
+      72
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_9_pro_fold",
@@ -764,7 +1000,14 @@
     "ydpi": 380,
     "size": "large",
     "round": false,
-    "diagonal": 8
+    "diagonal": 8,
+    "cutout": [
+      1951,
+      41,
+      75,
+      75
+    ],
+    "corner": 0
   },
   {
     "id": "pixel_fold",
@@ -777,7 +1020,9 @@
     "ydpi": 380,
     "size": "large",
     "round": false,
-    "diagonal": 7.58
+    "diagonal": 7.58,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "resizable",
@@ -790,7 +1035,9 @@
     "ydpi": 420,
     "size": "normal",
     "round": false,
-    "diagonal": 6
+    "diagonal": 6,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "10.1in WXGA (Tablet)",
@@ -803,7 +1050,9 @@
     "ydpi": 149,
     "size": "xlarge",
     "round": false,
-    "diagonal": 10.1
+    "diagonal": 10.1,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "13.5in Freeform",
@@ -816,7 +1065,9 @@
     "ydpi": 240,
     "size": "xlarge",
     "round": false,
-    "diagonal": 13.5
+    "diagonal": 13.5,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "5.1in WVGA",
@@ -829,7 +1080,9 @@
     "ydpi": 183,
     "size": "large",
     "round": false,
-    "diagonal": 5.1
+    "diagonal": 5.1,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "5.4in FWVGA",
@@ -842,7 +1095,9 @@
     "ydpi": 181,
     "size": "large",
     "round": false,
-    "diagonal": 5.4
+    "diagonal": 5.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "7in WSVGA (Tablet)",
@@ -855,7 +1110,9 @@
     "ydpi": 169,
     "size": "large",
     "round": false,
-    "diagonal": 7
+    "diagonal": 7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "medium_tablet",
@@ -868,7 +1125,9 @@
     "ydpi": 320,
     "size": "xlarge",
     "round": false,
-    "diagonal": 10.055
+    "diagonal": 10.055,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "Nexus 7 2013",
@@ -881,7 +1140,9 @@
     "ydpi": 323,
     "size": "large",
     "round": false,
-    "diagonal": 7.02
+    "diagonal": 7.02,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "Nexus 7",
@@ -894,7 +1155,9 @@
     "ydpi": 200,
     "size": "large",
     "round": false,
-    "diagonal": 7
+    "diagonal": 7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "Nexus 9",
@@ -907,7 +1170,9 @@
     "ydpi": 289,
     "size": "xlarge",
     "round": false,
-    "diagonal": 8.86
+    "diagonal": 8.86,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_c",
@@ -920,7 +1185,9 @@
     "ydpi": 308,
     "size": "xlarge",
     "round": false,
-    "diagonal": 9.94
+    "diagonal": 9.94,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "pixel_tablet",
@@ -933,7 +1200,9 @@
     "ydpi": 276,
     "size": "large",
     "round": false,
-    "diagonal": 10.95
+    "diagonal": 10.95,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "small_tablet",
@@ -946,7 +1215,9 @@
     "ydpi": 320,
     "size": "large",
     "round": false,
-    "diagonal": 7
+    "diagonal": 7,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "wearos_large_round",
@@ -959,7 +1230,9 @@
     "ydpi": 227,
     "size": "small",
     "round": true,
-    "diagonal": 1.39
+    "diagonal": 1.39,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "wearos_rect",
@@ -972,7 +1245,9 @@
     "ydpi": 238,
     "size": "small",
     "round": false,
-    "diagonal": 1.2
+    "diagonal": 1.2,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "wearos_small_round",
@@ -985,7 +1260,9 @@
     "ydpi": 192,
     "size": "small",
     "round": true,
-    "diagonal": 1.2
+    "diagonal": 1.2,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "wearos_square",
@@ -998,7 +1275,9 @@
     "ydpi": 180,
     "size": "small",
     "round": false,
-    "diagonal": 1.2
+    "diagonal": 1.2,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "wearos_xl_round",
@@ -1011,7 +1290,9 @@
     "ydpi": 240,
     "size": "small",
     "round": true,
-    "diagonal": 1.5
+    "diagonal": 1.5,
+    "cutout": null,
+    "corner": 210
   },
   {
     "id": "tv_1080p",
@@ -1024,7 +1305,9 @@
     "ydpi": 40,
     "size": "xlarge",
     "round": false,
-    "diagonal": 55
+    "diagonal": 55,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "tv_4k",
@@ -1037,7 +1320,9 @@
     "ydpi": 80,
     "size": "xlarge",
     "round": false,
-    "diagonal": 55
+    "diagonal": 55,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "tv_720p",
@@ -1050,7 +1335,9 @@
     "ydpi": 27,
     "size": "large",
     "round": false,
-    "diagonal": 55
+    "diagonal": 55,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_1024p_landscape",
@@ -1063,7 +1350,9 @@
     "ydpi": 152,
     "size": "normal",
     "round": false,
-    "diagonal": 8.4
+    "diagonal": 8.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_1080p_landscape",
@@ -1076,7 +1365,9 @@
     "ydpi": 120,
     "size": "normal",
     "round": false,
-    "diagonal": 8.4
+    "diagonal": 8.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_1408p_landscape_with_google_apis",
@@ -1089,7 +1380,9 @@
     "ydpi": 160,
     "size": "normal",
     "round": false,
-    "diagonal": 10
+    "diagonal": 10,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_1408p_landscape_with_play",
@@ -1102,7 +1395,9 @@
     "ydpi": 160,
     "size": "normal",
     "round": false,
-    "diagonal": 10
+    "diagonal": 10,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_distant_display",
@@ -1115,7 +1410,9 @@
     "ydpi": 120,
     "size": "normal",
     "round": false,
-    "diagonal": 8.4
+    "diagonal": 8.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_distant_display_with_play",
@@ -1128,7 +1425,9 @@
     "ydpi": 120,
     "size": "normal",
     "round": false,
-    "diagonal": 8.4
+    "diagonal": 8.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_large_portrait",
@@ -1141,7 +1440,9 @@
     "ydpi": 160,
     "size": "normal",
     "round": false,
-    "diagonal": 8.4
+    "diagonal": 8.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_portrait",
@@ -1154,7 +1455,9 @@
     "ydpi": 120,
     "size": "normal",
     "round": false,
-    "diagonal": 8.4
+    "diagonal": 8.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "automotive_ultrawide",
@@ -1167,7 +1470,9 @@
     "ydpi": 200,
     "size": "normal",
     "round": false,
-    "diagonal": 8.4
+    "diagonal": 8.4,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "desktop_api37",
@@ -1180,7 +1485,9 @@
     "ydpi": 200,
     "size": "xlarge",
     "round": false,
-    "diagonal": 17
+    "diagonal": 17,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "desktop_large",
@@ -1193,7 +1500,9 @@
     "ydpi": 130,
     "size": "xlarge",
     "round": false,
-    "diagonal": 17
+    "diagonal": 17,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "desktop_medium",
@@ -1206,7 +1515,9 @@
     "ydpi": 290,
     "size": "xlarge",
     "round": false,
-    "diagonal": 15
+    "diagonal": 15,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "desktop_small",
@@ -1219,7 +1530,9 @@
     "ydpi": 110,
     "size": "xlarge",
     "round": false,
-    "diagonal": 14
+    "diagonal": 14,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "ai_glasses_device",
@@ -1232,7 +1545,9 @@
     "ydpi": 160,
     "size": "normal",
     "round": false,
-    "diagonal": 1
+    "diagonal": 1,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "xr_glasses_device",
@@ -1245,7 +1560,9 @@
     "ydpi": 240,
     "size": "normal",
     "round": false,
-    "diagonal": 6
+    "diagonal": 6,
+    "cutout": null,
+    "corner": 0
   },
   {
     "id": "xr_headset_device",
@@ -1258,6 +1575,8 @@
     "ydpi": 240,
     "size": "normal",
     "round": false,
-    "diagonal": 6
+    "diagonal": 6,
+    "cutout": null,
+    "corner": 0
   }
 ]

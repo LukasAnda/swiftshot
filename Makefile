@@ -51,23 +51,38 @@ bin/swiftshot-simhost: Agent/SimHost.m
 	mkdir -p bin
 	xcrun clang -fobjc-arc -O2 -framework Foundation -framework Metal Agent/SimHost.m -o $@
 
-install: all
+install: all android
 	install -d $(PREFIX)/bin
 	install bin/swiftshot bin/SwiftshotAgent.dylib bin/SwiftshotAgent-watchOS.dylib bin/SwiftshotNoBoot.dylib bin/SwiftshotNoBoot-watchOS.dylib bin/swiftshot-simhost $(PREFIX)/bin/
+	install bin/swiftshot-android bin/swiftshot-android.jar bin/swiftshot-android-worker.jar $(PREFIX)/bin/
+
+# The Jetpack Compose renderer: a JVM CLI and the worker that runs inside the app's classpath.
+android:
+	cd Android && ./gradlew -q :cli:jar :worker:jar -Pswiftshot.version=$(VERSION)
+	mkdir -p bin
+	cp Android/cli/build/libs/swiftshot-android.jar Android/worker/build/libs/swiftshot-android-worker.jar Android/swiftshot-android bin/
 
 # A release archive: the CLI and everything it loads, for Apple silicon Macs.
 VERSION ?= dev
 dist:
 	sed -i '' 's/^let swiftshotVersion = .*/let swiftshotVersion = "$(VERSION)"/' Sources/swiftshot/Version.swift
-	$(MAKE) all
+	$(MAKE) all android
 	sed -i '' 's/^let swiftshotVersion = .*/let swiftshotVersion = "dev"/' Sources/swiftshot/Version.swift
 	rm -rf dist && mkdir -p dist/swiftshot/bin
 	cp bin/swiftshot bin/swiftshot-simhost bin/SwiftshotAgent.dylib bin/SwiftshotAgent-watchOS.dylib bin/SwiftshotNoBoot.dylib bin/SwiftshotNoBoot-watchOS.dylib dist/swiftshot/bin/
+	cp bin/swiftshot-android bin/swiftshot-android.jar bin/swiftshot-android-worker.jar dist/swiftshot/bin/
 	cp README.md LICENSE dist/swiftshot/ 2>/dev/null || cp README.md dist/swiftshot/
 	tar -C dist -czf dist/swiftshot-macos-arm64.tar.gz swiftshot
 	shasum -a 256 dist/swiftshot-macos-arm64.tar.gz | sed 's| dist/| |' > dist/swiftshot-macos-arm64.tar.gz.sha256
+	# Android only, any OS with a JDK 21+ (Linux CI): the launcher is called swiftshot here.
+	mkdir -p dist/android/swiftshot/bin
+	cp bin/swiftshot-android.jar bin/swiftshot-android-worker.jar dist/android/swiftshot/bin/
+	cp bin/swiftshot-android dist/android/swiftshot/bin/swiftshot
+	cp README.md LICENSE dist/android/swiftshot/
+	tar -C dist/android -czf dist/swiftshot-android.tar.gz swiftshot
+	shasum -a 256 dist/swiftshot-android.tar.gz | sed 's| dist/| |' > dist/swiftshot-android.tar.gz.sha256
 
 clean:
-	rm -rf .build bin
+	rm -rf .build bin Android/cli/build Android/worker/build
 
-.PHONY: all install clean dist
+.PHONY: all android install clean dist

@@ -1,19 +1,22 @@
 #!/bin/sh
-# Installs swiftshot from a GitHub release (Apple silicon Mac, Xcode installed).
+# Installs swiftshot from a GitHub release: the full tool on an Apple silicon Mac, the Android
+# (Jetpack Compose) renderer on Linux or an Intel Mac (needs a JDK 21+).
 #   curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | sh
 #   SWIFTSHOT_VERSION=0.1.0 SWIFTSHOT_PREFIX=$HOME/.swiftshot sh install.sh
 set -eu
 version=${SWIFTSHOT_VERSION:-latest}
 prefix=${SWIFTSHOT_PREFIX:-$HOME/.swiftshot}
 repo=https://github.com/LukasAnda/swiftshot
-if [ "$version" = latest ]; then url=$repo/releases/latest/download/swiftshot-macos-arm64.tar.gz
-else url=$repo/releases/download/v$version/swiftshot-macos-arm64.tar.gz; fi
+if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ] && [ -z "${SWIFTSHOT_ANDROID_ONLY:-}" ]; then file=swiftshot-macos-arm64.tar.gz
+else file=swiftshot-android.tar.gz; fi
+if [ "$version" = latest ]; then url=$repo/releases/latest/download/$file
+else url=$repo/releases/download/v$version/$file; fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 echo "Downloading $url"
 curl -fsSL "$url" -o "$tmp/swiftshot.tar.gz"
 curl -fsSL "$url.sha256" -o "$tmp/swiftshot.tar.gz.sha256"
-(cd "$tmp" && expected=$(cut -d' ' -f1 swiftshot.tar.gz.sha256) && actual=$(shasum -a 256 swiftshot.tar.gz | cut -d' ' -f1) && [ "$expected" = "$actual" ]) \
+(cd "$tmp" && expected=$(cut -d' ' -f1 swiftshot.tar.gz.sha256) && actual=$( (command -v shasum >/dev/null && shasum -a 256 swiftshot.tar.gz || sha256sum swiftshot.tar.gz) | cut -d' ' -f1) && [ "$expected" = "$actual" ]) \
   || { echo "checksum mismatch" >&2; exit 1; }
 mkdir -p "$prefix"
 tar -xzf "$tmp/swiftshot.tar.gz" -C "$tmp"

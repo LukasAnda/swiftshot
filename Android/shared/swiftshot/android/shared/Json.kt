@@ -2,7 +2,12 @@ package swiftshot.android.shared
 
 /** A small JSON reader and writer: objects become maps, arrays lists, numbers Long or Double. */
 object Json {
-    fun parse(text: String): Any? = Parser(text).run { val v = value(); ws(); require(i == s.length) { "trailing data at $i" }; v }
+    /** Malformed input throws [IllegalArgumentException] (or [IllegalStateException]), never an index error. */
+    fun parse(text: String): Any? = try {
+        Parser(text).run { val v = value(); ws(); require(i == s.length) { "trailing data at $i" }; v }
+    } catch (e: IndexOutOfBoundsException) {
+        throw IllegalArgumentException("unexpected end of JSON", e)
+    }
 
     fun write(value: Any?, indent: String? = null): String = StringBuilder().also { write(it, value, indent, "") }.toString()
 

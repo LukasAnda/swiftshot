@@ -4,7 +4,7 @@ import java.io.File
 import java.util.Locale
 import kotlin.system.exitProcess
 
-const val VERSION = "dev"
+val VERSION: String = Options::class.java.`package`?.implementationVersion ?: "dev"
 
 fun main(args: Array<String>) {
     if (args.firstOrNull() == "--version") { println("swiftshot $VERSION (android)"); return }
@@ -13,6 +13,7 @@ fun main(args: Array<String>) {
         val o = Options.parse(args.toList())
         when (o.command) {
             "devices" -> { devices(); 0 }
+            "init", "auto-setup" -> Init.run(o, o.force, log)
             "emit-devices" -> {
                 val jar = o.commandArgs.getOrNull(0) ?: "/Applications/Android Studio.app/Contents/plugins/android/lib/sdklib.jar"
                 Devices.emit(File(jar), File(o.commandArgs.getOrNull(1) ?: "devices.json")); 0

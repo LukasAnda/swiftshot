@@ -22,6 +22,10 @@ data class Device(
     val size: String,
     val round: Boolean = false,
     val diagonal: Double = 0.0,
+    /** The camera cutout in px (x, y, width, height), measured from Android Studio's screen mask. */
+    val cutout: List<Int>? = null,
+    /** Radius of the screen's rounded corners in px. */
+    val corner: Int = 0,
 ) {
     val widthDp get() = width * 160.0 / density
     val heightDp get() = height * 160.0 / density
@@ -38,9 +42,11 @@ data class Device(
     fun toJson(): LinkedHashMap<String, Any?> = linkedMapOf(
         "id" to id, "name" to name, "type" to type, "width" to width, "height" to height, "density" to density,
         "xdpi" to xdpi, "ydpi" to ydpi, "size" to size, "round" to round, "diagonal" to diagonal,
+        "cutout" to cutout, "corner" to corner,
     )
 
-    fun landscape() = if (width >= height) this else copy(name = "$name (landscape)", width = height, height = width, xdpi = ydpi, ydpi = xdpi)
+    fun landscape() = if (width >= height) this else copy(name = "$name (landscape)", width = height, height = width, xdpi = ydpi, ydpi = xdpi, cutout = null)
+    fun portrait() = if (height >= width) this else copy(name = "$name (portrait)", width = height, height = width, xdpi = ydpi, ydpi = xdpi, cutout = null)
 
     companion object {
         fun fromJson(m: Map<*, *>) = Device(
@@ -48,6 +54,7 @@ data class Device(
             width = (m["width"] as Number).toInt(), height = (m["height"] as Number).toInt(),
             density = (m["density"] as Number).toInt(), xdpi = (m["xdpi"] as Number).toInt(), ydpi = (m["ydpi"] as Number).toInt(),
             size = m["size"] as String, round = m["round"] as Boolean? ?: false, diagonal = (m["diagonal"] as Number?)?.toDouble() ?: 0.0,
+            cutout = (m["cutout"] as List<*>?)?.map { (it as Number).toInt() }, corner = (m["corner"] as Number?)?.toInt() ?: 0,
         )
     }
 }
@@ -95,8 +102,11 @@ object Devices {
         }.toMap()
         val parent = params["parent"]?.let { p -> all.firstOrNull { it.id == p } }
         if (parent != null) {
-            val landscape = params["orientation"] == "landscape"
-            return if (landscape) parent.landscape() else parent
+            return when (params["orientation"]) {
+                "landscape" -> parent.landscape()
+                "portrait" -> parent.portrait()
+                else -> parent
+            }
         }
         val dpi = params["dpi"]?.toIntOrNull() ?: 420
         fun px(v: String?): Int? {
@@ -193,9 +203,45 @@ object Devices {
                 }
             }
         }
-        val unique = devices.distinctBy { it.id }.sortedWith(compareBy({ order(it.type) }, { it.name }))
+        val art = File(sdklib.parentFile.parentFile, "resources/device-art-resources")
+        val unique = devices.distinctBy { it.id }.sortedWith(compareBy({ order(it.type) }, { it.name })).map { measure(it, art) }
         out.writeText(Json.write(unique.map { it.toJson() }, "  ") + "\n")
         println("${unique.size} devices → $out")
+    }
+
+    /** Cutout and corner radius from the device art next to sdklib.jar (Android Studio's). */
+    private fun measure(d: Device, artRoot: File): Device {
+        val folder = Frames.folder(d) ?: return d
+        val dir = File(artRoot, folder)
+        val layout = File(dir, "layout").takeIf { it.isFile } ?: return d
+        val display = Frames.block(layout.readText()).path("parts", "device", "display")
+        val corner = display?.int("corner_radius") ?: 0
+        val art = Frames.parse(dir) ?: return d.copy(corner = corner)
+        if (art.width != d.width || art.height != d.height || art.mask == null) return d.copy(corner = corner)
+        val mask = Webp.read(art.mask) ?: return d.copy(corner = corner)
+        // The cutout is the opaque island in the top fifth that doesn't touch the mask's border (the
+        // border-connected opaque pixels are the rounded corners).
+        val w = mask.width; val h = mask.height / 5
+        val opaque = BooleanArray(w * h) { (mask.getRGB(it % w, it / w) ushr 24) > 128 }
+        val border = BooleanArray(w * h)
+        val queue = ArrayDeque<Int>()
+        for (x in 0 until w) for (y in listOf(0, h - 1)) if (opaque[y * w + x]) queue += y * w + x
+        for (y in 0 until h) for (x in listOf(0, w - 1)) if (opaque[y * w + x]) queue += y * w + x
+        while (queue.isNotEmpty()) {
+            val i = queue.removeFirst()
+            if (border[i] || !opaque[i]) continue
+            border[i] = true
+            val x = i % w; val y = i / w
+            if (x > 0) queue += i - 1; if (x < w - 1) queue += i + 1
+            if (y > 0) queue += i - w; if (y < h - 1) queue += i + w
+        }
+        var x0 = Int.MAX_VALUE; var y0 = Int.MAX_VALUE; var x1 = -1; var y1 = -1
+        for (i in 0 until w * h) if (opaque[i] && !border[i]) {
+            val x = i % w; val y = i / w
+            x0 = minOf(x0, x); y0 = minOf(y0, y); x1 = maxOf(x1, x); y1 = maxOf(y1, y)
+        }
+        val cutout = if (x1 < 0) null else listOf(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+        return d.copy(cutout = cutout, corner = corner)
     }
 
     private fun order(type: String) = listOf("phone", "foldable", "tablet", "watch", "tv", "car", "desktop", "xr").indexOf(type)
