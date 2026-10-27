@@ -131,6 +131,7 @@ class Ios(private val o: Options, private val log: Log, private val output: File
             "--devices", devices.joinToString(","),
             "--languages", o.languages.joinToString(","), "--appearances", o.appearances.joinToString(","),
             "--output", iosOut.path, "--no-html")
+        if (o.previews.isNotEmpty()) cmd += listOf("--previews", o.previews.joinToString(","))
         cmd += extra
         if (o.iosVersions.isNotEmpty()) cmd += listOf("--ios", o.iosVersions.joinToString(","))
         if (o.verbose) cmd += "--verbose"

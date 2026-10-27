@@ -41,15 +41,50 @@ class FlutterIos(private val o: Options, private val log: Log, private val root:
             }
             """.trimIndent() + "\n"
         )
+        val runnerApp = File(root, "build/ios/iphonesimulator/Runner.app")
+        val stampFile = File(dir, "ios/build.stamp")
+        val stamp = buildStamp()
+        if (runnerApp.isDirectory && stampFile.isFile && stampFile.readText() == stamp) {
+            log.step("The Flutter app for the iOS simulator is up to date")
+        } else {
+            if (!buildApp(main)) return null
+            stampFile.parentFile.mkdirs()
+            stampFile.writeText(buildStamp())
+        }
+        return render(runnerApp, manifest, measured, devices)
+    }
+
+    /**
+     * What the simulator build depends on: the project's files (path, size, modification time;
+     * build outputs left out), the generated Dart files' contents and the SDK's version.
+     */
+    private fun buildStamp(): String {
+        val skip = setOf("build", ".dart_tool", ".git", "Pods", ".gradle", ".idea", "screenshots", "android")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        // Files flutter pub get and flutter build rewrite on every run, unchanged.
+        val generated = setOf("Generated.xcconfig", "flutter_export_environment.sh", ".flutter-plugins", ".flutter-plugins-dependencies", ".DS_Store")
+        root.walkTopDown().onEnter { it == root || it.name !in skip }.filter { it.isFile && it.name !in generated }.sortedBy { it.path }.forEach { f ->
+            digest.update("${f.relativeTo(root).path}\u0000${f.length()}\u0000${f.lastModified()}\n".toByteArray())
+        }
+        dir.listFiles { f -> f.extension == "dart" }.orEmpty().sortedBy { it.name }.forEach { digest.update(it.readBytes()) }
+        File(sdk, "version").takeIf { it.isFile }?.let { digest.update(it.readBytes()) }
+        File(sdk, "bin/cache/engine.stamp").takeIf { it.isFile }?.let { digest.update(it.readBytes()) }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun buildApp(main: File): Boolean {
         log.step("Building the Flutter app for the iOS simulator")
         val build = ProcessBuilder(File(sdk, "bin/flutter").path, "build", "ios", "--simulator", "--debug", "--no-pub", "-t", main.relativeTo(root).path)
             .directory(root).redirectErrorStream(true).also { it.environment()["FLUTTER_ROOT"] = sdk.path }.start()
         val buildOut = build.inputStream.bufferedReader().readText()
         if (build.waitFor() != 0) {
             log.warn("iOS: flutter build ios --simulator failed; iPhones and iPads are rendered headless instead:\n" + buildOut.lines().filter { it.isNotBlank() }.takeLast(15).joinToString("\n"))
-            return null
+            return false
         }
-        val runner = File(root, "build/ios/iphonesimulator/Runner.app")
+        return true
+    }
+
+    private fun render(runner: File, manifest: List<Map<*, *>>, measured: Map<String, Pair<Double, Double>>, devices: List<String>): List<Shot>? {
         val app = hostApp(runner, manifest, measured) ?: return null
         val iosOut = File(output, ".flutter-ios")
         // A pinned brightness or locale renders once, as headless (Dart decides the rest itself).

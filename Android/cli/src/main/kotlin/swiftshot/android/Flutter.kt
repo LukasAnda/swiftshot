@@ -32,34 +32,57 @@ class Flutter(private val o: Options, private val log: Log) {
         val devices = devices()
         val languages = o.languages.map { it.replace('_', '-') }
         val iosDevices = devices.filter { it["platform"] == "ios" }.map { it["name"] as String }
-        val exact = if (iosDevices.isEmpty()) null else FlutterIos(o, log, root, File(root, ".dart_tool/swiftshot"), sdk, output).let { f ->
+        val exact = if (iosDevices.isEmpty() || o.flutterIos == "headless") null else FlutterIos(o, log, root, File(root, ".dart_tool/swiftshot"), sdk, output).let { f ->
             f.unavailable()?.let { why -> log.step("iPhones and iPads rendered headless ($why); on a Mac with Xcode they render exactly as on a device"); null } ?: f
         }
         if (o.clear) output.listFiles()?.forEach { if (it.isDirectory) it.deleteRecursively() else if (it.name.endsWith(".png") || it.name == "screenshots.html" || it.name == "swiftshot-report.json") it.delete() }
-        val dir = File(root, ".dart_tool/swiftshot").apply { deleteRecursively(); mkdirs() }
+        // Generated anew each run; ios/ keeps the host app and its build stamp between runs.
+        val dir = File(root, ".dart_tool/swiftshot").apply { listFiles()?.filter { it.name != "ios" }?.forEach { it.deleteRecursively() }; mkdirs() }
         generate(dir, pkg, public, pubspec, languages, devices, exact != null)
         val processes = if (o.parallel > 0) o.parallel else maxOf(1, minOf(languages.size, Runtime.getRuntime().availableProcessors()))
         log.step("${public.size} preview declarations, ${devices.size} devices, ${languages.size} languages, $processes tester processes")
         val t0 = System.nanoTime()
         val tests = languages.map { File(dir, "${file(it)}_test.dart").relativeTo(root).path }
-        val cmd = listOf(File(sdk, "bin/flutter").path, "test", "--no-pub", "--concurrency=$processes", "--reporter=compact") + tests
+        // Impeller, as phones render Flutter (its anti-aliasing and gradients); Skia where the
+        // tester can't start it (a Linux machine without Vulkan).
+        fun cmd(impeller: Boolean) = listOf(File(sdk, "bin/flutter").path, "test", "--no-pub", "--concurrency=$processes", "--reporter=compact") +
+            (if (impeller) listOf("--enable-impeller") else emptyList()) + tests
         val pubGet = ProcessBuilder(File(sdk, "bin/flutter").path, "pub", "get").directory(root).redirectErrorStream(true).also { it.environment()["FLUTTER_ROOT"] = sdk.path }.start()
         val pubOut = pubGet.inputStream.bufferedReader().readText()
         if (pubGet.waitFor() != 0) throw CliError("flutter pub get failed:\n${pubOut.takeLast(3000)}")
-        val p = ProcessBuilder(cmd).directory(root).redirectErrorStream(true).also { it.environment()["FLUTTER_ROOT"] = sdk.path }.start()
-        val out = StringBuilder()
-        p.inputStream.bufferedReader().forEachLine { line -> out.appendLine(line); if (o.verbose) log.step(line) }
-        val status = p.waitFor()
-        val results = languages.flatMap { lang ->
+        fun test(impeller: Boolean): Pair<Int, String> {
+            val p = ProcessBuilder(cmd(impeller)).directory(root).redirectErrorStream(true).also { it.environment()["FLUTTER_ROOT"] = sdk.path }.start()
+            val out = StringBuilder()
+            p.inputStream.bufferedReader().forEachLine { line -> out.appendLine(line); if (o.verbose) log.step(line) }
+            return p.waitFor() to out.toString()
+        }
+        fun results() = languages.flatMap { lang ->
             File(dir, "${file(lang)}.results.jsonl").takeIf { it.isFile }?.readLines().orEmpty().filter { it.isNotBlank() }.map { Json.parse(it) as Map<*, *> }
         }
+        var (status, out) = test(impeller = true)
+        if (results().isEmpty() && status != 0) {
+            log.warn("flutter test could not render with Impeller here; rendering with Skia")
+            test(impeller = false).let { status = it.first; out = it.second }
+        }
+        val results = results()
         val ok = results.filter { it["ok"] == true }
         for (r in results.filter { it["ok"] != true }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["error"]} (${r["script"]}:${r["line"]})")
         if (status != 0 && results.isEmpty()) throw CliError("flutter test failed:\n${out.toString().lines().filter { it.isNotBlank() }.takeLast(40).joinToString("\n")}")
         log.ok("${ok.size} screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (flutter test)")
         var shots = ok
+        val manifest = File(dir, "previews.json").takeIf { it.isFile }?.let { (Json.parse(it.readText()) as List<*>).map { m -> m as Map<*, *> } }.orEmpty()
+        // The system bars over full screens (components have none), where no system drew them.
+        if (o.systemUi != "never") {
+            val components = manifest.filter { it["component"] == true }.map { it["name"] as String }.toSet()
+            val byName = devices.associateBy { it["name"] as String }
+            val roboto = File(sdk, "bin/cache/artifacts/material_fonts/Roboto-Regular.ttf")
+            for (r in ok) {
+                val d = byName[r["device"]] ?: continue
+                if ((r["preview"] as String) in components || (d["platform"] == "ios" && exact != null)) continue
+                FlutterBars.draw(File(r["file"] as String), d, rtl(r["language"] as String), roboto)
+            }
+        }
         if (exact != null) {
-            val manifest = (Json.parse(File(dir, "previews.json").readText()) as List<*>).map { it as Map<*, *> }
             // Self-sizing components: their size in points from the headless iPhone renders.
             val ratios = devices.associate { (it["name"] as String) to (it["ratio"] as Number).toDouble() }
             val measured = HashMap<String, Pair<Double, Double>>()
@@ -107,10 +130,12 @@ class Flutter(private val o: Options, private val log: Log) {
                 val dp = d.density / 160.0
                 val status = SystemBars.statusDp(d)
                 linkedMapOf("name" to d.name, "platform" to "android", "width" to d.width / dp, "height" to d.height / dp, "ratio" to dp,
-                    "insets" to listOf(status, 0.0, if (d.type == "watch") 0.0 else 24.0, 0.0))
+                    "insets" to listOf(status, 0.0, if (d.type == "watch") 0.0 else 24.0, 0.0), "cutout" to d.cutout, "corner" to d.corner)
             }
         }
     }
+
+    private fun rtl(tag: String) = tag.substringBefore('-').substringBefore('_') in setOf("ar", "fa", "he", "iw", "ur", "ps", "sd", "ug", "yi", "dv", "ckb")
 
     private fun file(language: String) = "swiftshot_" + language.lowercase().replace(Regex("[^a-z0-9]"), "_")
 

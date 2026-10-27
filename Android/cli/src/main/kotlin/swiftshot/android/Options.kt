@@ -33,6 +33,7 @@ class Options {
     /** android, desktop (and ios for Compose Multiplatform); empty: every platform the project has. */
     var platforms: List<String> = emptyList()
     var flutterRoot: String? = null
+    var flutterIos = "exact"
     var languages = listOf("en-US")
     var appearances = listOf("light")
     var fontScales = listOf(1.0)
@@ -83,6 +84,8 @@ class Options {
               --gradle-arg <arg>                    Extra Gradle argument (repeatable)
               --java-home <path>                    JDK 21+ for the renderer (default: JAVA_HOME, then Android Studio's)
               --flutter-root <path>                 Flutter SDK for Flutter projects (default: FLUTTER_ROOT, fvm, then flutter on PATH)
+              --flutter-ios exact|headless          Flutter on iPhones and iPads: Flutter's iOS engine on a Mac with Xcode
+                                                    (exact, the default) or the headless renderer (faster, any OS)
 
             MATRIX
               --devices "Pixel 10 Pro,Pixel 9 Pro Fold,Pixel Tablet"   Phones, foldables, tablets (default: Pixel 10 Pro, Pixel Tablet)
@@ -149,6 +152,7 @@ class Options {
                 "--ios" -> o.iosVersions = list(v)
                 "--platforms" -> o.platforms = list(v)
                 "--flutter-root" -> o.flutterRoot = v
+                "--flutter-ios" -> o.flutterIos = v!!
                 // As the Mac tool takes it: android is this renderer, ios needs the Mac one.
                 "--platform" -> when (v) {
                     "android" -> {}
@@ -257,6 +261,7 @@ class Options {
         strings("gradle_args")?.let { gradleArgs = it }
         (c["java_home"] as String?)?.let { javaHome = it }
         (c["flutter_root"] as String?)?.let { flutterRoot = File(base, it).path }
+        (c["flutter_ios"] as String?)?.let { flutterIos = it }
         (c["screens"] as List<*>?)?.let { l -> screens = l.map { val m = it as Map<*, *>; rule(m["preview"] as String, m.mapKeys { e -> e.key.toString() }) } }
     }
 
@@ -269,6 +274,7 @@ class Options {
         require(frame == "none" || frame == "plain") { "frame: plain or none (App Store-style frames are iOS only)" }
         require(roundCorners == "black" || roundCorners == "transparent") { "round_corners: black or transparent" }
         for (p in platforms) require(p in setOf("android", "desktop", "ios")) { "platforms: android, desktop or ios, not \"$p\"" }
+        require(flutterIos == "exact" || flutterIos == "headless") { "flutter_ios: exact or headless" }
         for (s in fontScales) require(s in 0.5..3.0) { "font_scales: $s is outside 0.5…3" }
     }
 
@@ -285,7 +291,7 @@ class Options {
     private val configKeys = setOf(
         "project_dir", "modules", "variant", "devices", "watch_devices", "desktop_devices", "ios_devices", "ios_versions", "platforms", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",
-        "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "flutter_root", "screens",
+        "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "flutter_root", "flutter_ios", "screens",
         "platform", "android",
     )
 }
