@@ -56,3 +56,20 @@ jobs:
         run: |
           HOMEBREW_NO_AUTO_UPDATE=1 brew install lukasanda/tap/swiftshot
           cd "$RUNNER_TEMP" && test "$(swiftshot --version)" = "swiftshot ${{ steps.v.outputs.version }}"
+
+  # The Linux package, installed the way the docs say, on a fresh Linux runner.
+  linux:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install and run
+        run: |
+          v="${{ inputs.version }}"; [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
+          SWIFTSHOT_VERSION=$v SWIFTSHOT_PREFIX="$RUNNER_TEMP/s" sh install.sh
+          test "$("$RUNNER_TEMP/s/bin/swiftshot" --version)" = "swiftshot $v (android)"
+          "$RUNNER_TEMP/s/bin/swiftshot" devices | head -5

@@ -104,6 +104,19 @@ swiftshot           # renders every preview
 - Needs a JDK 21+ and `debugImplementation("androidx.compose.ui:ui-tooling")`, as Android
   Studio's previews do. Nothing is added to the project.
 
+Against Paparazzi and Roborazzi, the same 470 screenshots (the demo app's previews on a Pixel
+10 Pro and a Pixel Tablet, five languages, light and dark) on a free 4-core GitHub runner
+([`bench/android`](bench/android)):
+
+| | swiftshot | Paparazzi | Roborazzi |
+|---|---:|---:|---:|
+| first run | **57.7 s** | 87.4 s | 93.0 s |
+| warm run | **38.0 s** | 66.1 s | 70.8 s |
+
+Paparazzi and Roborazzi render screenshots as unit tests: Gradle compiles a test source set and
+each test JVM renders one screenshot at a time. Swiftshot skips the test machinery, starts its
+renderers while Gradle builds and keeps them up for the whole run.
+
 Details on the [Android](https://github.com/LukasAnda/swiftshot/wiki/Android) wiki page.
 
 ## CI

@@ -166,6 +166,25 @@ Paparazzi and Roborazzi run screenshots as unit tests: Gradle compiles a test so
 test task renders one screenshot per test, one at a time per JVM. Swiftshot skips the test
 machinery and renders in parallel processes that stay up for the whole run.
 
+## Speed
+
+The same 470 screenshots from each tool (the demo app's `:app` previews on a Pixel 10 Pro and a
+Pixel Tablet, en-US, de-DE, sk, ar, ja, light and dark), on a free 4-core `ubuntu-latest` runner,
+one tool after another, the same number of processes for each
+([`bench/android`](https://github.com/LukasAnda/swiftshot/tree/main/bench/android)):
+
+| | swiftshot | Paparazzi 2.0.0-alpha05.1 | Roborazzi 1.77.0 |
+|---|---:|---:|---:|
+| first run (compiles, renders) | **57.7 s** | 87.4 s | 93.0 s |
+| warm run | **38.0 s** | 66.1 s | 70.8 s |
+
+What makes the difference:
+
+- No test source set to compile and no test task: one Gradle task writes a JSON file.
+- Renderers start while Gradle builds and render whole groups of screenshots each.
+- PNG encoding runs beside the next render, at a fast compression level.
+- The project's configuration cache is kept: a warm Gradle step takes about a second.
+
 ## Limitations
 
 - `apiLevel` in `@Preview` is ignored: every preview renders with layoutlib's Android version.
