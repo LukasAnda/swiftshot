@@ -1,4 +1,5 @@
 #!/bin/bash
+# Results: the job summary of the android-benchmark workflow, and the README table.
 # Android benchmark: swiftshot vs Paparazzi vs Roborazzi rendering the same :app @Previews of
 # Example/AndroidDemo with the same device × language × appearance matrix (bench/android/bench.json).
 #

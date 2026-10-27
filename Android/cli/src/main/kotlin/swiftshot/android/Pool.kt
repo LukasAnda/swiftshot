@@ -48,7 +48,10 @@ class Pool(val module: Module, private val java: File, private val workerJar: Fi
             cds.isFile -> listOf("-XX:SharedArchiveFile=${cds.path}")
             else -> emptyList()
         }
-        val cmd = listOf(java.path, "-Xmx1536m", "-XX:+UseParallelGC", "-XX:+EnableDynamicAgentLoading", "-Djava.awt.headless=true") +
+        // Several renderers per core: each gets a couple of GC and JIT threads instead of one per core.
+        val crowded = totalProcesses * 2 > Runtime.getRuntime().availableProcessors()
+        val threads = if (crowded) listOf("-XX:ParallelGCThreads=2", "-XX:CICompilerCount=2") else emptyList()
+        val cmd = listOf(java.path, "-Xmx1536m", "-XX:+UseParallelGC", "-XX:+EnableDynamicAgentLoading", "-Djava.awt.headless=true") + threads +
             share + listOf("-Xlog:cds=off", "-Xlog:cds+dynamic=off", "-Xshare:auto") +
             (System.getenv("SWIFTSHOT_WORKER_JVM_OPTS")?.split(' ')?.filter { it.isNotBlank() }?.map { it.replace("%n", n.toString()) } ?: emptyList()) +
             listOf("@${argfile.path}")
@@ -57,6 +60,9 @@ class Pool(val module: Module, private val java: File, private val workerJar: Fi
         val drain = thread(isDaemon = true) { p.errorStream.bufferedReader().forEachLine { stderr.appendLine(it); if (log.verbose) System.err.println("    [w$n] $it") } }
         return Proc(n, p, stderr, drain)
     }
+
+    /** Set before spawning: renderers in all, so a busy machine gets lighter JVMs. */
+    var totalProcesses = 1
 
     fun run(groups: List<Map<String, Any?>>, processes: Int, onResult: (Result) -> Unit): Long {
         val queue = ConcurrentLinkedQueue(groups)

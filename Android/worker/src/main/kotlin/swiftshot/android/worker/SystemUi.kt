@@ -46,8 +46,11 @@ object SystemUi {
 
     /** [dark] content: light icons. [rtl] mirrors the bar, as Android does. */
     fun draw(image: BufferedImage, density: Int, bars: Bars, dark: Boolean, rtl: Boolean, handle: Boolean): BufferedImage {
-        val out = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_ARGB)
+        // Opaque straight away: a full screen has no transparency, and this saves another copy.
+        val out = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_RGB)
         val g = out.createGraphics()
+        g.color = if (dark) Color.BLACK else Color.WHITE
+        g.fillRect(0, 0, image.width, image.height)
         g.drawImage(image, 0, 0, null)
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)

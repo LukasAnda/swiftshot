@@ -174,12 +174,12 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
                 pending += Encoder.pool.submit {
                     try {
                         val final = opaque(rendered, round, job.str("roundCorners"))
-                        ImageIO.write(final, "png", File(target))
+                        Png.write(final, File(target))
                         shot.strOrNull("framed")?.let { framed ->
                             val f = File(if (index < 0) framed else framed.removeSuffix("_framed.png") + "_${index + 1}_framed.png")
                             runCatching {
                                 f.parentFile.mkdirs()
-                                ImageIO.write(Frame.compose(final, job.map("frame")), "png", f)
+                                Png.write(Frame.compose(final, job.map("frame")), f)
                             }.onFailure { System.err.println("swiftshot: no frame for $target: ${message(it)}") }
                         }
                         emit("ok\t$target\t$renderMs\t$size")
@@ -296,6 +296,27 @@ object Debug {
             p = (p as? android.view.ViewParent)?.parent; depth++
         }
         System.err.println("  view y=${v.top} h=${v.height}")
+    }
+}
+
+/**
+ * PNG at a fast deflate level: ImageIO's default (level 9) costs more CPU than rendering the
+ * screen, for files only a little smaller.
+ */
+object Png {
+    private val quality = System.getenv("SWIFTSHOT_PNG_QUALITY")?.toFloatOrNull() ?: 0.4f
+
+    fun write(image: BufferedImage, file: File) {
+        val writer = ImageIO.getImageWritersByFormatName("png").next()
+        val param = writer.defaultWriteParam.apply {
+            compressionMode = javax.imageio.ImageWriteParam.MODE_EXPLICIT
+            compressionQuality = quality
+        }
+        javax.imageio.stream.FileImageOutputStream(file.also { it.delete() }).use { out ->
+            writer.output = out
+            writer.write(null, javax.imageio.IIOImage(image, null, null), param)
+        }
+        writer.dispose()
     }
 }
 

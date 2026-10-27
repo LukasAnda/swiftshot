@@ -77,6 +77,7 @@ class Runner(private val o: Options, private val log: Log) {
             kotlin.concurrent.thread(name = m.path) {
                 val t0 = System.nanoTime()
                 val pool = warm[m.path]?.takeIf { it.argfile == Pool(m, javaBin, workerJar, log).argfile } ?: Pool(m, javaBin, workerJar, log)
+                pool.totalProcesses = budget
                 val readyMs = pool.run(groups, processes) { r ->
                     val shot = byFile[r.file] ?: byFile[r.file.replace(Regex("_\\d+\\.png$"), ".png")]
                     if (shot != null) results += shot to r
@@ -111,7 +112,7 @@ class Runner(private val o: Options, private val log: Log) {
         val javaBin = Java.find(o)
         val worker = workerJar()
         val each = maxOf(1, budget / modules.size)
-        modules.associate { m -> m.path to Pool(m, javaBin, worker, log).also { it.warm(each) } }
+        modules.associate { m -> m.path to Pool(m, javaBin, worker, log).also { it.totalProcesses = budget; it.warm(each) } }
     }.getOrDefault(emptyMap())
 
     private fun describe(p: Preview) = buildList {
