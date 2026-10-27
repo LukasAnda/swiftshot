@@ -18,4 +18,4 @@ jobs:
       - name: Unit tests
         run: swift test --skip-build --filter swiftshotTests
       - name: Android unit tests
-        run: cd Android && JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}" ./gradlew --no-daemon -q :cli:test
+        run: cd Android && JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}" ./gradlew --no-daemon -q :cli:test :desktop-worker:jar

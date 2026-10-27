@@ -313,7 +313,7 @@ class Runner(private val o: Options, private val log: Log) {
      * tells the iOS host app how many values each @PreviewParameter provider has and how large
      * a component preview is (iOS lays a preview out at the size it is given).
      */
-    private fun measures(iosModules: List<Module>, found: Map<Module, List<Preview>>): List<Shot> {
+    internal fun measures(iosModules: List<Module>, found: Map<Module, List<Preview>>): List<Shot> {
         val dir = File(Cache.root, "measure/${System.nanoTime()}")
         val phone = Device("measure", "measure", "window", 804, 1748, 320, 320, 320, "normal")
         return iosModules.flatMap { m ->

@@ -270,6 +270,68 @@ class OptionsTest {
         )
     }
 
+    @Test fun multiplatformDefaults() {
+        val o = parse()
+        assertEquals(emptyList(), o.desktopDevices)
+        assertEquals(emptyList(), o.iosDevices)
+        assertEquals(emptyList(), o.iosVersions)
+        assertEquals(emptyList(), o.platforms) // every platform the project has
+    }
+
+    @Test fun multiplatformFlags() {
+        val o = parse(
+            "--desktop-devices", "Desktop 1440×900 @2x, Desktop 1366×768",
+            "--ios-devices", "iPhone 17 Pro Max,iPad Pro 13-inch (M5)",
+            "--ios", "26.0, 27.0",
+            "--platforms", "android,desktop,ios",
+        )
+        assertEquals(listOf("Desktop 1440×900 @2x", "Desktop 1366×768"), o.desktopDevices)
+        assertEquals(listOf("iPhone 17 Pro Max", "iPad Pro 13-inch (M5)"), o.iosDevices)
+        assertEquals(listOf("26.0", "27.0"), o.iosVersions)
+        assertEquals(listOf("android", "desktop", "ios"), o.platforms)
+        assertEquals(listOf("desktop"), parse("--platforms=desktop").platforms)
+        assertEquals(listOf("27.0"), parse("--ios=27.0").iosVersions)
+    }
+
+    @Test fun multiplatformConfig() {
+        config(
+            """
+            {"desktop_devices": ["Desktop 1920×1080"], "ios_devices": ["iPhone 17"], "ios_versions": ["26.1"], "platforms": ["desktop", "ios"]}
+            """.trimIndent(),
+        )
+        val o = parse()
+        assertEquals(listOf("Desktop 1920×1080"), o.desktopDevices)
+        assertEquals(listOf("iPhone 17"), o.iosDevices)
+        assertEquals(listOf("26.1"), o.iosVersions)
+        assertEquals(listOf("desktop", "ios"), o.platforms)
+        // Flags win over the config.
+        val f = parse("--platforms", "android", "--ios-devices", "iPad mini (A17 Pro)", "--desktop-devices", "Desktop 1280×800", "--ios", "27.0")
+        assertEquals(listOf("android"), f.platforms)
+        assertEquals(listOf("iPad mini (A17 Pro)"), f.iosDevices)
+        assertEquals(listOf("Desktop 1280×800"), f.desktopDevices)
+        assertEquals(listOf("27.0"), f.iosVersions)
+    }
+
+    @Test fun platformsAreValidated() {
+        val e = assertFailsWith<IllegalArgumentException> { parse("--platforms", "android,web") }
+        assertTrue(e.message!!.contains("web"))
+        assertTrue(e.message!!.contains("platforms"))
+        config("""{"platforms": ["macos"]}""")
+        assertTrue(assertFailsWith<IllegalArgumentException> { parse() }.message!!.contains("macos"))
+    }
+
+    @Test fun multiplatformFlagsNeedValues() {
+        for (flag in listOf("--desktop-devices", "--ios-devices", "--ios", "--platforms")) {
+            assertTrue(assertFailsWith<IllegalStateException> { parse(flag) }.message!!.contains(flag))
+        }
+    }
+
+    @Test fun iosOnlyConfigKeysStillRejected() {
+        // ios_versions is accepted; the iOS tool's own keys are not.
+        config("""{"ios_versions": ["27.0"], "scheme": "App"}""")
+        assertTrue(assertFailsWith<IllegalArgumentException> { parse() }.message!!.contains("scheme"))
+    }
+
     @Test fun explicitConfigPath() {
         val file = config("""{"languages": ["ja"], "output_directory": "shots"}""", File(dir, "conf/my.json"))
         val o = Options.parse(listOf("--config", file.path))

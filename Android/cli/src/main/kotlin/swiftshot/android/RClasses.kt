@@ -71,7 +71,7 @@ object RClasses {
         return result
     }
 
-    private fun write(all: List<Symbols>, framework: Map<String, Int>, out: File) {
+    internal fun write(all: List<Symbols>, framework: Map<String, Int>, out: File) {
         // One id per (type, name), shared by every package's R class.
         val ids = HashMap<String, Int>()
         val counters = IntArray(types.size)
