@@ -19,7 +19,8 @@ fun main(args: Array<String>) {
                 val jar = o.commandArgs.getOrNull(0) ?: "/Applications/Android Studio.app/Contents/plugins/android/lib/sdklib.jar"
                 Devices.emit(File(jar), File(o.commandArgs.getOrNull(1) ?: "devices.json")); 0
             }
-            else -> Runner(o, log).run()
+            // A Flutter project (pubspec.yaml on the Flutter SDK, no Gradle build at its root).
+            else -> if (!File(o.projectDir, "gradlew").isFile && Flutter.isProject(File(o.projectDir))) Flutter(o, log).run() else Runner(o, log).run()
         }
     } catch (e: CliError) {
         log.error(e.message ?: "failed"); 1

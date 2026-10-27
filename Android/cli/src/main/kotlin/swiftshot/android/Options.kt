@@ -32,6 +32,7 @@ class Options {
     var iosVersions: List<String> = emptyList()
     /** android, desktop (and ios for Compose Multiplatform); empty: every platform the project has. */
     var platforms: List<String> = emptyList()
+    var flutterRoot: String? = null
     var languages = listOf("en-US")
     var appearances = listOf("light")
     var fontScales = listOf(1.0)
@@ -81,6 +82,7 @@ class Options {
               --variant <name>                      Build variant (default: debug)
               --gradle-arg <arg>                    Extra Gradle argument (repeatable)
               --java-home <path>                    JDK 21+ for the renderer (default: JAVA_HOME, then Android Studio's)
+              --flutter-root <path>                 Flutter SDK for Flutter projects (default: FLUTTER_ROOT, fvm, then flutter on PATH)
 
             MATRIX
               --devices "Pixel 10 Pro,Pixel 9 Pro Fold,Pixel Tablet"   Phones, foldables, tablets (default: Pixel 10 Pro, Pixel Tablet)
@@ -146,6 +148,7 @@ class Options {
                 "--ios-devices" -> o.iosDevices = list(v)
                 "--ios" -> o.iosVersions = list(v)
                 "--platforms" -> o.platforms = list(v)
+                "--flutter-root" -> o.flutterRoot = v
                 // As the Mac tool takes it: android is this renderer, ios needs the Mac one.
                 "--platform" -> when (v) {
                     "android" -> {}
@@ -253,6 +256,7 @@ class Options {
         (c["parallel"] as Number?)?.let { parallel = it.toInt() }
         strings("gradle_args")?.let { gradleArgs = it }
         (c["java_home"] as String?)?.let { javaHome = it }
+        (c["flutter_root"] as String?)?.let { flutterRoot = File(base, it).path }
         (c["screens"] as List<*>?)?.let { l -> screens = l.map { val m = it as Map<*, *>; rule(m["preview"] as String, m.mapKeys { e -> e.key.toString() }) } }
     }
 
@@ -281,7 +285,7 @@ class Options {
     private val configKeys = setOf(
         "project_dir", "modules", "variant", "devices", "watch_devices", "desktop_devices", "ios_devices", "ios_versions", "platforms", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",
-        "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "screens",
+        "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "flutter_root", "screens",
         "platform", "android",
     )
 }
