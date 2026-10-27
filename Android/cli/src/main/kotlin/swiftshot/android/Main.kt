@@ -11,6 +11,7 @@ fun main(args: Array<String>) {
     val log = Log(args.contains("-v") || args.contains("--verbose"))
     val status = try {
         val o = Options.parse(args.toList())
+        o.notes.forEach(log::warn)
         when (o.command) {
             "devices" -> { devices(); 0 }
             "init", "auto-setup" -> Init.run(o, o.force, log)

@@ -15,7 +15,12 @@ object Init {
         if (target.exists() && !force) throw CliError("$target already exists. --force overwrites it.")
         val settings = listOf("settings.gradle.kts", "settings.gradle").map { File(root, it) }.firstOrNull { it.isFile }
             ?: throw CliError("No settings.gradle(.kts) in $root.")
-        val modules = modules(settings.readText()).filter { isAndroid(File(root, it.trim(':').replace(':', '/'))) }
+        val dir = { m: String -> File(root, m.trim(':').replace(':', '/')) }
+        val all = modules(settings.readText()).filter { isAndroid(dir(it)) || isMultiplatform(dir(it)) }
+        // The modules with previews (an app module that only hosts a shared one has none).
+        val modules = all.filter { hasPreviews(dir(it)) }.ifEmpty { all }
+        val desktop = modules.any { buildText(dir(it)).contains(Regex("""\bjvm\s*\(""")) }
+        val ios = modules.any { buildText(dir(it)).contains("iosSimulatorArm64") }
         val wear = modules.filter { isWear(File(root, it.trim(':').replace(':', '/'))) }
         val languages = modules.flatMap { languages(File(root, it.trim(':').replace(':', '/'))) }.distinct()
             .sortedWith(compareBy({ it != "en-US" }, { it })).ifEmpty { listOf("en-US") }
@@ -24,6 +29,8 @@ object Init {
             "modules" to modules.ifEmpty { null },
             "devices" to listOf("Pixel 10 Pro", "Pixel 9 Pro Fold", "Pixel Tablet"),
             "watch_devices" to if (wear.isNotEmpty()) Devices.defaultWatch else null,
+            "desktop_devices" to if (desktop) Devices.defaultDesktop else null,
+            "ios_devices" to if (ios) Ios.defaultDevices else null,
             "languages" to languages,
             "appearances" to listOf("light", "dark"),
             "output_directory" to if (fastlane) "fastlane/metadata/android" else "screenshots",
@@ -50,6 +57,11 @@ object Init {
             b.contains("android.application") || b.contains("android.library") || b.contains("android {")
     }
 
+    private fun isMultiplatform(dir: File) = buildText(dir).let { it.contains("kotlin.multiplatform") || it.contains("kotlin(\"multiplatform\")") }
+
+    private fun hasPreviews(dir: File): Boolean = File(dir, "src").walkTopDown()
+        .filter { it.isFile && it.extension == "kt" }.any { it.readText().contains("@Preview") }
+
     private fun isWear(dir: File): Boolean {
         val b = buildText(dir)
         val manifest = File(dir, "src/main/AndroidManifest.xml").takeIf { it.isFile }?.readText() ?: ""
@@ -58,8 +70,11 @@ object Init {
     }
 
     /** `values-de`, `values-pt-rBR`, `values-b+sr+Latn` with a strings file → BCP 47 tags. */
-    fun languages(module: File): List<String> {
-        val res = File(module, "src/main/res")
+    fun languages(module: File): List<String> =
+        (listOf("src/main/res", "src/androidMain/res") + listOf("src/commonMain/composeResources")).flatMap { languages(module, it) }.distinct()
+
+    private fun languages(module: File, path: String): List<String> {
+        val res = File(module, path)
         val dirs = res.listFiles { f -> f.isDirectory && f.name.startsWith("values") }?.toList() ?: return emptyList()
         val tags = dirs.filter { d -> d.listFiles { f -> f.name.startsWith("strings") && f.name.endsWith(".xml") }?.isNotEmpty() == true }
             .mapNotNull { tag(it.name.removePrefix("values")) }

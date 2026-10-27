@@ -125,7 +125,7 @@ class Ios(private val o: Options, private val log: Log, private val output: File
         val iosOut = File(output, ".ios")
         iosOut.deleteRecursively()
         val cmd = mutableListOf(tool.path, "--platform", "ios", "run", "--app", app.path,
-            "--devices", o.iosDevices.ifEmpty { listOf("iPhone 17 Pro Max", "iPad Pro 13-inch (M5)") }.joinToString(","),
+            "--devices", o.iosDevices.ifEmpty { defaultDevices }.joinToString(","),
             "--languages", o.languages.joinToString(","), "--appearances", o.appearances.joinToString(","),
             "--output", iosOut.path, "--no-html")
         if (o.iosVersions.isNotEmpty()) cmd += listOf("--ios", o.iosVersions.joinToString(","))
@@ -161,6 +161,8 @@ class Ios(private val o: Options, private val log: Log, private val output: File
     private fun md5(s: String) = MessageDigest.getInstance("MD5").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
     companion object {
+        val defaultDevices = listOf("iPhone 17 Pro Max", "iPad Pro 13-inch (M5)")
+
         /** The name each preview is called by: private previews sharing a name in one package are renamed apart. */
         internal fun callNames(previews: List<Preview>): Map<Preview, String> {
             val private = previews.filter { it.isPrivate && it.sourceFile != null }

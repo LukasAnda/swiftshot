@@ -8,12 +8,15 @@ while [ -L "$self" ]; do
   target=$(readlink "$self"); case $target in /*) self=$target ;; *) self=$(dirname "$self")/$target ;; esac
 done
 dir=$(cd "$(dirname "$self")" && pwd -P)
-for home in "$SWIFTSHOT_JAVA_HOME" "$JAVA_HOME" "/Applications/Android Studio.app/Contents/jbr/Contents/Home" "$HOME/Applications/Android Studio.app/Contents/jbr/Contents/Home" /opt/android-studio/jbr; do
+# The java on the PATH, and Linux distributions' JDKs (/usr/lib/jvm), are tried too, newest first.
+path_java=$(command -v java 2>/dev/null || true)
+path_home=; [ -n "$path_java" ] && path_home=$(cd "$(dirname "$(readlink -f "$path_java" 2>/dev/null || echo "$path_java")")/.." && pwd -P)
+jvms=$(ls -d /usr/lib/jvm/* 2>/dev/null | sort -rV 2>/dev/null || true)
+for home in "$SWIFTSHOT_JAVA_HOME" "$JAVA_HOME" "/Applications/Android Studio.app/Contents/jbr/Contents/Home" "$HOME/Applications/Android Studio.app/Contents/jbr/Contents/Home" /opt/android-studio/jbr "$path_home" $jvms; do
   if [ -n "$home" ] && [ -x "$home/bin/java" ]; then
     v=$("$home/bin/java" -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)
     if [ "${v:-0}" -ge 21 ]; then export SWIFTSHOT_JAVA_HOME="$home"; exec "$home/bin/java" -XX:TieredStopAtLevel=1 -Xshare:auto -jar "$dir/swiftshot-android.jar" "$@"; fi
   fi
 done
-command -v java >/dev/null && exec java -XX:TieredStopAtLevel=1 -jar "$dir/swiftshot-android.jar" "$@"
-echo "error: swiftshot needs JDK 21 or later for Android projects. Set JAVA_HOME." >&2
+echo "error: swiftshot needs a JDK 21 or later. Install one (e.g. openjdk-21-jre-headless or java-21-openjdk-headless) or set JAVA_HOME." >&2
 exit 1
