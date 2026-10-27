@@ -17,6 +17,7 @@ dependencies {
 ```
 
 - iOS target: an Apple silicon Mac with Xcode and an `iosSimulatorArm64()` target
+- The Android SDK only for the Android target: `--platforms ios` or `desktop` runs without it
 
 Nothing else is added to the project.
 

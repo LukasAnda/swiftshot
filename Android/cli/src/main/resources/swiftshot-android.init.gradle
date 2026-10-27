@@ -203,13 +203,18 @@ def setupIos(p, String variantName) {
             task.sources.set(sources.absolutePath)
             task.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/ios.json"))
         }
-        if (!hostBuild) aggregate(p, task)
+        if (!hostBuild) aggregate(p, task, "ios")
     }
 }
 
-/** `swiftshotPrepare` runs every platform's prepare task of the module. */
-def aggregate(p, task) {
+/**
+ * `swiftshotPrepare` runs the prepare task of each platform asked for (`-Pswiftshot.platforms`,
+ * default all): an iOS-only run doesn't build, or need an SDK for, the Android target.
+ */
+def aggregate(p, task, String platform) {
+    def wanted = startParameter.projectProperties["swiftshot.platforms"]
     if (!p.tasks.names.contains("swiftshotPrepare")) p.tasks.register("swiftshotPrepare") { it.group = "swiftshot" }
+    if (wanted && !(platform in wanted.split(",")*.trim())) return
     p.tasks.named("swiftshotPrepare") { it.dependsOn(task) }
 }
 
@@ -230,7 +235,7 @@ def setupDesktop(p, String variantName) {
             t.classpath.from(compilation.runtimeDependencyFiles)
             t.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/desktop.json"))
         }
-        aggregate(p, task)
+        aggregate(p, task, "desktop")
     }
 }
 
@@ -334,7 +339,7 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             t.wear.set(ids.map { list -> list.any { it.startsWith("androidx.wear.compose:") } })
             t.output.set(p.layout.buildDirectory.file("intermediates/swiftshot/${variantName}/android.json"))
         }
-        aggregate(p, task)
+        aggregate(p, task, "android")
         variant.artifacts.forScope(scope).use(task).toGet(classesArtifact, { it.jars }, { it.dirs })
     }
 }

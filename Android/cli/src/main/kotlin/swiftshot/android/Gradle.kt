@@ -56,15 +56,20 @@ class Module(val json: Map<*, *>) {
 }
 
 object Gradle {
+    /** The targets to prepare: iOS previews are found and measured on the desktop target. */
+    fun gradlePlatforms(platforms: List<String>): List<String> =
+        if (platforms.isEmpty()) emptyList() else (platforms + if ("ios" in platforms) listOf("desktop") else emptyList()).distinct()
+
     /** Runs `swiftshotPrepare` in the project and returns the modules it described. */
-    fun prepare(o: Options, log: Log): List<Module> {
+    fun prepare(o: Options, log: Log, platforms: List<String> = gradlePlatforms(o.platforms)): List<Module> {
         val root = File(o.projectDir).absoluteFile.normalize()
         val gradlew = File(root, "gradlew")
         require(gradlew.isFile) { "No gradlew in $root. Pass --project-dir or run from the Gradle project's root." }
         val init = initScript()
         val tasks = if (o.modules.isEmpty()) listOf("swiftshotPrepare") else o.modules.map { "${it.trimEnd(':')}:swiftshotPrepare" }
         val cmd = listOf(gradlew.path, "-I", init.path) + tasks +
-            listOf("-Pswiftshot.variant=${o.variant}", "--console=plain", "-q") + o.gradleArgs
+            listOf("-Pswiftshot.variant=${o.variant}", "--console=plain", "-q") +
+            (if (platforms.isEmpty()) emptyList() else listOf("-Pswiftshot.platforms=${platforms.joinToString(",")}")) + o.gradleArgs
         log.step("Building ${tasks.joinToString(" ")} (${o.variant})…")
         val p = ProcessBuilder(cmd).directory(root).redirectErrorStream(true).apply {
             o.javaHome?.let { environment()["JAVA_HOME"] = it }

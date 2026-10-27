@@ -43,7 +43,14 @@ class Runner(private val o: Options, private val log: Log) {
         // Renderer processes for last run's classpath start now, while Gradle builds; they are
         // used if the classpath comes out the same.
         val warm = if (o.command == "run") warmPools(budgetAll) else emptyMap()
-        val prepared = try { Gradle.prepare(o, log) } catch (e: Exception) { warm.values.forEach { it.close() }; throw e }
+        val prepared = try {
+            Gradle.prepare(o, log).let { modules ->
+                // An iOS module without a desktop target: its previews come from the Android one.
+                val bare = modules.filter { it.ios && modules.none { d -> d.desktop && d.path == it.path } && modules.none { a -> a.platform == "android" && a.path == it.path } }
+                if (bare.isEmpty() || o.platforms.isEmpty()) modules
+                else Gradle.prepare(o, log, (Gradle.gradlePlatforms(o.platforms) + "android").distinct())
+            }
+        } catch (e: Exception) { warm.values.forEach { it.close() }; throw e }
         // iOS modules have no classes of their own: their previews are found on a JVM target,
         // which is prepared even when only iOS is asked for.
         val iosModules = prepared.filter { it.ios && (o.platforms.isEmpty() || "ios" in o.platforms) }
@@ -82,7 +89,9 @@ class Runner(private val o: Options, private val log: Log) {
         val totalGroups = byModule.values.sumOf { it.size }
         val threads = byModule.map { (m, groups) ->
             val processes = maxOf(1, minOf(groups.size, Math.round(budget * groups.size.toDouble() / totalGroups).toInt()))
-            log.step("${m.label}: ${planned.count { it.module == m }} screenshots in ${groups.size} groups, $processes renderer processes")
+            // A target rendered only to measure iOS previews isn't reported.
+            val reported = planned.any { it.module == m }
+            if (reported) log.step("${m.label}: ${planned.count { it.module == m }} screenshots in ${groups.size} groups, $processes renderer processes")
             kotlin.concurrent.thread(name = m.label) {
                 val t0 = System.nanoTime()
                 val workerJar = workerJar(m)
@@ -96,7 +105,7 @@ class Runner(private val o: Options, private val log: Log) {
                     else if (o.verbose) log.step("[$n/$total] ${File(r.file).name} ${r.millis} ms")
                 }
                 val ok = results.count { it.first.module == m && it.second.ok && it.first !in measureSet }
-                log.ok("${m.label}: $ok screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (renderer start ${readyMs} ms)")
+                if (reported) log.ok("${m.label}: $ok screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s (renderer start ${readyMs} ms)")
             }
         }
         threads.forEach { it.join() }

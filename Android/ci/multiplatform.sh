@@ -3,7 +3,7 @@
 # Example/MultiplatformDemo for the given targets in two languages (one of them RTL), then checks
 # that every expected screenshot exists with the device's size and that the report has no errors.
 #   Android/ci/multiplatform.sh android,desktop [out-dir]    (any OS with a JDK 21+ and the Android SDK)
-#   Android/ci/multiplatform.sh ios [out-dir]                (a Mac with Xcode, after make)
+#   Android/ci/multiplatform.sh ios [out-dir]                (a Mac with Xcode, after make; no Android SDK)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 platforms=${1:?platforms, e.g. android,desktop or ios}
