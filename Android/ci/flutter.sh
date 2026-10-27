@@ -2,7 +2,8 @@
 # The Flutter check (CI on Linux, or a Mac): renders the @Previews of Example/FlutterDemo on an
 # iPhone and a Pixel in five languages (one right to left, one CJK) and both appearances, then
 # checks the count, sizes, that a second run is byte-for-byte identical and the report.
-#   Android/ci/flutter.sh [out-dir]       (a JDK 21+ and a Flutter SDK: FLUTTER_ROOT or flutter on the PATH)
+#   Android/ci/flutter.sh [out-dir]       (a JDK 21+ and a Flutter SDK: FLUTTER_ROOT or flutter on the PATH;
+#                                          on a Mac with Xcode, after make, iOS renders on Flutter's iOS engine)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 out=${1:-${RUNNER_TEMP:-/tmp}/swiftshot-flutter}
@@ -29,6 +30,11 @@ check "en-US/iPhone 17 Pro Max-Root-light.png" 1320x2868
 check "ar/Pixel 10 Pro-Stats-dark.png" 1280x2856
 check "ja/iPhone 17 Pro Max-Habit card-light.png" 1200x360
 grep -q "boxes" "$out/a.log" && { echo "FAIL: a language has no font"; fail=1; }
+# On a Mac with Xcode, iPhones render on Flutter's iOS engine (no simulator booted).
+if [ "$(uname -s)" = Darwin ]; then
+  grep -q "Flutter's iOS engine" "$out/a.log" && echo "iOS: Flutter's iOS engine" || { echo "FAIL: iOS was not rendered on Flutter's iOS engine"; fail=1; }
+  xcrun simctl list devices booted | grep -q Booted && { echo "FAIL: a simulator was booted"; fail=1; }
+fi
 echo "time: first $((t1 - t0))s, second $((t2 - t1))s"
 [ "$count" -eq "$expected" ] || { echo "FAIL: $count screenshots, expected $expected"; fail=1; }
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then

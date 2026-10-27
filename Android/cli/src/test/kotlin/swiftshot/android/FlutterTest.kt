@@ -35,4 +35,41 @@ class FlutterTest {
         assertTrue(AppleDevices.matching("iPhone 17*").size >= 3)
         assertTrue(AppleDevices.matching("Pixel 10 Pro").isEmpty())
     }
+
+    @Test fun hostAppHasAPreviewPerFlutterPreviewWithComponentSizes() {
+        val o = Options.parse(listOf("--project-dir", dir.path))
+        val ios = FlutterIos(o, Log(false), dir, dir, dir, dir)
+        val manifest = listOf(
+            mapOf("name" to "Root", "component" to false),
+            mapOf("name" to "Card \"big\"", "component" to true, "width" to 400.0, "height" to 120.0),
+            mapOf("name" to "Summary", "component" to true, "width" to 400.0, "height" to null),
+            mapOf("name" to "Free", "component" to true),
+        )
+        val swift = ios.hostMain(manifest, mapOf("Summary" to (400.0 to 212.5)), plugins = true)
+        assertTrue("#Preview(\"Root\") { flutterPreview(0) }" in swift, swift)
+        assertTrue("#Preview(\"Card \\\"big\\\"\", traits: .fixedLayout(width: 400, height: 120)) { flutterPreview(1) }" in swift, swift)
+        assertTrue("#Preview(\"Summary\", traits: .fixedLayout(width: 400, height: 212.50)) { flutterPreview(2) }" in swift, swift)
+        assertTrue("#Preview(\"Free\", traits: .sizeThatFitsLayout) { flutterPreview(3) }" in swift, swift)
+        assertTrue("registerWithRegistry:" in swift)
+        assertFalse("registerWithRegistry:" in ios.hostMain(manifest, emptyMap(), plugins = false))
+    }
+
+    @Test fun fontsPerLanguageAndPlatform() {
+        val material = File(dir, "material_fonts").apply { mkdirs() }
+        File(material, "Roboto-Regular.ttf").writeText("")
+        File(material, "MaterialIcons-Regular.otf").writeText("")
+        val fonts = Fonts(material, Log(false))
+        val latin = fonts.forLanguage("de-DE", ios = false, android = true)
+        assertEquals(listOf(File(material, "Roboto-Regular.ttf").path), latin["Roboto"])
+        assertFalse("CupertinoSystemText" in latin)
+        assertTrue("MaterialIcons" in latin)
+        val ios = fonts.forLanguage("en-US", ios = true, android = false)
+        assertTrue("CupertinoSystemText" in ios && "CupertinoSystemDisplay" in ios && "Roboto" !in ios)
+    }
+
+    @Test fun flutterIosOption() {
+        assertEquals("exact", Options.parse(listOf("--project-dir", dir.path)).flutterIos)
+        assertEquals("headless", Options.parse(listOf("--project-dir", dir.path, "--flutter-ios", "headless")).flutterIos)
+        assertTrue(runCatching { Options.parse(listOf("--project-dir", dir.path, "--flutter-ios", "fast")) }.isFailure)
+    }
 }

@@ -57,6 +57,17 @@ jobs:
           export JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
           unset ANDROID_HOME ANDROID_SDK_ROOT
           Android/ci/multiplatform.sh ios "$RUNNER_TEMP/multiplatform-ios"
+      # Flutter on iPhones through Flutter's iOS engine, on the same runner (no simulator booted).
+      - uses: subosito/flutter-action@v2
+        if: matrix.key == 'No simulator booted'
+        with:
+          flutter-version: 3.41.7
+          channel: stable
+      - name: Flutter (iOS engine)
+        if: matrix.key == 'No simulator booted'
+        run: |
+          export JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
+          Android/ci/flutter.sh "$RUNNER_TEMP/flutter-ios"
       - name: Summary
         if: always()
         run: |
