@@ -36,11 +36,18 @@ class Runner(private val o: Options, private val log: Log) {
     private val output = File(o.output).absoluteFile
 
     fun run(): Int {
-        val modules = Gradle.prepare(o, log)
+        val cores = Runtime.getRuntime().availableProcessors()
+        val memory = (java.lang.management.ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
+        val auto = minOf(cores, maxOf(1, (memory / (1536L shl 20)).toInt()), 8)
+        val budgetAll = if (o.parallel > 0) o.parallel else auto
+        // Renderer processes for last run's classpath start now, while Gradle builds; they are
+        // used if the classpath comes out the same.
+        val warm = if (o.command == "run") warmPools(budgetAll) else emptyMap()
+        val modules = try { Gradle.prepare(o, log) } catch (e: Exception) { warm.values.forEach { it.close() }; throw e }
         log.ok("Built ${modules.joinToString(", ") { it.path }} in ${"%.1f".format(Locale.ROOT, log.seconds)}s")
         val found = modules.associateWith { m -> PreviewScanner(m.classDirs + m.classpath).scan(m.classDirs) }
             .filterValues { it.isNotEmpty() }
-        if (found.isEmpty()) throw CliError("No @Preview functions found in ${modules.joinToString { it.path }}.")
+        if (found.isEmpty()) { warm.values.forEach { it.close() }; throw CliError("No @Preview functions found in ${modules.joinToString { it.path }}.") }
         if (o.command == "list") {
             for ((m, previews) in found) {
                 println("${m.path}${if (m.wear) " (Wear OS)" else ""}")
@@ -60,19 +67,17 @@ class Runner(private val o: Options, private val log: Log) {
         val results = java.util.Collections.synchronizedList(mutableListOf<Pair<Shot, Result>>())
         val total = shots.size
         val done = java.util.concurrent.atomic.AtomicInteger()
-        val cores = Runtime.getRuntime().availableProcessors()
-        val memory = (java.lang.management.ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
         // Every module at once: the renderer processes are shared out by how much each has to do.
         val byModule = shots.groupBy { it.module }.mapValues { (m, list) -> groups(m, list) }
-        val auto = minOf(maxOf(1, cores / 2), maxOf(1, (memory / (2L shl 30)).toInt()), 8)
-        val budget = maxOf(if (o.parallel > 0) o.parallel else auto, byModule.size)
+        val budget = maxOf(budgetAll, byModule.size)
         val totalGroups = byModule.values.sumOf { it.size }
         val threads = byModule.map { (m, groups) ->
             val processes = maxOf(1, minOf(groups.size, Math.round(budget * groups.size.toDouble() / totalGroups).toInt()))
             log.step("${m.path}: ${groups.sumOf { (it["shots"] as List<*>).size }} screenshots in ${groups.size} groups, $processes renderer processes")
             kotlin.concurrent.thread(name = m.path) {
                 val t0 = System.nanoTime()
-                val readyMs = Pool(m, javaBin, workerJar, log).run(groups, processes) { r ->
+                val pool = warm[m.path]?.takeIf { it.argfile == Pool(m, javaBin, workerJar, log).argfile } ?: Pool(m, javaBin, workerJar, log)
+                val readyMs = pool.run(groups, processes) { r ->
                     val shot = byFile[r.file] ?: byFile[r.file.replace(Regex("_\\d+\\.png$"), ".png")]
                     if (shot != null) results += shot to r
                     val n = done.incrementAndGet()
@@ -84,12 +89,30 @@ class Runner(private val o: Options, private val log: Log) {
             }
         }
         threads.forEach { it.join() }
+        warm.values.forEach { it.close() }
         val failed = results.filter { !it.second.ok }
         report(results)
         val ok = results.count { it.second.ok }
         log.ok("$ok screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
         return if (failed.isEmpty() && ok > 0) 0 else 1
     }
+
+    /** Pools started from the module descriptions the previous run left in each module's build folder. */
+    private fun warmPools(budget: Int): Map<String, Pool> = runCatching {
+        val root = File(o.projectDir).absoluteFile
+        val files = root.walkTopDown().maxDepth(6)
+            .onEnter { it.name != ".gradle" && it.name != "src" && it.name != "node_modules" && !it.name.startsWith(".") }
+            .filter { it.name == "module.json" && it.parentFile.name == o.variant && it.parentFile.parentFile.name == "swiftshot" }
+            .toList()
+        val modules = files.mapNotNull { runCatching { Module(Json.parse(it.readText()) as Map<*, *>) }.getOrNull() }
+            .filter { o.modules.isEmpty() || it.path in o.modules }
+            .filter { m -> (m.classpath + m.bootClasspath).all { it.exists() } }
+        if (modules.isEmpty()) return emptyMap()
+        val javaBin = Java.find(o)
+        val worker = workerJar()
+        val each = maxOf(1, budget / modules.size)
+        modules.associate { m -> m.path to Pool(m, javaBin, worker, log).also { it.warm(each) } }
+    }.getOrDefault(emptyMap())
 
     private fun describe(p: Preview) = buildList {
         if (p.device.isNotEmpty()) add("device=${p.device}")

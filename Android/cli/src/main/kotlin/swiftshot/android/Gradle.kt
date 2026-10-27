@@ -38,13 +38,13 @@ object Gradle {
         val root = File(o.projectDir).absoluteFile.normalize()
         val gradlew = File(root, "gradlew")
         require(gradlew.isFile) { "No gradlew in $root. Pass --project-dir or run from the Gradle project's root." }
-        val init = File.createTempFile("swiftshot-android", ".init.gradle").apply {
-            deleteOnExit()
-            writeText(Gradle::class.java.getResourceAsStream("/swiftshot-android.init.gradle")!!.bufferedReader().readText())
-        }
+        // A stable path, so the project's configuration cache stays valid between runs.
+        val text = Gradle::class.java.getResourceAsStream("/swiftshot-android.init.gradle")!!.bufferedReader().readText()
+        val init = File(Cache.root, "swiftshot-android.init.gradle")
+        if (!init.isFile || init.readText() != text) { init.parentFile.mkdirs(); init.writeText(text) }
         val tasks = if (o.modules.isEmpty()) listOf("swiftshotPrepare") else o.modules.map { "${it.trimEnd(':')}:swiftshotPrepare" }
         val cmd = listOf(gradlew.path, "-I", init.path) + tasks +
-            listOf("-Pswiftshot.variant=${o.variant}", "--console=plain", "-q", "--no-configuration-cache") + o.gradleArgs
+            listOf("-Pswiftshot.variant=${o.variant}", "--console=plain", "-q") + o.gradleArgs
         log.step("Building ${tasks.joinToString(" ")} (${o.variant})…")
         val p = ProcessBuilder(cmd).directory(root).redirectErrorStream(true).apply {
             o.javaHome?.let { environment()["JAVA_HOME"] = it }

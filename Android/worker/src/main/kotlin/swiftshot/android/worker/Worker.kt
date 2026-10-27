@@ -38,6 +38,12 @@ fun main() {
     // Layoutlib and the app print freely; keep stdout for the protocol.
     System.setOut(System.err)
     var env: Environment? = null
+    // Started while Gradle may still be building: patch layoutlib now, it needs nothing from the app.
+    runCatching {
+        PaparazziSdk(environment = Environment("", "", 0, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList()), onNewFrame = {}).setup()
+        Insets.install()
+        Warm.done = true
+    }
     val input = System.`in`.bufferedReader()
     while (true) {
         val line = input.readLine() ?: break
@@ -108,10 +114,14 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
         RenderParamsFlags.FLAG_KEY_EDGE_TO_EDGE to (targetSdk >= 35),
     )
     val trace = System.getenv("SWIFTSHOT_TRACE") != null
-    fun mark(what: String) { if (trace) System.err.println("TRACE ${what} ${(System.nanoTime() - start) / 1_000_000} ms (jvm up ${java.lang.management.ManagementFactory.getRuntimeMXBean().uptime} ms)") }
+    val phases = mutableListOf<String>()
+    fun mark(what: String) {
+        phases += "$what ${(System.nanoTime() - start) / 1_000_000}"
+        if (trace) System.err.println("TRACE ${what} ${(System.nanoTime() - start) / 1_000_000} ms (jvm up ${java.lang.management.ManagementFactory.getRuntimeMXBean().uptime} ms)")
+    }
     try {
         mark("begin")
-        sdk.setup()
+        if (!Warm.done) sdk.setup()
         mark("setup")
         Insets.install()
         val injected = SessionFlags.add(flags, targetSdk)
@@ -124,7 +134,7 @@ private fun runGroup(env: Environment, job: Map<*, *>, emit: (String) -> Unit) {
         return
     }
     BuildInfo.fill(job.map("device").str("name"), type == "watch")
-    emit("ready\t${(System.nanoTime() - start) / 1_000_000}")
+    emit("ready\t${(System.nanoTime() - start) / 1_000_000}\tjvm ${java.lang.management.ManagementFactory.getRuntimeMXBean().uptime}, ${phases.joinToString(", ")}")
     for (s in job.list("shots")) {
         val shot = s as Map<*, *>
         val base = shot.str("out")
@@ -288,6 +298,8 @@ object Debug {
         System.err.println("  view y=${v.top} h=${v.height}")
     }
 }
+
+object Warm { @Volatile var done = false }
 
 object Encoder {
     val pool: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newFixedThreadPool(2) { r -> Thread(r, "encoder").apply { isDaemon = true } }

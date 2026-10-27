@@ -1,0 +1,57 @@
+# swiftshot vs Paparazzi vs Roborazzi on a free GitHub-hosted Linux runner: the same :app
+# @Previews of Example/AndroidDemo, the same devices × languages × appearances
+# (bench/android/bench.json), one tool after another in one job so they share the machine but
+# never compete for it. Each tool gets an untimed warm-up (downloads), then a cold run in a fresh
+# copy of the project and a warm rerun (bench/android/run.sh).
+name: android-benchmark
+on:
+  pull_request:
+    paths: ["bench/android/**", ".github/workflows/android-benchmark.yml"]
+  workflow_dispatch:
+    inputs:
+      parallel:
+        description: Renderer processes / test forks per tool (empty = swiftshot's default for the runner)
+        default: ""
+      tools:
+        description: Tools to benchmark, in order
+        default: swiftshot paparazzi roborazzi
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Machine
+        run: |
+          nproc; free -g; java -version; echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "::notice title=machine::$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs), $(nproc) cores, $(free -g | awk '/Mem:/ {print $2}') GB"
+      - name: Build swiftshot
+        run: cd Android && ./gradlew --no-daemon -q :cli:jar :worker:jar
+      - name: Benchmark (warm-up, cold, warm per tool)
+        env:
+          BENCH_DIR: ${{ runner.temp }}/bench-android
+          BENCH_PARALLEL: ${{ inputs.parallel }}
+          BENCH_STOP_DAEMONS: "1"
+        run: bench/android/run.sh ${{ inputs.tools }}
+      - name: Summary
+        if: always()
+        run: bench/android/summary.sh "$RUNNER_TEMP/bench-android/results.json" "swiftshot vs Paparazzi vs Roborazzi" | tee "$RUNNER_TEMP/bench-android/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-benchmark
+          path: |
+            ${{ runner.temp }}/bench-android/results.json
+            ${{ runner.temp }}/bench-android/summary.md
+            ${{ runner.temp }}/bench-android/results.tsv
+            ${{ runner.temp }}/bench-android/sizes.tsv
+            ${{ runner.temp }}/bench-android/*.log
+            ${{ runner.temp }}/bench-android/*-cold/log.txt
+            ${{ runner.temp }}/bench-android/*-warm/log.txt
+            ${{ runner.temp }}/bench-android/*-cold/samples
+          if-no-files-found: ignore

@@ -120,13 +120,14 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             t.description = "Prepares the ${variantName} variant for Swiftshot's renderer"
             t.modulePath.set(p.path)
             t.namespace.set(variant.namespace)
-            t.compileSdk.set(p.provider { compileSdkOf(p) })
-            t.targetSdk.set(p.provider {
-                def target = null
-                try { target = variant.targetSdk?.apiLevel } catch (ignored) { }
-                if (target == null) try { target = variant.minSdk?.apiLevel } catch (ignored) { }
-                target instanceof Number && target > 0 ? target.intValue() : compileSdkOf(p)
-            })
+            // Plain values and configuration-cache-safe providers only: nothing here may hold on to
+            // the Project, so the project's configuration cache keeps working.
+            def compileSdk = compileSdkOf(p)
+            def target = null
+            try { target = variant.targetSdk?.apiLevel } catch (ignored) { }
+            if (target == null) try { target = variant.minSdk?.apiLevel } catch (ignored) { }
+            t.compileSdk.set(compileSdk)
+            t.targetSdk.set(target instanceof Number && target > 0 ? target.intValue() : compileSdk)
             t.classpath.from(view(cp, "android-classes-jar", { true }))
             t.moduleRes.from(view(source, "android-res", isProject))
             t.libraryRes.from(view(source, "android-res", { !isProject(it) }))
@@ -140,11 +141,18 @@ def setupSwiftshot(p, String variantName, String paparazziVersion, String layout
             if (res != null) t.localRes.set(res.all.map { layers -> layers.flatten().reverse() })
             def assets = variant.sources.assets
             if (assets != null) t.localAssets.set(assets.all.map { layers -> layers.flatten().reverse() })
-            def ids = p.provider {
-                source.incoming.resolutionResult.allComponents.collect { c ->
+            def ids = source.incoming.resolutionResult.rootComponent.map { root ->
+                def seen = new LinkedHashSet()
+                def queue = [root] as LinkedList
+                def names = []
+                while (!queue.isEmpty()) {
+                    def c = queue.removeFirst()
+                    if (!seen.add(c.id)) continue
                     def m = c.moduleVersion
-                    m == null ? c.id.displayName : "${m.group}:${m.name}:${m.version}"
+                    names << (m == null ? c.id.displayName : "${m.group}:${m.name}:${m.version}".toString())
+                    c.dependencies.each { d -> if (d instanceof org.gradle.api.artifacts.result.ResolvedDependencyResult) queue << d.selected }
                 }
+                names
             }
             t.components.set(ids)
             t.wear.set(ids.map { list -> list.any { it.startsWith("androidx.wear.compose:") } })

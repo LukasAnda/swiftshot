@@ -1,0 +1,16 @@
+{
+  "project": "Example/AndroidDemo",
+  "module": ":app",
+  "package": "com.swiftshot.demo",
+  "devices": ["Pixel 10 Pro", "Pixel Tablet"],
+  "languages": ["en-US", "de-DE", "sk", "ar", "ja"],
+  "appearances": ["light", "dark"],
+  "versions": {
+    "paparazzi": "2.0.0-alpha05.1",
+    "roborazzi": "1.77.0",
+    "robolectric": "4.17",
+    "robolectric_sdk": 36,
+    "composable_preview_scanner": "0.9.3",
+    "junit": "4.13.2"
+  }
+}

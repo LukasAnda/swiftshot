@@ -15,7 +15,7 @@ run() {
   java -jar "$jar" run --project-dir Example/AndroidDemo \
     --devices "Pixel 10 Pro,Pixel 9 Pro Fold,Pixel 9 Pro Fold (folded),Pixel Tablet" \
     --languages "en-US,de-DE,sk,ar,ja" --appearances light,dark \
-    --screen "Stats long: full_length=true" --output "$1" 2>&1 | tee "$1.log"
+    --screen "Stats long: full_length=true" --output "$1" -v 2>&1 | grep -v "^    \[w" | tee "$1.log"
 }
 
 echo "::group::First run (builds, renders)"
@@ -38,7 +38,7 @@ else echo "FAIL: the second run differs"; diff -rq --exclude='*.json' --exclude=
 # Sizes: each screen is the device's own size, watch screens square, full length taller.
 size() { python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(24); print("%dx%d" % struct.unpack(">II", d[16:24]))' "$1"; }
 check() { local s; s=$(size "$out/a/$1"); [ "$s" = "$2" ] && echo "size ok: $1 $s" || { echo "FAIL: $1 is $s, expected $2"; fail=1; }; }
-check "en-US/Pixel 10 Pro-Welcome.png" 1280x2856
+check "en-US/Pixel 10 Pro-Welcome-light.png" 1280x2856
 check "de-DE/Pixel 9 Pro Fold-Root-dark.png" 2076x2152
 check "ar/Pixel 9 Pro Fold (folded)-Root-light.png" 1080x2424
 check "ja/Pixel Tablet-Stats-light.png" 2560x1600
