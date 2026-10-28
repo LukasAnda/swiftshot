@@ -39,8 +39,11 @@ The output layout is the same, so `fastlane deliver` and `frameit` keep working.
 1. Make sure each screen you capture has a `#Preview`, with the sample data it needs.
 2. Run `swiftshot init`, then compare its `swiftshot.json` with your `Snapfile`.
 3. Run `swiftshot` and review `screenshots/screenshots.html`.
-4. Replace `capture_ios_screenshots` / `snapshot` in your lane:
-   `sh("swiftshot run --config ../swiftshot.json")`
+4. Add the [fastlane plugin](https://github.com/LukasAnda/fastlane-plugin-swiftshot)
+   (`fastlane add_plugin swiftshot`) and replace `capture_ios_screenshots` / `snapshot` in your
+   lane with `swiftshot`. It takes the same `devices`, `languages`, `dark_mode`,
+   `output_directory` and `clear_previous_screenshots`:
+   `swiftshot(devices: ["iPhone 17 Pro Max"], languages: ["en-US", "de-DE"])`
 5. Delete the UI test target and `SnapshotHelper.swift` if nothing else uses them.
 
 Preview names become screenshot names: `#Preview("01 Welcome")` gives `<device>-01 Welcome.png`,
@@ -57,6 +60,10 @@ which keeps App Store order.
 | `Screengrabfile` | `swiftshot.json` |
 | a running emulator or device | no emulator |
 | `assembleDebug` and `assembleAndroidTest` | one Gradle task, the debug variant |
+
+In a lane, `swiftshot(platform: "android", languages: ["en-US", "de-DE"])` from the
+[fastlane plugin](https://github.com/LukasAnda/fastlane-plugin-swiftshot) replaces
+`capture_android_screenshots` and writes the supply layout by default.
 
 With `"layout": "fastlane"`, the output is where `fastlane supply` uploads from:
 `metadata/android/<locale>/images/phoneScreenshots`, `sevenInchScreenshots`,

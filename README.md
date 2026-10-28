@@ -208,6 +208,22 @@ curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh
 
 The exit code is non-zero if any screenshot failed.
 
+### fastlane
+
+```
+fastlane add_plugin swiftshot
+```
+
+```ruby
+lane :screenshots do
+  swiftshot(devices: ["iPhone 17 Pro Max"], languages: ["en-US", "de-DE"])  # was capture_ios_screenshots
+  upload_to_app_store
+end
+```
+
+See [fastlane-plugin-swiftshot](https://github.com/LukasAnda/fastlane-plugin-swiftshot) for the
+options.
+
 ### Visual review tools
 
 The output is plain PNGs with stable names, so screenshot review services take it as is:
