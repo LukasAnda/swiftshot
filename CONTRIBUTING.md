@@ -3,8 +3,9 @@
 ## Bugs
 
 [Open an issue](https://github.com/LukasAnda/swiftshot/issues/new/choose) with `swiftshot --version`,
-`xcodebuild -version`, the command you ran and its log (`--verbose`). A screenshot of the wrong
-output and the matching preview code help most.
+the toolchain (`xcodebuild -version`, the Android Gradle plugin version or `flutter --version`),
+the command you ran and its log (`--verbose`). A screenshot of the wrong output and the matching
+preview code help most.
 
 ## Pull requests
 
@@ -12,6 +13,13 @@ output and the matching preview code help most.
 make                                                     # builds bin/
 swift test                                               # unit tests
 SWIFTSHOT_INTEGRATION=1 swift test --filter IntegrationTests
+```
+
+Android, Compose Multiplatform and Flutter live in `Android/` (Kotlin, JDK 21):
+
+```
+make android                                             # builds the JVM CLI and workers into bin/
+cd Android && ./gradlew :cli:test                        # unit tests
 ```
 
 The integration tests render `Example/DemoApp` and compare it pixel by pixel with booted

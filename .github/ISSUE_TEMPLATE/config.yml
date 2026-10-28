@@ -3,3 +3,6 @@ contact_links:
   - name: Documentation
     url: https://github.com/LukasAnda/swiftshot/wiki
     about: Configuration, CI and troubleshooting
+  - name: Questions and ideas
+    url: https://github.com/LukasAnda/swiftshot/discussions
+    about: Ask how to do something, or share how you use swiftshot

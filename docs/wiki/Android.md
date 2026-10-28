@@ -205,8 +205,8 @@ one tool after another, the same number of processes for each
 
 | | swiftshot | Paparazzi 2.0.0-alpha05.1 | Roborazzi 1.77.0 |
 |---|---:|---:|---:|
-| first run (compiles, renders) | **57.7 s** | 87.4 s | 93.0 s |
-| warm run | **38.0 s** | 66.1 s | 70.8 s |
+| first run (compiles, renders) | **59.4 s** | 86.8 s | 87.7 s |
+| warm run | **36.7 s** | 63.6 s | 70.2 s |
 
 What makes the difference:
 

@@ -1,0 +1,41 @@
+name: Rendering difference
+description: A screenshot doesn't match the simulator, emulator or IDE preview
+labels: [bug, rendering]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [SwiftUI / UIKit, Jetpack Compose, Compose Multiplatform, Flutter]
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Swiftshot's screenshot and the reference (simulator, emulator or IDE preview), same device, language and appearance.
+    validations:
+      required: true
+  - type: textarea
+    id: preview
+    attributes:
+      label: Preview code
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device, OS version, language, appearance
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: swiftshot --version
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Toolchain
+      description: "`xcodebuild -version`, the Android Gradle plugin version or `flutter --version`"

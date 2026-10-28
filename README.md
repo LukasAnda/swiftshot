@@ -328,26 +328,29 @@ full reference.
 
 ## Speed
 
-Both benchmarks run on free GitHub-hosted runners, as workflows in this repo, so anyone can re-run
-them.
+Both benchmarks run on free GitHub-hosted runners, as workflows in this repo
+([iOS](.github/workflows/benchmark.yml), [Android](.github/workflows/android-benchmark.yml)), so
+anyone can re-run them. The numbers below link to the runs they come from.
 
 **iOS: swiftshot vs `fastlane snapshot`.** 5 screens of `Example/DemoApp` on 3 devices in 3
-languages, 45 screenshots each, on the `xcode-27` runner from a cold start:
+languages, 45 screenshots each, on the `xcode-27` runner from a cold start
+([run](https://github.com/LukasAnda/swiftshot/actions/runs/40598242160)):
 
 | | wall clock | per screenshot |
 |---|---:|---:|
-| `fastlane snapshot` | 4615 s (77 min) | 103 s |
-| swiftshot, cold | **84 s** | 1.9 s |
-| swiftshot, warm build | **55 s** | 1.2 s |
+| `fastlane snapshot` | 4195 s (70 min) | 93 s |
+| swiftshot, cold | **99 s** | 2.2 s |
+| swiftshot, warm build | **56 s** | 1.2 s |
 
 **Android: swiftshot vs Paparazzi and Roborazzi.** The `Example/AndroidDemo` previews on a Pixel
 10 Pro and a Pixel Tablet, five languages, light and dark, 470 screenshots each, on a 4-core
-`ubuntu-latest` runner ([`bench/android`](bench/android)):
+`ubuntu-latest` runner ([`bench/android`](bench/android),
+[run](https://github.com/LukasAnda/swiftshot/actions/runs/40493772786)):
 
 | | swiftshot | Paparazzi | Roborazzi |
 |---|---:|---:|---:|
-| first run | **57.7 s** | 87.4 s | 93.0 s |
-| warm run | **38.0 s** | 66.1 s | 70.8 s |
+| first run | **59.4 s** | 86.8 s | 87.7 s |
+| warm run | **36.7 s** | 63.6 s | 70.2 s |
 
 fastlane boots a simulator per device and runs a UI-test session per device and language.
 Paparazzi and Roborazzi render screenshots as unit tests, one at a time per test JVM. Swiftshot
@@ -491,3 +494,7 @@ Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md
 ## License
 
 AGPL-3.0 — see [LICENSE](LICENSE).
+
+Using swiftshot doesn't put your app or your screenshots under the AGPL: running the tool, in CI
+or anywhere else, leaves your code and its output yours. The AGPL applies to swiftshot itself,
+if you change it and distribute it or offer it as a service.

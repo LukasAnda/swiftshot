@@ -9,7 +9,7 @@ to suggest something or to say what you need most.
 | [v0.4.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.4.0) | [Android: Jetpack Compose](#v040--android-jetpack-compose) | released |
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.5.0) | [Compose Multiplatform](#v050--compose-multiplatform) | released |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | [Linux as a full host](#v060--linux-as-a-full-host) | released |
-| [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/4) | [Flutter](#v070--flutter) | released |
+| [v0.7.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.7.0) | [Flutter](#v070--flutter) | released |
 | [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/7) | [Migration from Paparazzi and Roborazzi](#v080--migration-from-paparazzi-and-roborazzi) | planned |
 | [v0.9.0](https://github.com/LukasAnda/swiftshot/milestone/5) | [IDE plugins](#v090--ide-plugins) | planned |
 
