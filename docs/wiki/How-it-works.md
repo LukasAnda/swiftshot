@@ -295,7 +295,7 @@ flowchart TB
 | simulators booted | one per device | none |
 | app launches | one per screen, device and language | one per device and language |
 | getting to a screen | XCUITest taps | the preview is the screen |
-| per screenshot, free GitHub runner | 103 s | 1.2–1.9 s, build included |
+| per screenshot, free GitHub runner | 93 s | 1.2–2.2 s, build included |
 
 ## Android
 
@@ -383,8 +383,8 @@ The same 470 screenshots on a free 4-core `ubuntu-latest` runner
 
 | | swiftshot | Paparazzi 2.0.0-alpha05.1 | Roborazzi 1.77.0 |
 |---|---:|---:|---:|
-| first run | **57.7 s** | 87.4 s | 93.0 s |
-| warm run | **38.0 s** | 66.1 s | 70.8 s |
+| first run | **59.4 s** | 86.8 s | 87.7 s |
+| warm run | **36.7 s** | 63.6 s | 70.2 s |
 
 ## Compose Multiplatform
 

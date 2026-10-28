@@ -119,3 +119,6 @@ private final class OutputBuffer: @unchecked Sendable {
 }
 
 func ms(since start: Date) -> String { String(format: "%.1fs", Date().timeIntervalSince(start)) }
+
+/// "1 device", "2 devices".
+func count(_ n: Int, _ noun: String) -> String { "\(n) \(noun)\(n == 1 ? "" : "s")" }

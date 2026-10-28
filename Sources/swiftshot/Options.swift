@@ -115,7 +115,7 @@ struct Options: Codable {
     }
 
     static let usage = """
-    swiftshot — App Store screenshots straight from your SwiftUI #Previews.
+    swiftshot — screenshot tests from your SwiftUI and UIKit #Previews, without a simulator.
     In a Gradle project (or with --platform android) it renders Jetpack Compose @Previews instead;
     `swiftshot --platform android --help` lists those options.
 

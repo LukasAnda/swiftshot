@@ -261,7 +261,7 @@ final class Runner {
             let runtimes = try await resolveRuntimes(platform)
             let target = Target(platform: platform, app: placeholder, runtimes: runtimes, types: types)
             targets.append(target)
-            Log.info("\(platform.runtimeName) matrix: \(types.count) device(s) × \(runtimes.count) \(platform.runtimeName) (\(runtimes.map(\.version).joined(separator: ", "))) × \(options.languages.count) language(s) × \(options.appearances.count) appearance(s), mode: \(options.mode.rawValue)")
+            Log.info("\(platform.runtimeName) matrix: \(count(types.count, "device")) × \(runtimes.count) \(platform.runtimeName) (\(runtimes.map(\.version).joined(separator: ", "))) × \(count(options.languages.count, "language")) × \(count(options.appearances.count, "appearance")), mode: \(options.mode.rawValue)")
             if options.mode == .device || platform == .watchos {
                 for runtime in runtimes {
                     let info = try await runtimeInfo(runtime)
@@ -363,7 +363,9 @@ final class Runner {
         for s in skipped { Log.warn("Skipped: " + s) }
         for e in errors { Log.warn(e) }
         if shots.isEmpty && errors.isEmpty { Log.warn("No screenshots: no preview matched the filters (previews, screens, devices)") }
-        let summary = "\(shots.count) screenshots in \(ms(since: total)) → \(outputDir)"
+        let cwd = FileManager.default.currentDirectoryPath + "/"
+        let shown = outputDir.hasPrefix(cwd) ? String(outputDir.dropFirst(cwd.count)) : outputDir
+        let summary = "\(count(shots.count, "screenshot")) in \(ms(since: total)) → \(shown)"
         if errors.isEmpty { Log.success(summary) } else { Log.failure(summary + " (\(errors.count) failed, see above)") }
         if !errors.isEmpty { throw CLIError("\(errors.count) error(s) while rendering") }
     }

@@ -72,7 +72,7 @@ extension Runner {
                                                                          contentSize: category.isEmpty ? nil : category)
                                 self.collect(result)
                                 self.record("render \(runtime.name) \(language) (no boot)", t)
-                                Log.success("\(runtime.name) · \(language) · \(profiles.count) devices, no simulator: \(result.shots.count) shots in \(ms(since: t)) (in-app \(Int(result.totalMs)) ms)")
+                                Log.success("\(runtime.name) · \(language) · \(count(profiles.count, "device")), no simulator: \(count(result.shots.count, "shot")) in \(ms(since: t)) (in-app \(Int(result.totalMs)) ms)")
                             } catch {
                                 self.lock.lock(); self.errors.append("\(runtime.name) · \(language) (no boot): \(error)"); self.lock.unlock()
                             }
