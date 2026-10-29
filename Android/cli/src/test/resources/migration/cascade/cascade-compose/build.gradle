@@ -1,0 +1,79 @@
+plugins {
+  id "com.dropbox.dropshots" version "0.4.1"
+  id "wtf.emulator.gradle" version "0.15.1"
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'app.cash.paparazzi'
+apply plugin: "io.github.takahirom.roborazzi"
+apply plugin: 'com.vanniktech.maven.publish'
+
+android {
+  resourcePrefix "cascade_"
+  namespace "me.saket.cascade"
+
+  compileSdkVersion versions.compileSdk
+  defaultConfig {
+    minSdkVersion versions.minSdk
+    targetSdk versions.compileSdk
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+
+  buildFeatures {
+    compose = true
+    buildConfig = true
+  }
+  composeOptions {
+    kotlinCompilerExtensionVersion = versions.composeCompiler
+  }
+  kotlinOptions {
+    jvmTarget = "1.8"
+  }
+  lintOptions {
+    abortOnError true
+  }
+  testOptions {
+    animationsDisabled = true
+    unitTests.includeAndroidResources = true  // Required by Robolectric.
+  }
+}
+
+emulatorwtf {
+  devices = [
+    [model: 'Pixel7', version: 31, atd: false], // ATD emulators don't have any soft keyboard.
+  ]
+  directoriesToPull = ["/sdcard/Download/"]
+  numFlakyTestAttempts = 2 // 3 runs in total.
+  fileCacheTtl = Duration.ofDays(30)
+  timeout = Duration.ofMinutes(15) // Note to self: this is per shard and not per test.
+  printOutput = true // Print report URL even for successful test runs.
+}
+
+dependencies {
+  implementation "androidx.activity:activity-compose:$versions.activityCompose"
+  implementation "androidx.compose.ui:ui:$versions.composeUi"
+  implementation "androidx.compose.ui:ui-tooling:$versions.composeUi"
+  implementation "androidx.compose.foundation:foundation:$versions.composeUi"
+  implementation "androidx.compose.material3:material3:$versions.composeUiMaterial3"
+
+  testImplementation "junit:junit:4.13.2"
+  testImplementation "com.google.testparameterinjector:test-parameter-injector:$versions.testParamInjector"
+  testImplementation "com.google.truth:truth:1.1.5"
+
+  testImplementation "androidx.compose.ui:ui-test-junit4:$versions.composeUi"
+  testImplementation "org.robolectric:robolectric:4.10.3"
+  testImplementation "io.github.takahirom.roborazzi:roborazzi:$versions.roborazzi"
+  testImplementation "io.github.takahirom.roborazzi:roborazzi-junit-rule:$versions.roborazzi"
+  testImplementation "androidx.compose.material:material-icons-extended:$versions.composeUi"
+  testImplementation 'org.hamcrest:hamcrest-core:1.3' // Workaround for https://github.com/cashapp/paparazzi/issues/622.
+  debugImplementation "androidx.compose.ui:ui-test-manifest:$versions.composeUi"
+
+  debugImplementation "androidx.appcompat:appcompat:$versions.appCompat"
+  androidTestImplementation "androidx.test:core-ktx:1.5.0"
+  androidTestImplementation "androidx.test:rules:1.5.0"
+  androidTestImplementation "androidx.test.ext:junit-ktx:1.1.5"
+  androidTestImplementation "androidx.compose.ui:ui-test-junit4:$versions.composeUi"
+  androidTestImplementation "com.google.testparameterinjector:test-parameter-injector:$versions.testParamInjector"
+  androidTestImplementation "androidx.compose.material:material-icons-extended:$versions.composeUi"
+}

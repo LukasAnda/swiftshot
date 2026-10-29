@@ -101,6 +101,8 @@ jobs:
         run: cd Android && ./gradlew --no-daemon -q :cli:test
       - name: Integration (render, sizes, determinism, budget)
         run: Android/ci/integration.sh "$RUNNER_TEMP/android-it"
+      - name: Migration (init, then render the tested previews at the tests' sizes)
+        run: Android/ci/migration.sh "$RUNNER_TEMP/android-migration"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

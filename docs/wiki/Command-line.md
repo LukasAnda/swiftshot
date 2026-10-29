@@ -135,7 +135,8 @@ COMMANDS
   list      Build and print the previews that were found
   devices   List the devices and their screens
   init      Write a swiftshot.json for the project here: modules, languages and Play devices
-            detected (alias auto-setup; --force overwrites an existing one)
+            detected; with Paparazzi or Roborazzi, the devices of their tests and a
+            swiftshot-migration.md report (alias auto-setup; --force overwrites an existing one)
 
 PROJECT
   --project-dir <path>                  Gradle project (default: .)

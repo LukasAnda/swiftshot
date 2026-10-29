@@ -1,0 +1,25 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'com.vanniktech.maven.publish'
+
+android {
+  resourcePrefix "cascade_"
+  namespace "me.saket.cascade"
+
+  compileSdkVersion versions.compileSdk
+  defaultConfig { minSdkVersion 21 }
+
+  kotlinOptions {
+    jvmTarget = "1.8"
+  }
+
+  lintOptions {
+    abortOnError true
+  }
+}
+
+dependencies {
+  implementation "androidx.appcompat:appcompat:$versions.appCompat"
+  implementation "androidx.recyclerview:recyclerview:$versions.recyclerView"
+  implementation "androidx.core:core-ktx:$versions.ktx"
+}

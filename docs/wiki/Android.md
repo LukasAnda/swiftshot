@@ -89,9 +89,10 @@ own: keys only iOS knows, such as `scheme`, are rejected.
 | `java_home` | | JDK 21+ for Gradle and the renderer |
 | `screens` | `[]` | per-screenshot settings, below |
 
-`screens` rules match previews by name or `*` glob; the first match wins. Keys: `preview`,
-`appearances`, `languages`, `devices`, `font_scales`, `full_length`, `delay`, `skip`. On the
-command line: `--screen "Stats: languages=de-DE,ja devices=Pixel*"`.
+`screens` rules match previews by name or `*` glob, and by fully qualified function when the
+pattern has a `.`; the first match wins. Keys: `preview`, `appearances`, `languages`, `devices`, `font_scales`, `full_length`,
+`delay`, `skip`, `override_preview` (the rule wins over a preview's own device, size and settings). On
+the command line: `--screen "Stats: languages=de-DE,ja devices=Pixel*"`.
 
 ## Previews
 
@@ -153,7 +154,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.7.0
+      - uses: LukasAnda/swiftshot@v0.8.0
       - uses: actions/upload-artifact@v7
         with: { name: screenshots, path: screenshots }
 ```
@@ -193,6 +194,10 @@ are kept when it is unchanged.
 Paparazzi and Roborazzi run screenshots as unit tests: Gradle compiles a test source set and a
 test task renders one screenshot per test, one at a time per JVM. Swiftshot skips the test
 machinery and renders in parallel processes that stay up for the whole run.
+
+Coming from Paparazzi or Roborazzi? `swiftshot init` reads their tests and sets each preview to
+the devices and settings of its tests. Nothing is removed, see
+[[Migrating|Migrating-from-fastlane#paparazzi-and-roborazzi]].
 
 More in [[How it works]].
 

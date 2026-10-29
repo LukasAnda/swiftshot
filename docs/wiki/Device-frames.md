@@ -261,7 +261,7 @@ On CI, cache that folder:
   with:
     path: ~/Library/Caches/swiftshot/frames
     key: swiftshot-frames-1
-- uses: LukasAnda/swiftshot@v0.7.0
+- uses: LukasAnda/swiftshot@v0.8.0
   with:
     args: --frame appstore --accept-bezel-license
 ```

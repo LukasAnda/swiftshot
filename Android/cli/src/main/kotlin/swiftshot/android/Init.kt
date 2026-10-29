@@ -6,7 +6,8 @@ import java.io.File
 /**
  * `swiftshot init` for a Gradle project: writes swiftshot.json with the Android modules, the
  * languages the app has strings for, Play Store devices, and fastlane's folder layout when the
- * project already uses fastlane. Nothing is built.
+ * project already uses fastlane. With Paparazzi or Roborazzi tests, the config renders what they render instead
+ * ([Migration]), and swiftshot-migration.md lists what was read. Nothing is built.
  */
 object Init {
     fun run(o: Options, force: Boolean, log: Log): Int {
@@ -16,17 +17,32 @@ object Init {
         if (!File(root, "gradlew").isFile && Flutter.isProject(root)) return write(target, flutter(root), log)
         val settings = listOf("settings.gradle.kts", "settings.gradle").map { File(root, it) }.firstOrNull { it.isFile }
             ?: throw CliError("No settings.gradle(.kts) in $root.")
-        val dir = { m: String -> File(root, m.trim(':').replace(':', '/')) }
-        val all = modules(settings.readText()).filter { isAndroid(dir(it)) || isMultiplatform(dir(it)) }
+        Migration.run(root)?.let { r ->
+            // Nothing covered: a config that skips every preview would render nothing, so the regular one.
+            write(target, if (r.covered == 0) regular(root, settings) else r.config, log)
+            Migration.print(r, log)
+            val md = File(root, "swiftshot-migration.md").apply { writeText(Migration.markdown(r)) }
+            log.ok("Wrote $md")
+            return 0
+        }
+        return write(target, regular(root, settings), log)
+    }
+
+    /** What init writes without Paparazzi or Roborazzi. */
+    private fun regular(root: File, settings: File): Map<String, Any?> {
+        val text = settings.readText()
+        val dirs = projects(text, root)
+        val dir = { m: String -> dirs[m] ?: File(root, m.trim(':').replace(':', '/')) }
+        val all = modules(text).filter { isAndroid(dir(it)) || isMultiplatform(dir(it)) }
         // The modules with previews (an app module that only hosts a shared one has none).
         val modules = all.filter { hasPreviews(dir(it)) }.ifEmpty { all }
         val desktop = modules.any { buildText(dir(it)).contains(Regex("""\bjvm\s*\(""")) }
         val ios = modules.any { buildText(dir(it)).contains("iosSimulatorArm64") }
-        val wear = modules.filter { isWear(File(root, it.trim(':').replace(':', '/'))) }
-        val languages = modules.flatMap { languages(File(root, it.trim(':').replace(':', '/'))) }.distinct()
+        val wear = modules.filter { isWear(dir(it)) }
+        val languages = modules.flatMap { languages(dir(it)) }.distinct()
             .sortedWith(compareBy({ it != "en-US" }, { it })).ifEmpty { listOf("en-US") }
         val fastlane = File(root, "fastlane").isDirectory
-        val config = linkedMapOf<String, Any?>(
+        return linkedMapOf<String, Any?>(
             "modules" to modules.ifEmpty { null },
             "devices" to listOf("Pixel 10 Pro", "Pixel 9 Pro Fold", "Pixel Tablet"),
             "watch_devices" to if (wear.isNotEmpty()) Devices.defaultWatch else null,
@@ -38,7 +54,6 @@ object Init {
             "layout" to if (fastlane) "fastlane" else null,
             "clear_previous_screenshots" to true,
         ).filterValues { it != null }
-        return write(target, config, log)
     }
 
     private fun write(target: File, config: Map<String, Any?>, log: Log): Int {
@@ -65,11 +80,33 @@ object Init {
         )
     }
 
-    /** `include(":app", ":wear")`, `include ':app'`, one per line or several in one call. */
+    /** `include(":app", ":wear")`, `include ':app'`, one per line or several in one call, also across lines. Not `includeBuild`/`includeFlat`. */
     fun modules(settings: String): List<String> =
-        Regex("""include\s*\(?([^)\n]*)\)?""").findAll(settings).flatMap { m ->
-            Regex("""["']([^"']+)["']""").findAll(m.groupValues[1]).map { it.groupValues[1] }
+        Regex("""\binclude\b\s*(?:\(([^)]*)\)|((?:[^\n,]*,[ \t]*\n)*[^\n]*))""").findAll(SnapshotModules.strip(settings)).flatMap { m ->
+            Regex("""["']([^"']+)["']""").findAll(m.groupValues[1] + m.groupValues[2]).map { it.groupValues[1] }
         }.map { if (it.startsWith(":")) it else ":$it" }.distinct().toList()
+
+    /** Module path → directory: the default `a/b` for `:a:b`, or the `project(":a:b").projectDir = file("x")` override. */
+    fun projects(settings: String, root: File): Map<String, File> {
+        val text = SnapshotModules.strip(settings)
+        fun path(p: String) = if (p.startsWith(":")) p else ":$p"
+        val literal = Regex("""^(?:new\s+)?(?:file|File)\s*\(\s*(?:(?:rootDir|settingsDir|settings\.rootDir|rootProject\.projectDir)\s*,\s*)?["']([^"']*)["']\s*\)$""")
+        fun dir(rhs: String): File? {
+            val rel = literal.find(rhs.trim().trimEnd(';'))?.groupValues?.get(1)?.replace(Regex("""^\$\{?(?:rootDir|settingsDir)}?/"""), "") ?: return null
+            if (rel.contains('$')) return null
+            return File(rel).let { if (it.isAbsolute) it else File(root, rel) }.normalize()
+        }
+        val overrides = linkedMapOf<String, File>()
+        val head = """(?:find)?[Pp]roject\s*\(\s*["']([^"']+)["']\s*\)"""
+        Regex("""$head(?:!!|\?)?\s*\.projectDir\s*=\s*([^\n]+)""").findAll(text).forEach { m -> dir(m.groupValues[2])?.let { overrides[path(m.groupValues[1])] = it } }
+        Regex("""$head(?:!!|\?)?\s*\.(?:apply|run|with)\s*\{\s*projectDir\s*=\s*([^\n}]+)""").findAll(text).forEach { m -> dir(m.groupValues[2])?.let { overrides[path(m.groupValues[1])] = it } }
+        return modules(text).associateWith { overrides[it] ?: File(root, it.trim(':').replace(':', '/')) }
+    }
+
+    /** Directories named by `includeBuild("x")`. */
+    fun includedBuilds(settings: String, root: File): List<File> =
+        Regex("""includeBuild\s*\(?\s*["']([^"']+)["']""").findAll(SnapshotModules.strip(settings))
+            .map { File(root, it.groupValues[1]).normalize() }.distinct().toList()
 
     private fun buildText(dir: File) = listOf("build.gradle.kts", "build.gradle").map { File(dir, it) }.firstOrNull { it.isFile }?.readText() ?: ""
 

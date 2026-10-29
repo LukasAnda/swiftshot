@@ -1,0 +1,48 @@
+# Swiftshot migration
+
+## Modules
+
+- :paparazzi-tests  Paparazzi (alias libs.plugins.paparazzi, imports)
+- :roborazzi-tests  Roborazzi (alias libs.plugins.roborazzi, imports)
+- :ui  previews the tests call
+
+## Devices
+
+- RobolectricDeviceQualifiers.Pixel4 → spec:width=392.7dp,height=828.7dp,dpi=440
+- renderingMode=SHRINK → unresolved (paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/CustomComposePreviewTest.kt:66); its previews render on the devices other tests give them
+
+## Settings
+
+- languages: en-US (no test sets a locale)
+- string resources also have ar: add them to languages to render them
+- appearances: light (no test uses night mode)
+- font scales: 1 (no test sets one)
+- each preview's own locale, uiMode, fontScale (from @Preview, as the tests apply previewInfo)
+
+## Not covered
+
+- paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/AccessibilityScreenshotTest.kt:62  FlavorshubTheme { MainScreen( content = Recipes( scrollState = rememberLazyListState(), recipes = recipes, onToggleFavo… has no @Preview — add a @Preview with the same arguments to include it
+- paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/NoOvertestingRecipeCardScreenshotTest.kt:98  FlavorshubTheme { RecipeCard( modifier = Modifier.Companion, recipe = testCase.recipeInLocale.mainScreenRecipeItem, onF… has no @Preview — add a @Preview with the same arguments to include it
+- paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/ParameterizedRecipeCardScreenshotTest.kt:96  FlavorshubTheme { RecipeCard( modifier = Modifier.Companion, recipe = recipeInLocale.mainScreenRecipeItem, onFavouriteC… has no @Preview — add a @Preview with the same arguments to include it
+- paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/SimpleRecipeCardScreenshotTest.kt:35  FlavorshubTheme { RecipeCard( modifier = Modifier.Companion, recipe = MainScreenRecipeItem( id = 1, name = "Recipe Titl… has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/AccessibilityScreenshotTest.kt:90  FlavorshubTheme { MainScreen( content = Recipes( scrollState = rememberLazyListState(), recipes = recipes, onToggleFavo… has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:128  captureScreenshot("1. Show Home") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:131  captureScreenshot("2. Added 1st recipe to favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:134  captureScreenshot("3. Show Favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:137  captureScreenshot("4. Show Details Screen of favorited Recipe") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:140  captureScreenshot("5. Back in Favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:143  captureScreenshot("6. Removed favorited Recipe") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:106  captureScreenshot("1. Show Home") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:109  captureScreenshot("2. Added 1st recipe to favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:112  captureScreenshot("3. Show Favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:115  captureScreenshot("4. Show Details Screen of favorited Recipe") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:118  captureScreenshot("5. Back in Favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:121  captureScreenshot("6. Removed favorited Recipe") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:64  captureScreenshot("1. Show Home") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:67  captureScreenshot("2. Added 1st recipe to favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:70  captureScreenshot("3. Show Favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:73  captureScreenshot("4. Show Details Screen of favorited Recipe") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:76  captureScreenshot("5. Back in Favorites") has no @Preview — add a @Preview with the same arguments to include it
+- roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:79  captureScreenshot("6. Removed favorited Recipe") has no @Preview — add a @Preview with the same arguments to include it
+
+2 of 25 snapshot tests are covered by previews; 23 aren't (listed above)

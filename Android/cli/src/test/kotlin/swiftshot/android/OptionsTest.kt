@@ -165,6 +165,13 @@ class OptionsTest {
         assertEquals(ScreenRule("Stats", languages = listOf("de-DE", "ja"), devices = listOf("Pixel*"), skip = true), r)
     }
 
+    @Test fun overridePreviewKey() {
+        assertTrue(Options.screenFlag("X: override_preview=true").overridePreview)
+        assertTrue(Options.rule("X", mapOf("override_preview" to true)).overridePreview)
+        assertFalse(Options.rule("X", emptyMap()).overridePreview)
+        assertFailsWith<IllegalArgumentException> { Options.rule("X", mapOf("bogus" to 1)) }
+    }
+
     @Test fun screenFlagAllKeys() {
         val r = Options.screenFlag("  Welcome*  :   appearances=dark   font_scales=1,1.5 full_length=true delay=0.25 skip=false ")
         assertEquals("Welcome*", r.preview)
@@ -191,6 +198,14 @@ class OptionsTest {
         assertEquals(listOf("de"), o.rule("stats - dark")!!.languages)
         assertEquals(listOf("fr"), o.rule("Welcome")!!.languages)
         assertNull(parse("--screen", "Stats: skip=true").rule("Welcome"))
+    }
+
+    @Test fun screenRuleMatchesTheFunctionOnlyWithADot() {
+        val card = Preview(composable = "com.example.SettingsScreenKt.ProfileCard", function = "ProfileCard", name = "Profile card")
+        assertFalse(ScreenRule("*Settings*", skip = true).matches(card))
+        assertTrue(ScreenRule("*Profile*").matches(card))
+        assertTrue(ScreenRule("com.example.SettingsScreenKt.*").matches(card))
+        assertTrue(ScreenRule("*.ProfileCard").matches(card))
     }
 
     @Test fun globs() {

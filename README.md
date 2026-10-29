@@ -133,6 +133,10 @@ debugImplementation("androidx.compose.ui:ui-tooling")
 
 Nothing else is added to the project.
 
+Coming from Paparazzi or Roborazzi? `init` reads their tests, uses their devices and writes
+`swiftshot-migration.md`. Nothing is removed. See the
+[migration guide](https://github.com/LukasAnda/swiftshot/wiki/Migrating-from-fastlane).
+
 ### Compose Multiplatform
 
 Also in the folder with `gradlew`. Every target the module has is rendered: Android, desktop
@@ -177,9 +181,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - uses: LukasAnda/swiftshot@v0.7.0
+      - uses: LukasAnda/swiftshot@v0.8.0
         with:
-          version: 0.7.0      # or "latest"
+          version: 0.8.0      # or "latest"
       - uses: actions/upload-artifact@v7
         with: { name: ios-screenshots, path: fastlane/screenshots }
 
@@ -189,9 +193,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.7.0
+      - uses: LukasAnda/swiftshot@v0.8.0
         with:
-          version: 0.7.0
+          version: 0.8.0
       - uses: actions/upload-artifact@v7
         with: { name: android-screenshots, path: fastlane/metadata/android }
 ```
@@ -202,7 +206,7 @@ The action installs the release and runs `swiftshot run` with your `swiftshot.js
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.7.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.8.0 sh
 ~/.swiftshot/bin/swiftshot run
 ```
 
@@ -488,8 +492,8 @@ the time budget.
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.5.0) | Compose Multiplatform: Android, desktop and iOS (released) |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | Linux as a full host: the same `swiftshot` command, setup and config as on a Mac (released) |
 | [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter: widget previews on iOS and Android devices (released) |
-| [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/7) | Easy migration from Paparazzi and Roborazzi: `swiftshot init` sets Swiftshot up to match |
-| [v0.9.0](https://github.com/LukasAnda/swiftshot/milestone/5) | IDE plugins for Xcode, Android Studio and IntelliJ IDEA |
+| [v0.8.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.8.0) | Migration from Paparazzi and Roborazzi: `swiftshot init` sets Swiftshot up to match (released) |
+| 1.0.0 | Baseline comparison: verify against a committed baseline, HTML diff report, accept changes on CI (GitHub, GitLab, Bitbucket, Bitrise, Codemagic and others) |
 
 Version numbers are targets and can move. Details on the
 [Roadmap](https://github.com/LukasAnda/swiftshot/wiki/Roadmap) wiki page; suggestions are welcome as

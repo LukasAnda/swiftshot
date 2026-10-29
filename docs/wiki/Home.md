@@ -25,7 +25,7 @@ Run `swiftshot` in the project folder: an Xcode project renders iOS, a Gradle pr
 - [[Command line]]: every command and flag
 - [[CI]]: GitHub Actions and other CI systems
 - [[Device frames]]: Apple bezels, App Store titles and backgrounds, Android Studio's device art
-- [[Migrating from fastlane]]: replace `fastlane snapshot` and `fastlane screengrab`
+- [[Migrating|Migrating-from-fastlane]]: from `fastlane snapshot` and `screengrab`, Paparazzi and Roborazzi
 - [[How it works]]: why it's fast and how output stays pixel identical
 - [[Troubleshooting]]
 - [[Roadmap]]: what's planned for upcoming versions

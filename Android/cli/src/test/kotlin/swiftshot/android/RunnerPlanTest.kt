@@ -122,6 +122,37 @@ class RunnerPlanTest {
         assertEquals("Pixel 9", shots.single().device.name)
     }
 
+    @Test fun ruleMatchesFullyQualifiedFunction() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"com.a.UiKt.Checkout","devices":["Pixel 5"]},{"preview":"*","skip":true}]}""")
+        val shots = plan(listOf(preview("Checkout", composable = "com.a.UiKt.Checkout"), preview("Checkout", composable = "com.b.UiKt.Checkout")))
+        assertEquals(listOf("Pixel 5"), shots.map { it.device.name })
+        assertEquals(listOf("com.a.UiKt.Checkout"), shots.map { it.preview.composable })
+    }
+
+    private val styled get() = preview("Welcome").copy(device = "id:pixel_9", locale = "de", uiMode = 0x20, fontScale = 1.5)
+
+    @Test fun overridePreviewBeatsPreviewSettings() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","override_preview":true,"devices":["Pixel 5"],"languages":["en-US"],"appearances":["light"],"font_scales":[1.0]}]}""")
+        val s = plan(listOf(styled)).single()
+        assertEquals(listOf("Pixel 5", "en-US", false, 1.0), listOf(s.device.name, s.language, s.dark, s.fontScale))
+    }
+
+    @Test fun withoutOverridePreviewSettingsStillWin() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","devices":["Pixel 5"],"languages":["en-US"],"appearances":["light"],"font_scales":[1.0]}]}""")
+        val s = plan(listOf(styled)).single()
+        assertEquals(listOf("Pixel 9", "de", true, 1.5), listOf(s.device.name, s.language, s.dark, s.fontScale))
+    }
+
+    @Test fun overridePreviewDeviceBeatsPreviewSize() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","override_preview":true,"devices":["Pixel 5"]}]}""")
+        val d = plan(listOf(preview("Welcome").copy(widthDp = 200, heightDp = 100))).single().device
+        assertEquals(1080 to 2340, d.width to d.height)
+        // Without devices of its own the rule leaves the preview's size.
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","override_preview":true,"languages":["en-US"]}]}""")
+        val sized = plan(listOf(preview("Welcome").copy(widthDp = 200, heightDp = 100)), "--devices", "Pixel 5").single().device
+        assertEquals(550 to 275, sized.width to sized.height)
+    }
+
     @Test fun unknownPreviewDevice() {
         val e = assertFailsWith<CliError> { plan(listOf(preview("Welcome").copy(device = "id:nokia_3310"))) }
         assertTrue(e.message!!.contains("Welcome") && e.message!!.contains("nokia_3310"))
@@ -210,6 +241,15 @@ class RunnerPlanTest {
         val round = plan(listOf(preview("Tile").copy(device = "spec:width=227dp,height=227dp,dpi=320,isRound=true")), "--appearances", "light,dark")
         assertEquals(listOf(true), round.map { it.dark })
         assertEquals("watch", round.single().device.type)
+    }
+
+    @Test fun roundRuleDeviceRendersAsAWatch() {
+        // A round spec: from a Wear test config renders like watch_devices: dark only, no appearance suffix.
+        File(dir, "swiftshot.json").writeText("""{"appearances": ["light", "dark"], "screens": [{"preview": "Tile", "devices": ["spec:width=200dp,height=200dp,dpi=320,isRound=true", "Pixel 9"]}]}""")
+        val shots = plan(listOf(preview("Tile"), preview("Home")), "--devices", "Pixel 9")
+        assertEquals(listOf("en-US/200x200dp-Tile.png", "en-US/Pixel 9-Tile-light.png", "en-US/Pixel 9-Tile-dark.png"), shots.filter { it.preview.name == "Tile" }.files())
+        assertEquals(listOf(true, false, true), shots.filter { it.preview.name == "Tile" }.map { it.dark })
+        assertEquals(listOf(false, true), shots.filter { it.preview.name == "Home" }.map { it.dark })
     }
 
     @Test fun watchStillScalesFonts() {

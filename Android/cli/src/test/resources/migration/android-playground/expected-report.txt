@@ -1,0 +1,36 @@
+# Swiftshot migration
+
+## Modules
+
+- :core:ui  Paparazzi (imports): not rendered (no tests on previews)
+- :feature:home:impl  Paparazzi (convention plugin playground.screenshots, imports): not rendered (no tests on previews)
+- :feature:licenses:impl  Paparazzi (convention plugin playground.screenshots): not rendered (no tests on previews)
+
+## Devices
+
+- none (no test renders a preview)
+
+## Settings
+
+- languages: en-US (no test sets a locale)
+- appearances: light (no test uses night mode)
+- font scales: 1 (no test sets one)
+
+## Not covered
+
+- feature/home/impl/src/test/kotlin/fr/smarquis/playground/feature/home/HomeScreenshotTest.kt:23  couldn't be read: helper screenshot
+- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:19  couldn't be read: helper screenshot
+- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:22  couldn't be read: helper screenshot
+- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:25  couldn't be read: helper screenshot
+
+## Not tested, skipped
+
+- fr.smarquis.playground.core.ui.AndroidPlaygroundThemeKt.AndroidPlaygroundThemePreview (:core:ui)
+- fr.smarquis.playground.feature.home.HomeScreenKt.HomeScreenContentPreview (:feature:home:impl)
+- fr.smarquis.playground.feature.licenses.LicensesScreenKt.LicensesScreenContentFailurePreview (:feature:licenses:impl)
+- fr.smarquis.playground.feature.licenses.LicensesScreenKt.LicensesScreenContentLoadingPreview (:feature:licenses:impl)
+- fr.smarquis.playground.feature.licenses.LicensesScreenKt.LicensesScreenContentPreview (:feature:licenses:impl)
+
+No snapshot test is covered by a @Preview, so swiftshot.json renders every preview like a new setup
+
+0 of 4 snapshot tests are covered by previews; 4 aren't (listed above)
