@@ -9,8 +9,11 @@ data class SourcePreview(val module: String, val fqn: String, val function: Stri
 sealed interface Target {
     /** Calls these `@Preview` functions (possibly wrapped in a theme or layout). */
     data class Previews(val fqns: List<String>) : Target
-    /** Renders every preview: a preview scanner, Roborazzi's generated preview tests, Showkase. */
-    data object AllPreviews : Target
+    /**
+     * Renders every preview in [packages] (all packages when empty), private ones only with [includePrivate]:
+     * a preview scanner, Roborazzi's generated preview tests, Showkase.
+     */
+    data class AllPreviews(val packages: List<String> = emptyList(), val includePrivate: Boolean = true) : Target
     /** Anything else, with what it renders as written, e.g. `CheckoutScreen(state)`. */
     data class Uncovered(val call: String) : Target
 }
@@ -127,10 +130,30 @@ object SnapshotTests {
         fun generated(): List<SnapshotTest> {
             val file = buildFile(module.dir) ?: return emptyList()
             val src = Src(file)
-            return Regex("""\bgenerateComposePreviewRobolectricTests\s*\{""").findAll(src.mask).filter { m ->
+            return Regex("""\bgenerateComposePreviewRobolectricTests\s*\{""").findAll(src.mask).mapNotNull { m ->
                 val open = m.range.last
-                Regex("""\benable\s*(?:=\s*|\.set\s*\(\s*|\(\s*)true\b""").containsMatchIn(src.mask.substring(open, src.close(open)))
-            }.map { SnapshotTest(module.path, file, src.line(it.range.first), SnapshotTool.ROBORAZZI, Target.AllPreviews, DeviceSource.FromPreview, TestSettings(), "test") }.toList()
+                val block = src.mask.substring(open, src.close(open))
+                if (!Regex("""\benable\s*(?:=\s*|\.set\s*\(\s*|\(\s*)true\b""").containsMatchIn(block)) return@mapNotNull null
+                SnapshotTest(module.path, file, src.line(m.range.first), SnapshotTool.ROBORAZZI, generatedTarget(src, open), DeviceSource.FromPreview, TestSettings(), "test")
+            }.toList()
+        }
+
+        /**
+         * The previews Roborazzi's generated tests render: `packages`, and `includePrivatePreviews` (false by default
+         * in Roborazzi's GenerateComposePreviewRobolectricTestsExtension). An annotation filter or a custom tester
+         * picks previews in ways not read here.
+         */
+        fun generatedTarget(src: Src, open: Int): Target {
+            val block = open + 1 until src.close(open)
+            val m = src.mask
+            fun setting(name: String) = Regex("""\b$name\b\s*(?:=|\.set\s*\(|\(|\.addAll\s*\()""").findAll(m).firstOrNull { it.range.first in block }
+            if (setting("annotationFilter") != null || setting("testerQualifiedClassName") != null) return Target.Uncovered("filtered previews")
+            val private = setting("includePrivatePreviews")?.let { Regex("""^\s*(true|false)\b""").find(m.substring(it.range.last + 1))?.groupValues?.get(1) ?: return Target.Uncovered("filtered previews") } == "true"
+            val packages = setting("packages")?.let { s ->
+                val start = src.skipWs(s.range.last + 1)
+                literals(src, start..src.exprEndAt(start)) ?: return Target.Uncovered("filtered previews")
+            } ?: emptyList()
+            return Target.AllPreviews(packages, private)
         }
 
         /** A recognised snapshot call; [content] is the composable lambda it renders, when there is one. */
@@ -139,7 +162,10 @@ object SnapshotTests {
         inner class FileScan(val src: Src, val sourceSet: String) {
             val java = src.file.extension == "java"
             val mask = src.mask
-            val scanner = Regex("""\b(?:\w*ComposablePreviewScanner|JvmAnnotationScanner|Showkase\w*)\b""").containsMatchIn(mask)
+            /** What the file's preview scanners (or Showkase) return; null when there is none. */
+            val scanned: Target? = scanned()
+            /** Values a scanned preview is passed in as: `preview: ComposablePreview<…>`, `component: ShowkaseBrowserComponent`. */
+            val scannedValues = Regex("""\b(\w+)\s*:\s*(?:ComposablePreview\s*<|ShowkaseBrowserComponent\b)""").findAll(mask).map { it.groupValues[1] }.toSet()
             val paparazzi: Map<String, Int> = Regex(if (java) """\bPaparazzi\s+(\w+)\s*=\s*new\s+(?:app\.cash\.paparazzi\.)?Paparazzi\s*\("""
                 else """\b(?:val|var)\s+(\w+)\s*(?::\s*[\w.]+\s*)?=\s*(?:app\.cash\.paparazzi\.)?Paparazzi\s*\(""")
                 .findAll(mask).associate { it.groupValues[1] to it.range.last }
@@ -204,56 +230,100 @@ object SnapshotTests {
 
             fun isTest(fn: Decl) = fn.annotations.any { it.name == "Test" || it.name.endsWith("Test") || it.name == "TestFactory" || it.name == "Theory" }
 
+            fun scanned(): Target? {
+                val found = mutableListOf<Target>()
+                for (m in Regex("""\b(?:\w*ComposablePreviewScanner|JvmAnnotationScanner)\s*\(\s*\)""").findAll(mask)) {
+                    var packages = emptyList<String>()
+                    var private = false
+                    var filtered = false
+                    for ((name, args) in src.calledOn(m.range.last + 1)) when {
+                        name == "scanPackageTrees" -> packages = args?.let { literals(src, it) } ?: run { filtered = true; emptyList() }
+                        name == "includePrivatePreviews" -> private = true
+                        name == "scanAllPackages" || name == "getPreviews" || name.startsWith("includeAnnotationInfo") || name in harmlessListCalls -> {}
+                        else -> filtered = true
+                    }
+                    found += if (filtered) Target.Uncovered("filtered previews") else Target.AllPreviews(packages, private)
+                }
+                // Showkase lists the previews its processor can call, so public ones only.
+                if (Regex("""\bShowkase\w*\b""").containsMatchIn(mask)) found += Target.AllPreviews(emptyList(), includePrivate = false)
+                return found.distinct().let { if (it.size > 1) Target.Uncovered("filtered previews") else it.firstOrNull() }
+            }
+
             fun target(site: Site): Target {
                 val text = collapse(src.code.substring(site.pos, site.end))
                 val content = site.content ?: return Target.Uncovered(text)
                 val found = linkedSetOf<String>()
+                var scannedCall = false
                 var ok = true
                 fun visit(n: Node) {
                     if (n.assigned) return
                     resolver.resolve(src, n.name)?.let { found += it; return }
-                    val last = n.name.substringAfterLast('.')
+                    val parts = n.name.split('.')
+                    if (parts[0] in scannedValues && n.called && (parts.size == 1 || parts.size == 2 && parts[1] in setOf("invoke", "component")) && n.lambda == null) { scannedCall = true; return }
+                    val last = parts.last()
                     if (last in effects) return
-                    if (last.first().isLowerCase()) { n.children.forEach(::visit); return }
-                    if (n.lambda == null) { ok = false; return }
+                    if (last.first().isLowerCase()) {
+                        // A lowercase call with a trailing lambda (`remember {}`, `run {}`) passes through; one without may draw anything.
+                        if (n.lambda == null) { if (last !in harmless) ok = false; return }
+                        n.children.forEach(::visit); return
+                    }
+                    if (n.lambda == null || n.argLambda) { ok = false; return }
                     val before = found.size
+                    val scannedBefore = scannedCall
                     n.children.forEach(::visit)
-                    if (found.size == before) ok = false
+                    if (found.size == before && scannedCall == scannedBefore) ok = false
                 }
                 src.nodes(content.first, content.last + 1).forEach(::visit)
                 return when {
-                    ok && found.isNotEmpty() -> Target.Previews(found.toList())
-                    scanner -> Target.AllPreviews
+                    ok && found.isNotEmpty() && !scannedCall -> Target.Previews(found.toList())
+                    ok && scannedCall && found.isEmpty() && scanned != null -> scanned
                     else -> Target.Uncovered(collapse(src.code.substring(content.first, content.last + 1)))
                 }
             }
 
             fun test(site: Site, target: Target, pos: Int, bodies: List<Pair<Decl, Int>>): SnapshotTest {
+                val outer = bodies.firstOrNull()?.first
                 val (device, settings) = when {
                     java -> DeviceSource.Unresolved("Java test") to TestSettings()
+                    // A helper never called from a test here: the test that sets its device is somewhere else.
+                    outer != null && helper(outer) -> DeviceSource.Unresolved("helper ${outer.name}") to TestSettings()
                     site.tool == SnapshotTool.PAPARAZZI -> paparazziDevice(site.receiver!!, bodies, classAt(pos))
                     else -> roborazziDevice(bodies, classAt(pos))
                 }
                 return SnapshotTest(module.path, src.file, src.line(pos), site.tool, target, device, settings, sourceSet)
             }
 
-            /** A site inside a helper function becomes one test per call of the helper in this file. */
-            fun expand(site: Site, sites: List<Site>): List<SnapshotTest> {
-                val target = target(site)
-                val fn = site.fn
-                val own = listOf(test(site, target, site.pos, listOfNotNull(fn?.let { it to site.pos })))
-                if (fn == null || java || isTest(fn) || befores(classAt(fn.keyword)).contains(fn)) return own
-                val calls = Regex("""(?<!\w)${Regex.escape(fn.name)}\s*(?=[({])""").findAll(mask).filter { m ->
+            fun helper(fn: Decl) = !java && !isTest(fn) && !befores(classAt(fn.keyword)).contains(fn)
+
+            /** Calls of [fn] in this file, outside its own body, that aren't snapshot calls themselves: (start, end). */
+            fun callsOf(fn: Decl, sites: List<Site>): List<IntRange> {
+                val name = if (Regex("""\w+""").matches(fn.name)) fn.name else "`${fn.name}`"
+                return Regex("""(?<![\w`])${Regex.escape(name)}\s*(?=[({])""").findAll(mask).filter { m ->
                     m.range.first !in fn.body!! && sites.none { it.pos == src.chainStart(m.range.first) } &&
                         !Regex("""\bfun\s+(?:<[^>]*>\s*)?(?:[\w<>?]+\.)?$""").containsMatchIn(mask.substring(maxOf(0, m.range.first - 80), m.range.first))
-                }.toList()
-                if (calls.isEmpty()) return own
-                return calls.map { m ->
-                    val start = src.chainStart(m.range.first)
-                    val (end, _) = call(m.range.last + 1)
-                    val t = if (target is Target.Uncovered) Target.Uncovered(collapse(src.code.substring(start, end))) else target
-                    val caller = fnAt(start)
-                    test(site, t, start, listOfNotNull(caller?.let { it to start }, fn to site.pos))
+                }.map { m -> src.chainStart(m.range.first) until call(m.range.last + 1).first }.toList()
+            }
+
+            /** The call paths from test functions down to [fn] (cut at [cut]): (bodies outer→inner, outermost call). */
+            fun chains(fn: Decl, cut: Int, sites: List<Site>, seen: Set<Decl>): List<Pair<List<Pair<Decl, Int>>, IntRange?>> {
+                val inner = listOf(fn to cut)
+                if (!helper(fn) || fn in seen || seen.size > 5) return listOf(inner to null)
+                val calls = callsOf(fn, sites)
+                if (calls.isEmpty()) return listOf(inner to null)
+                return calls.flatMap { c ->
+                    val caller = fnAt(c.first) ?: return@flatMap listOf(inner to c)
+                    chains(caller, c.first, sites, seen + fn).map { (outer, call) -> outer + inner to (call ?: c) }
+                }
+            }
+
+            /** A site inside helper functions becomes one test per path of calls from a test function in this file. */
+            fun expand(site: Site, sites: List<Site>): List<SnapshotTest> {
+                val target = target(site)
+                val fn = site.fn ?: return listOf(test(site, target, site.pos, emptyList()))
+                return chains(fn, site.pos, sites, emptySet()).map { (bodies, c) ->
+                    val pos = c?.first ?: site.pos
+                    val t = if (target is Target.Uncovered && c != null) Target.Uncovered(collapse(src.code.substring(c.first, c.last + 1))) else target
+                    test(site, t, pos, bodies)
                 }
             }
 
@@ -284,13 +354,23 @@ object SnapshotTests {
             fun paparazziDevice(recv: String, bodies: List<Pair<Decl, Int>>, cls: Decl?): Pair<DeviceSource, TestSettings> {
                 val update = Regex("""\b${Regex.escape(recv)}\s*\.\s*unsafeUpdateConfig\s*\(""")
                 val scopes = bodies.reversed().map { (f, cut) -> f.body!!.first until cut } + befores(cls).map { it.body!! }
+                // Closest setting of each: unsafeUpdateConfig in the test (then helpers, @Before), then the constructor.
+                var device: IntRange? = null
+                var mode: IntRange? = null
                 for (scope in scopes) {
                     val m = update.findAll(mask).lastOrNull { it.range.first in scope } ?: continue
-                    src.args(m.range.last).firstOrNull { it.first == "deviceConfig" }?.let { return deviceConfig(it.second) }
+                    val args = src.args(m.range.last)
+                    if (device == null) device = args.firstOrNull { it.first == "deviceConfig" }?.second
+                    if (mode == null) mode = args.firstOrNull { it.first == "renderingMode" }?.second
                 }
                 val ctor = paparazzi[recv] ?: return DeviceSource.Unresolved(recv) to TestSettings()
                 val args = src.args(ctor)
-                args.firstOrNull { it.first == "deviceConfig" }?.let { return deviceConfig(it.second) }
+                if (device == null) device = args.firstOrNull { it.first == "deviceConfig" }?.second
+                if (mode == null) mode = args.firstOrNull { it.first == "renderingMode" }?.second
+                mode?.let { src.code.substring(it.first, it.last + 1).trim().substringAfterLast('.') }?.takeIf { it != "NORMAL" }?.let {
+                    return DeviceSource.Unresolved("renderingMode=$it") to TestSettings()
+                }
+                device?.let { return deviceConfig(it) }
                 if (args.any { it.first == null }) return DeviceSource.Unresolved(collapse(src.code.substring(ctor, src.close(ctor) + 1))) to TestSettings()
                 return DeviceSource.ToolDefault(TestDevices.paparazziDefault(), SnapshotTool.PAPARAZZI) to TestSettings()
             }
@@ -333,14 +413,14 @@ object SnapshotTests {
                 return source to settings
             }
 
-            /** `qualifiers=` from `robolectric.properties` in this source set's resources, the package's directory first. */
+            /** `qualifiers=` from the nearest `robolectric.properties` that sets it, from the package's directory up to the resources root. */
             fun properties(): String? {
                 val root = File(module.dir, "src/$sourceSet/resources")
                 val parts = src.pkg.split('.').filter { it.isNotEmpty() }
                 for (n in parts.size downTo 0) {
                     val f = File(root, (parts.take(n) + "robolectric.properties").joinToString("/"))
                     if (!f.isFile) continue
-                    return Regex("""(?m)^\s*qualifiers\s*[=:]\s*(.*?)\s*$""").find(f.readText())?.groupValues?.get(1)
+                    Regex("""(?m)^\s*qualifiers\s*[=:]\s*(.*?)\s*$""").find(f.readText())?.let { return it.groupValues[1] }
                 }
                 return null
             }
@@ -374,6 +454,18 @@ object SnapshotTests {
     }
 
     private val effects = setOf("LaunchedEffect", "SideEffect", "DisposableEffect")
+    /** Lowercase calls that draw nothing. */
+    private val harmless = setOf("println", "print", "require", "requireNotNull", "check", "checkNotNull", "assert")
+    /** Calls on a scanner's result that keep every preview. */
+    private val harmlessListCalls = setOf("map", "toList", "toTypedArray", "toMutableList", "asSequence", "asIterable", "mapIndexed", "toSet")
+
+    /** The string literals of a list expression (`listOf("a", "b")`, `["a"]`, `"a"`); null when anything else is in it. */
+    private fun literals(src: Src, range: IntRange): List<String>? {
+        val text = src.code.substring(range.first, minOf(range.last + 1, src.code.length))
+        val values = Regex(""""([^"$\\]*)"""").findAll(text).map { it.groupValues[1] }.toList()
+        val rest = Regex(""""[^"$\\]*"""").replace(text, "").replace(Regex("""\b(?:listOf|arrayOf|setOf|mutableListOf)\b|\.set\b|\.addAll\b|[\s(),\[\]]"""), "")
+        return if (rest.isEmpty()) values else null
+    }
     private val fromPreview = Regex("""\b(?:DeviceConfigBuilder|RobolectricDeviceQualifierBuilder)\b|\bpreviewInfo\b""")
 
     private fun collapse(s: String) = s.trim().replace(Regex("\\s+"), " ").let { if (it.length > 120) it.take(119) + "…" else it }
@@ -415,7 +507,8 @@ object SnapshotTests {
     /** A `fun` or class-like declaration; [body] is its `{ … }` (or expression body) range. */
     private class Decl(val name: String, val keyword: Int, val body: IntRange?, val annotations: List<Ann>, val superclass: String? = null)
 
-    private class Node(val name: String, val lambda: IntRange?, val assigned: Boolean, val children: List<Node>)
+    /** A call in composable content; [argLambda] when its argument list holds a lambda that calls something. */
+    private class Node(val name: String, val called: Boolean, val lambda: IntRange?, val assigned: Boolean, val argLambda: Boolean, val children: List<Node>)
 
     private val keywords = setOf(
         "if", "else", "when", "try", "catch", "finally", "for", "while", "do", "return", "val", "var", "fun", "is", "in", "as",
@@ -461,7 +554,7 @@ object SnapshotTests {
         val facade: String = Regex("""@file\s*:\s*JvmName\s*\(\s*"([^"]+)"""").find(code)?.groupValues?.get(1)
             ?: (file.nameWithoutExtension.replaceFirstChar(Char::uppercaseChar).replace(Regex("[^A-Za-z0-9_]"), "_") + "Kt")
 
-        val funs: List<Decl> = Regex("""\bfun\s+(?:<[^>]*>\s*)?(?:[\w<>?]+\.)*(\w+)\s*\(""").findAll(mask).map { m ->
+        val funs: List<Decl> = Regex("""\bfun\s+(?:<[^>]*>\s*)?(?:[\w<>?]+\.)*(\w+|`[^`\n]+`)\s*\(""").findAll(mask).map { m ->
             var i = skipWs(close(m.range.last) + 1)
             if (i < mask.length && mask[i] == ':') { i++; while (i < mask.length && mask[i] !in "{=\n;}") i = if (mask[i] in "([") close(i) + 1 else i + 1 }
             i = skipWs(i)
@@ -470,7 +563,7 @@ object SnapshotTests {
                 i < mask.length && mask[i] == '=' -> i..exprEnd(skipWs(i + 1))
                 else -> null
             }
-            Decl(m.groupValues[1], m.range.first, body, annotationsBefore(m.range.first))
+            Decl(m.groupValues[1].removeSurrounding("`"), m.range.first, body, annotationsBefore(m.range.first))
         }.toList()
 
         val classes: List<Decl> = Regex("""\b(?:(companion)\s+)?(class|object|interface)\b(?:\s+(\w+))?""").findAll(mask).mapNotNull { m ->
@@ -498,6 +591,31 @@ object SnapshotTests {
                 else Regex("""([\w.]+)\s*(?:<[^>]*>)?\s*\(""").find(mask.substring(delegation, body?.first ?: i))?.groupValues?.get(1)?.substringAfterLast('.')
             Decl(name, m.range.first, body, annotationsBefore(m.range.first), superclass)
         }.toList()
+
+        fun exprEndAt(from: Int) = exprEnd(from)
+
+        /** The calls chained after [from] (`.scanPackageTrees("a").getPreviews()`): (name, inside of its parentheses). */
+        fun calledOn(from: Int): List<Pair<String, IntRange?>> {
+            val out = mutableListOf<Pair<String, IntRange?>>()
+            var k = from
+            while (true) {
+                var d = skipWs(k)
+                if (d < mask.length && mask[d] in "?!") d++
+                if (d >= mask.length || mask[d] != '.') return out
+                val s = skipWs(d + 1)
+                var e = s
+                while (e < mask.length && (mask[e].isLetterOrDigit() || mask[e] == '_')) e++
+                if (e == s) return out
+                val name = mask.substring(s, e)
+                var args: IntRange? = null
+                var n = skipWs(e)
+                if (n < mask.length && mask[n] == '(') { args = n + 1 until close(n); n = close(n) + 1 }
+                val l = skipWs(n)
+                if (l < mask.length && mask[l] == '{') n = close(l) + 1
+                out += name to args
+                k = n
+            }
+        }
 
         /** End of an expression body: a newline that doesn't continue the expression, or the enclosing block's end. */
         private fun exprEnd(from: Int): Int {
@@ -633,7 +751,11 @@ object SnapshotTests {
                         if (name.toString() in keywords) { i = j; continue }
                         var k = skipWs(j)
                         var called = false
-                        if (k < to && mask[k] == '(') { k = close(k) + 1; called = true }
+                        var argLambda = false
+                        if (k < to && mask[k] == '(') {
+                            argLambda = Regex("""\{[^{}]*?[A-Za-z_]\w*\s*[({]""").containsMatchIn(mask.substring(k, close(k)))
+                            k = close(k) + 1; called = true
+                        }
                         var lambda: IntRange? = null
                         val l = skipWs(k)
                         if (l < to && mask[l] == '{') { lambda = l + 1 until close(l); k = close(l) + 1 }
@@ -652,7 +774,7 @@ object SnapshotTests {
                         }
                         val prev = skipWsBack(start - 1)
                         val assigned = prev >= 0 && mask[prev] == '=' && (prev == 0 || mask[prev - 1] !in "=!<>")
-                        out += Node(name.toString(), lambda, assigned, lambda?.let { nodes(it.first, it.last + 1) } ?: emptyList())
+                        out += Node(name.toString(), called, lambda, assigned, argLambda, lambda?.let { nodes(it.first, it.last + 1) } ?: emptyList())
                         i = k
                     }
                     else -> i++

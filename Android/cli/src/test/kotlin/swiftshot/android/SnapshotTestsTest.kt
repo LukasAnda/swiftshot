@@ -302,7 +302,7 @@ class SnapshotTestsTest {
         ui()
         write("app/build.gradle.kts", "plugins { id(\"io.github.takahirom.roborazzi\") }\nroborazzi {\n    generateComposePreviewRobolectricTests {\n        enable = true\n        packages = listOf(\"com.example\")\n    }\n}")
         val t = one(module(tool = SnapshotTool.ROBORAZZI))
-        assertEquals(Target.AllPreviews, t.target)
+        assertEquals(Target.AllPreviews(listOf("com.example"), includePrivate = false), t.target)
         assertEquals(DeviceSource.FromPreview, t.device)
         assertEquals(3, t.line)
         assertEquals(File(dir, "app/build.gradle.kts"), t.file)
@@ -346,7 +346,7 @@ class SnapshotTestsTest {
             }
         """)
         val t = scan()
-        assertEquals(listOf(Target.AllPreviews, Target.AllPreviews), t.map { it.target })
+        assertEquals(listOf(Target.AllPreviews(listOf("com.example"), false), Target.AllPreviews(listOf("com.example"), false)), t.map { it.target })
         assertEquals(listOf(DeviceSource.FromPreview, DeviceSource.FromPreview), t.map { it.device })
         assertEquals(setOf(SnapshotTool.PAPARAZZI, SnapshotTool.ROBORAZZI), t.map { it.tool }.toSet())
     }
@@ -419,5 +419,126 @@ class SnapshotTestsTest {
         val t = scan(module(tool = SnapshotTool.ROBORAZZI))
         assertEquals(listOf(Target.Uncovered("composeTestRule.shoot { CheckoutPreview() }"), Target.Previews(listOf(checkout.fqn))), t.map { it.target })
         assertEquals(listOf(8, 9), t.map { it.line })
+    }
+
+    // Review fixes
+
+    @Test fun lowercaseCallWithoutLambdaIsUncovered() {
+        ui()
+        write("app/src/test/kotlin/com/example/T.kt", """
+            package com.example
+            class T {
+                @get:Rule val paparazzi = Paparazzi()
+                fun shot(extra: @Composable () -> Unit) = paparazzi.snapshot { CheckoutPreview(); extra() }
+                @Test fun a() { paparazzi.snapshot { MyTheme { CheckoutPreview(); content() } } }
+                @Test fun b() { shot { Text("x") } }
+                @Test fun c() { paparazzi.snapshot { println("x"); CheckoutPreview() } }
+            }
+        """)
+        assertEquals(
+            listOf(Target.Uncovered("MyTheme { CheckoutPreview(); content() }"), Target.Uncovered("shot { Text(\"x\") }"), Target.Previews(listOf(checkout.fqn))),
+            scan().map { it.target },
+        )
+    }
+
+    @Test fun lambdaArgumentOfWrapperIsUncovered() {
+        ui()
+        paparazziTest("paparazzi.snapshot { Scaffold(topBar = { TopBar() }) { CheckoutPreview() } }\n        paparazzi.snapshot { Box(Modifier.padding(8.dp)) { CheckoutPreview() } }")
+        assertEquals(listOf(Target.Uncovered("Scaffold(topBar = { TopBar() }) { CheckoutPreview() }"), Target.Previews(listOf(checkout.fqn))), scan().map { it.target })
+    }
+
+    @Test fun scannerOnlyCoversScannedPreviewCalls() {
+        ui()
+        write("app/src/test/kotlin/com/example/PreviewTest.kt", """
+            package com.example
+            class PreviewTest(val preview: ComposablePreview<AndroidPreviewInfo>) {
+                companion object { fun previews() = AndroidComposablePreviewScanner().scanPackageTrees("com.example", "com.other").includePrivatePreviews().getPreviews() }
+                @get:Rule val paparazzi = Paparazzi()
+                @Test fun all() { paparazzi.snapshot { MyTheme { preview() } } }
+                @Test fun other() { paparazzi.snapshot { CheckoutScreen(1) } }
+                @Test fun mixed() { paparazzi.snapshot { preview(); CheckoutScreen(1) } }
+            }
+        """)
+        assertEquals(
+            listOf(Target.AllPreviews(listOf("com.example", "com.other"), includePrivate = true), Target.Uncovered("CheckoutScreen(1)"), Target.Uncovered("preview(); CheckoutScreen(1)")),
+            scan().map { it.target },
+        )
+    }
+
+    @Test fun filteredScannerIsUncovered() {
+        ui()
+        write("app/src/test/kotlin/com/example/PreviewTest.kt", """
+            package com.example
+            class PreviewTest(val preview: ComposablePreview<AndroidPreviewInfo>) {
+                companion object { fun previews() = AndroidComposablePreviewScanner().scanPackageTrees("com.example").filterPreviews { it.methodName.startsWith("A") }.getPreviews() }
+                @get:Rule val paparazzi = Paparazzi()
+                @Test fun all() { paparazzi.snapshot { preview() } }
+            }
+        """)
+        assertEquals(Target.Uncovered("filtered previews"), one().target)
+    }
+
+    @Test fun generatedPreviewTestsOptions() {
+        ui()
+        write("app/build.gradle.kts", "roborazzi { generateComposePreviewRobolectricTests { enable = true; packages = listOf(\"a\", \"b\"); includePrivatePreviews = true } }")
+        assertEquals(Target.AllPreviews(listOf("a", "b"), includePrivate = true), one(module(tool = SnapshotTool.ROBORAZZI)).target)
+        write("app/build.gradle.kts", "roborazzi { generateComposePreviewRobolectricTests { enable.set(true); packages.set(listOf(\"a\")); annotationFilter = listOf(\"x\") } }")
+        assertEquals(Target.Uncovered("filtered previews"), one(module(tool = SnapshotTool.ROBORAZZI)).target)
+        write("app/build.gradle.kts", "roborazzi { generateComposePreviewRobolectricTests { enable = true; packages = myPackages } }")
+        assertEquals(Target.Uncovered("filtered previews"), one(module(tool = SnapshotTool.ROBORAZZI)).target)
+    }
+
+    @Test fun backtickTestNames() {
+        ui()
+        roboTest("@Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)",
+            "    @Config(qualifiers = \"+night\")\n    @Test fun `renders checkout`() {\n        RuntimeEnvironment.setQualifiers(\"+de\")\n        composeTestRule.setContent { CheckoutPreview() }\n        composeTestRule.onRoot().captureRoboImage()\n    }\n" +
+                "    private fun `shoot it`() { captureRoboImage { CheckoutPreview() } }\n    @Test fun `uses helper`() { `shoot it`() }\n")
+        val t = scan(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(listOf(Target.Previews(listOf(checkout.fqn)), Target.Previews(listOf(checkout.fqn))), t.map { it.target })
+        assertEquals(roboPixel5, t[0].device)
+        assertEquals(TestSettings(locale = "de", night = true), t[0].settings)
+        assertEquals(listOf(12, 15), t.map { it.line })
+    }
+
+    @Test fun robolectricPropertiesWithoutQualifiersLooksFurtherUp() {
+        ui()
+        write("app/src/test/resources/com/example/robolectric.properties", "sdk=34\n")
+        write("app/src/test/resources/com/robolectric.properties", "qualifiers=w411dp-h891dp-xxhdpi\n")
+        roboTest("", roboMethod("a"))
+        assertEquals(TestDevices.parseQualifiers("w411dp-h891dp-xxhdpi").first, one(module(tool = SnapshotTool.ROBORAZZI)).device)
+    }
+
+    @Test fun nestedHelpersKeepTheTestScope() {
+        ui()
+        write("app/src/test/kotlin/com/example/T.kt", """
+            package com.example
+            @Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)
+            class T {
+                private fun inner() { captureRoboImage { CheckoutPreview() } }
+                @Config(qualifiers = "+notnight")
+                private fun outer() { inner() }
+                private fun unused() { captureRoboImage { CheckoutPreview() } }
+                @Config(qualifiers = "+night")
+                @Test fun a() { outer() }
+                @Test fun b() { outer() }
+            }
+        """)
+        val t = scan(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(listOf(7, 9, 10), t.map { it.line })
+        assertEquals(DeviceSource.Unresolved("helper unused"), t[0].device)
+        assertEquals(roboPixel5, t[1].device); assertEquals(TestSettings(night = true), t[1].settings)
+        assertEquals(roboPixel5, t[2].device); assertEquals(TestSettings(), t[2].settings)
+        assertTrue(t.all { it.target == Target.Previews(listOf(checkout.fqn)) })
+    }
+
+    @Test fun paparazziRenderingMode() {
+        ui()
+        paparazziTest("paparazzi.snapshot { CheckoutPreview() }", rule = "Paparazzi(deviceConfig = DeviceConfig.PIXEL_5, renderingMode = SessionParams.RenderingMode.SHRINK)")
+        assertEquals(DeviceSource.Unresolved("renderingMode=SHRINK"), one().device)
+        paparazziTest("paparazzi.unsafeUpdateConfig(renderingMode = RenderingMode.NORMAL)\n        paparazzi.snapshot { CheckoutPreview() }",
+            rule = "Paparazzi(deviceConfig = DeviceConfig.PIXEL_5, renderingMode = SessionParams.RenderingMode.SHRINK)")
+        assertEquals(pixel5, one().device)
+        paparazziTest("paparazzi.unsafeUpdateConfig(renderingMode = SessionParams.RenderingMode.V_SCROLL)\n        paparazzi.snapshot { CheckoutPreview() }")
+        assertEquals(DeviceSource.Unresolved("renderingMode=V_SCROLL"), one().device)
     }
 }
