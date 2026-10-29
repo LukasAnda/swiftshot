@@ -125,6 +125,9 @@ object TestDevices {
             "keysexposed keyshidden keyssoft nokeys qwerty 12key navexposed navhidden nonav dpad trackball wheel feminine masculine neuter"
         ).split(' ').toSet()
 
+    /** The qualifier string behind `RobolectricDeviceQualifiers.[name]`. */
+    internal fun robolectricConstant(name: String): String? = constants[name] as String?
+
     fun parseQualifiers(qualifiers: String): Pair<DeviceSource, TestSettings> {
         val q = qualifiers.trim().removeSurrounding("\"")
         Regex("""^(?:com\.github\.takahirom\.roborazzi\.)?RobolectricDeviceQualifiers\.(\w+)$""").matchEntire(q)?.let {

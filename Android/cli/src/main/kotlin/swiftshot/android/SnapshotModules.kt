@@ -175,8 +175,8 @@ object SnapshotModules {
         return result
     }
 
-    /** The source with `//`, `/* */` (and with [hash], `#`) comments blanked; strings are kept. */
-    internal fun strip(src: String, hash: Boolean = false): String {
+    /** The source with `//`, `/* */` (and with [hash], `#`) comments blanked; strings are kept unless [strings], which blanks their contents. */
+    internal fun strip(src: String, hash: Boolean = false, strings: Boolean = false): String {
         val out = src.toCharArray()
         val n = src.length
         fun blank(a: Int, b: Int) { for (k in a until minOf(b, n)) if (out[k] != '\n') out[k] = ' ' }
@@ -191,6 +191,7 @@ object SnapshotModules {
                     val q = if (src.startsWith("$c$c$c", i)) "$c$c$c" else "$c"
                     var j = i + q.length
                     while (j < n && !src.startsWith(q, j)) { if (src[j] == '\\' && q.length == 1) j++ else if (q.length == 1 && src[j] == '\n') break; j++ }
+                    if (strings) blank(i + q.length, j)
                     i = minOf(n, j + q.length)
                 }
                 else -> i++
