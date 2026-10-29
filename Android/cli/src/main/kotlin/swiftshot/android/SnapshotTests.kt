@@ -62,20 +62,44 @@ object SnapshotTests {
         "TABLET" to "spec:width=1280dp,height=800dp,dpi=240", "DESKTOP" to "spec:width=1920dp,height=1080dp,dpi=160",
     )
 
-    /** The `@Preview` functions in the main/common sources of [module] and the modules it depends on with `project(...)`. */
-    fun previews(module: SnapshotModule, all: Map<String, File>): List<SourcePreview> {
-        val modules = linkedMapOf(module.path to module.dir)
-        dependencies(module.path, module.dir, all).forEach { (p, d) -> modules.putIfAbsent(p, d) }
-        val sources = modules.mapValues { (_, d) -> mainSources(d).map(::KotlinSource) }
-        val multipreviews = multipreviews((all.values + module.dir).distinct().flatMap(::mainSources).filter { it.readText().contains("annotation") }.map(::KotlinSource))
-        return sources.flatMap { (path, srcs) -> srcs.flatMap { previewsIn(path, it, multipreviews) } }
-            .distinct().sortedWith(compareBy({ it.module }, { it.fqn }))
+    /** The sources of one run, each file read once: parsed files, multipreviews and each module's previews. */
+    class Sources(private val all: Map<String, File>) {
+        private val texts = HashMap<File, String>()
+        private val parsed = HashMap<File, KotlinSource>()
+        private fun text(f: File) = texts.getOrPut(f) { f.readText() }
+        private val byModule = HashMap<String, List<SourcePreview>>()
+        private val byFile = HashMap<File, List<SourcePreview>>()
+        internal fun source(f: File) = parsed.getOrPut(f) { KotlinSource(f, text(f)) }
+        private fun annotations(dirs: Collection<File>) = multipreviews(dirs.distinct().flatMap(::mainSources).filter { text(it).contains("annotation") }.map(::source))
+        private val everywhere by lazy { annotations(all.values) }
+
+        internal fun previews(module: SnapshotModule): List<SourcePreview> = byModule.getOrPut(module.path) {
+            val multipreviews = if (module.dir in all.values) everywhere else annotations(all.values + module.dir)
+            closure(module.path, module.dir, all).flatMap { (path, d) -> mainSources(d).flatMap { f -> if (multipreviews === everywhere) byFile.getOrPut(f) { previewsIn(path, source(f), multipreviews) } else previewsIn(path, source(f), multipreviews) } }
+                .distinct().sortedWith(compareBy({ it.module }, { it.fqn }))
+        }
     }
 
+    /** The `@Preview` functions in the main/common sources of [module] and the modules it depends on with `project(...)`, directly or through others. */
+    fun previews(module: SnapshotModule, all: Map<String, File>, sources: Sources = Sources(all)): List<SourcePreview> = sources.previews(module)
+
     /** [all] is every project of the build (path → dir); by default read from the settings file above the modules. */
-    fun scan(modules: List<SnapshotModule>, previews: List<SourcePreview>, all: Map<String, File>? = null): List<SnapshotTest> {
+    fun scan(modules: List<SnapshotModule>, previews: List<SourcePreview>, all: Map<String, File>? = null, sources: Sources? = null): List<SnapshotTest> {
         if (modules.isEmpty()) return emptyList()
-        return Scan(modules, Resolver(previews), all ?: projectsAround(modules)).tests()
+        val projects = all ?: projectsAround(modules)
+        return Scan(modules, Resolver(previews), projects, sources ?: Sources(projects)).tests()
+    }
+
+    /** [path] and every module it depends on, directly or through others. */
+    private fun closure(path: String, dir: File, all: Map<String, File>): Map<String, File> {
+        val seen = linkedMapOf<String, File>()
+        val queue = ArrayDeque(listOf(path to dir))
+        while (queue.isNotEmpty()) {
+            val (p, d) = queue.removeFirst()
+            if (seen.putIfAbsent(p, d) != null) continue
+            dependencies(p, d, all).forEach { queue.addLast(it.key to it.value) }
+        }
+        return seen
     }
 
     private fun projectsAround(modules: List<SnapshotModule>): Map<String, File> {
@@ -307,25 +331,20 @@ object SnapshotTests {
         }
     }
 
-    private class Scan(val modules: List<SnapshotModule>, val resolver: Resolver, val all: Map<String, File>) {
+    private class Scan(val modules: List<SnapshotModule>, val resolver: Resolver, val all: Map<String, File>, val sources: Sources) {
         val tests: List<FileScan> = modules.flatMap { m ->
             // testFixtures holds helpers other modules' tests call: read with the library sources, not as tests.
             File(m.dir, "src").listFiles { f -> f.isDirectory && f.name.contains("test", ignoreCase = true) && f.name != "testFixtures" }.orEmpty().sortedBy { it.name }
-                .flatMap { d -> sourceFiles(d).map { FileScan(KotlinSource(it), m.path, m.dir, d.name, true, m.tools) } }
+                .flatMap { d -> sourceFiles(d).map { FileScan(sources.source(it), m.path, m.dir, d.name, true, m.tools) } }
         }
 
         /** Main sources of the snapshot modules and of every module they depend on (and its test fixtures). */
         val library: List<FileScan> = run {
             val seen = linkedMapOf<String, File>()
-            val queue = ArrayDeque(modules.map { it.path to it.dir })
-            while (queue.isNotEmpty()) {
-                val (p, d) = queue.removeFirst()
-                if (seen.putIfAbsent(p, d) != null) continue
-                dependencies(p, d, all).forEach { queue.addLast(it.key to it.value) }
-            }
+            for (m in modules) closure(m.path, m.dir, all).forEach { (p, d) -> seen.putIfAbsent(p, d) }
             seen.flatMap { (p, d) ->
                 File(d, "src").listFiles { f -> f.isDirectory && (!f.name.contains("test", ignoreCase = true) || f.name == "testFixtures") }.orEmpty().sortedBy { it.name }
-                    .flatMap { s -> sourceFiles(s).filter { it.extension == "kt" }.map { FileScan(KotlinSource(it), p, d, s.name, false, emptySet()) } }
+                    .flatMap { s -> sourceFiles(s).filter { it.extension == "kt" }.map { FileScan(sources.source(it), p, d, s.name, false, emptySet()) } }
             }
         }
         val files = tests + library

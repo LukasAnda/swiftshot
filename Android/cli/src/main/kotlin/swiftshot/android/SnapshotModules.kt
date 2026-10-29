@@ -42,9 +42,9 @@ object SnapshotModules {
         return result
     }
 
-    fun find(root: File): List<SnapshotModule> {
+    fun find(root: File, projects: Map<String, File> = projects(root)): List<SnapshotModule> {
         val ctx = Context(root.absoluteFile.normalize())
-        return projects(root).mapNotNull { (path, dir) -> module(ctx, path, dir) }.sortedBy { it.path }
+        return projects.mapNotNull { (path, dir) -> module(ctx, path, dir) }.sortedBy { it.path }
     }
 
     private fun settings(dir: File) = listOf("settings.gradle.kts", "settings.gradle").map { File(dir, it) }.firstOrNull { it.isFile }

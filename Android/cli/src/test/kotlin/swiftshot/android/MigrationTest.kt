@@ -478,5 +478,20 @@ class MigrationTest {
         assertTrue(r.containsAll(listOf("Devices:", "  none (no test renders a preview)")), r.joinToString("\n"))
         assertFalse(r.any { it.contains("string resources also have") }, r.joinToString("\n"))
     }
-}
 
+    // Final review
+
+    @Test fun previewsInTransitiveDependencies() {
+        settings(":app", ":feature", ":core:ui")
+        write("app/build.gradle.kts", "plugins { id(\"com.android.library\"); id(\"app.cash.paparazzi\") }\ndependencies { implementation(project(\":feature\")) }")
+        write("feature/build.gradle.kts", "plugins { id(\"com.android.library\") }\ndependencies { api(project(\":core:ui\")) }")
+        write("core/ui/build.gradle.kts", "plugins { id(\"com.android.library\") }")
+        write("core/ui/src/main/kotlin/com/example/ui/Card.kt", "package com.example.ui\n@Preview @Composable fun CardPreview() {}")
+        paparazziTest("CardTest", "DeviceConfig.PIXEL_5", "CardPreview()")
+        File(dir, "app/src/test/kotlin/com/example/CardTest.kt").apply { writeText(readText().replace("package com.example\n", "package com.example\nimport com.example.ui.CardPreview\n")) }
+        val c = init()
+        assertEquals(listOf(":core:ui"), c["modules"])
+        assertEquals(listOf(ScreenRule("com.example.ui.CardKt.CardPreview", devices = listOf("Pixel 5")), ScreenRule("*", skip = true)), options().screens)
+        assertEquals(1 to 1, Migration.run(dir)!!.let { it.covered to it.total })
+    }
+}

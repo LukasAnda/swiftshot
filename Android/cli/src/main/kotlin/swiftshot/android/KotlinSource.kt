@@ -32,7 +32,7 @@ internal class Loop(val over: IntRange, val body: IntRange)
  * A Kotlin (or Java) source file read as text: [code] has comments blanked, [mask] string contents too, with the
  * same offsets. Brackets are matched once; declarations, imports, annotations and calls are read from [mask].
  */
-internal class KotlinSource(val file: File) {
+internal class KotlinSource(val file: File, text: String = file.readText()) {
     val code: String
     val mask: String
     private val closeAt: IntArray
@@ -40,7 +40,6 @@ internal class KotlinSource(val file: File) {
     private val lineStarts: List<Int>
 
     init {
-        val text = file.readText()
         code = SnapshotModules.strip(text)
         mask = SnapshotModules.strip(text, strings = true)
         closeAt = IntArray(mask.length) { -1 }; openAt = IntArray(mask.length) { -1 }

@@ -15,10 +15,11 @@ object Migration {
 
     /** Null when the project has neither tool. */
     fun run(root: File): MigrationResult? {
-        val modules = SnapshotModules.find(root).ifEmpty { return null }
         val all = SnapshotModules.projects(root)
-        val previews = modules.flatMap { SnapshotTests.previews(it, all) }.distinct()
-        return plan(root, modules, SnapshotTests.scan(modules, previews, all), previews)
+        val modules = SnapshotModules.find(root, all).ifEmpty { return null }
+        val sources = SnapshotTests.Sources(all)
+        val previews = modules.flatMap { SnapshotTests.previews(it, all, sources) }.distinct()
+        return plan(root, modules, SnapshotTests.scan(modules, previews, all, sources), previews, all, sources)
     }
 
     private fun platform(t: SnapshotTest) = when {
@@ -75,12 +76,14 @@ object Migration {
             o.fontScale != null && "fontScale" !in own && o.fontScale != (t.settings.fontScale ?: 1.0)
     }
 
-    fun plan(root: File, modules: List<SnapshotModule>, tests: List<SnapshotTest>, previews: List<SourcePreview>): MigrationResult {
-        val all = SnapshotModules.projects(root)
+    fun plan(
+        root: File, modules: List<SnapshotModule>, tests: List<SnapshotTest>, previews: List<SourcePreview>,
+        all: Map<String, File> = SnapshotModules.projects(root), sources: SnapshotTests.Sources = SnapshotTests.Sources(all),
+    ): MigrationResult {
         val covered = tests.filter { it.target !is Target.Uncovered }
         val scans = covered.filter { it.target is Target.AllPreviews }
         // What a preview scanner in a module sees: the previews of the module and of the modules it depends on.
-        val visible = scans.map { it.module }.distinct().associateWith { m -> modules.first { it.path == m }.let { SnapshotTests.previews(it, all) }.map { it.fqn }.toSet() }
+        val visible = scans.map { it.module }.distinct().associateWith { m -> modules.first { it.path == m }.let { SnapshotTests.previews(it, all, sources) }.map { it.fqn }.toSet() }
         fun inPackages(fqn: String, packages: List<String>) = packages.isEmpty() || packages.any { fqn.startsWith("$it.") }
         fun covers(t: SnapshotTest, p: SourcePreview) = when (val g = t.target) {
             is Target.Previews -> p.fqn in g.fqns
@@ -88,6 +91,7 @@ object Migration {
             else -> false
         }
         val covering = previews.associateWith { p -> covered.filter { covers(it, p) }.toSet() }
+        val byFqn = previews.groupBy { it.fqn }
 
         val stringLanguages = (modules.map { it.dir } + previews.mapNotNull { all[it.module] }).distinct().flatMap { Init.languages(it) }.distinct()
             .sortedWith(enFirst).ifEmpty { listOf("en-US") }
@@ -137,7 +141,7 @@ object Migration {
         // A preview gets its own rule when the tests that render it aren't the ones the package rules give it.
         // So does one a scanner renders on a fixed device or with settings that replace the preview's own.
         val specific = previews.filter { p -> covering.getValue(p) != implied(p) || covering.getValue(p).any { it.target is Target.AllPreviews && fixes(it) && replaces(p, it) } }.distinctBy { it.fqn }.sortedBy { it.fqn }
-            .map { p -> rule(p.fqn, previews.filter { it.fqn == p.fqn }.flatMap { covering.getValue(it) }.toSet(), p) }
+            .map { p -> rule(p.fqn, byFqn.getValue(p.fqn).flatMap { covering.getValue(it) }.toSet(), p) }
         val screens = specific + packages.map { rule("$it.*", globTests.getValue(it)) } + rule("*", everything)
 
         val android = covered.filter { platform(it) == "android" }
@@ -154,7 +158,7 @@ object Migration {
         // Previews tested on fewer platforms than the config renders: rules can't say per platform.
         val renderedPlatforms = if (narrower) testPlatforms else projectPlatforms + testPlatforms
         val mixed = previews.distinctBy { it.fqn }.mapNotNull { p ->
-            val on = previews.filter { it.fqn == p.fqn }.flatMap { covering.getValue(it) }.map(::platform).toSet()
+            val on = byFqn.getValue(p.fqn).flatMap { covering.getValue(it) }.map(::platform).toSet()
             if (on.isEmpty() || on == renderedPlatforms) null else p.fqn to on
         }
         val fastlane = File(root, "fastlane").isDirectory
