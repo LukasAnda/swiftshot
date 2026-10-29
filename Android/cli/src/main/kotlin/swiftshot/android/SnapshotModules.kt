@@ -51,7 +51,8 @@ object SnapshotModules {
 
     private fun buildFile(dir: File) = listOf("build.gradle.kts", "build.gradle").map { File(dir, it) }.firstOrNull { it.isFile }
 
-    private fun isPluginBuild(dir: File) = walk(dir).filter { it.name == "build.gradle.kts" || it.name == "build.gradle" }
+    /** A build of Gradle plugins; builds nested in it (their own settings file) don't count. */
+    private fun isPluginBuild(dir: File) = dir.walkTopDown().onEnter { it == dir || it.name !in skipped && settings(it) == null }.filter { it.isFile }.filter { it.name == "build.gradle.kts" || it.name == "build.gradle" }
         .any { f -> strip(f.readText()).let { it.contains("gradlePlugin") || it.contains("kotlin-dsl") || it.contains("java-gradle-plugin") } }
 
     private fun walk(dir: File) = dir.walkTopDown().onEnter { it.name !in skipped }.filter { it.isFile }

@@ -18,10 +18,10 @@
 
 ## Not covered
 
-- feature/home/impl/src/test/kotlin/fr/smarquis/playground/feature/home/HomeScreenshotTest.kt:23  helper screenshot has no @Preview — add a @Preview with the same arguments to include it
-- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:19  helper screenshot has no @Preview — add a @Preview with the same arguments to include it
-- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:22  helper screenshot has no @Preview — add a @Preview with the same arguments to include it
-- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:25  helper screenshot has no @Preview — add a @Preview with the same arguments to include it
+- feature/home/impl/src/test/kotlin/fr/smarquis/playground/feature/home/HomeScreenshotTest.kt:23  couldn't be read: helper screenshot
+- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:19  couldn't be read: helper screenshot
+- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:22  couldn't be read: helper screenshot
+- feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:25  couldn't be read: helper screenshot
 
 ## Not tested, skipped
 

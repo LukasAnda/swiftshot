@@ -120,6 +120,12 @@ class TestDevicesTest {
         assertIs<DeviceSource.Unresolved>(TestDevices.parseQualifiers("w411dp-bogus").first)
     }
 
+    @Test fun pixelSizeOnlyWithDensityAndNothingElseOnScreen() {
+        assertEquals(Screen(1080, 2340, 440), read(TestDevices.parseQualifiers("1080x2340-440dpi").first))
+        for (q in listOf("1080x2340", "w411dp-1080x2340-440dpi", "1080x2340-land-440dpi", "1080x2340-port-440dpi", "large-1080x2340-440dpi", "long-1080x2340-440dpi"))
+            assertIs<DeviceSource.Unresolved>(TestDevices.parseQualifiers(q).first, q)
+    }
+
     @Test fun roundTripThroughDevices() {
         val screens = presets.keys.map { recorded(it as String) } + constants.values.map { read(TestDevices.parseQualifiers(it as String).first) } +
             listOf(TestDevices.robolectricDefault(), Screen(1081, 2401, 420), Screen(2340, 1080, 440, landscape = true), Screen(384, 384, 320, round = true))

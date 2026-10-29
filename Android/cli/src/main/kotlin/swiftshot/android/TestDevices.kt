@@ -174,6 +174,8 @@ object TestDevices {
             if (screen) screenTokens += t
         }
         val settings = TestSettings(locale = locale, night = night)
+        // A pixel size is read only with a density and no other screen qualifier.
+        if (px != null && (dpi == null || screenTokens.any { it != "round" && it != "notround" && it !in densities && !Regex("""\d+(?:dpi|x\d+)""").matches(it) })) return unresolved
         // A `+` string adds to qualifiers set elsewhere (the class, robolectric.properties), so its screen isn't known.
         if (q.startsWith("+") && screenTokens.isNotEmpty()) return unresolved
         // Robolectric's DeviceConfig.applyRules: missing dp from the screen size, long stretches the default height 1.25×.

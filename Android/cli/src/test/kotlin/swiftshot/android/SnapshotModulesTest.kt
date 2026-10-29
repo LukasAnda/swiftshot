@@ -174,6 +174,18 @@ class SnapshotModulesTest {
         assertEquals(listOf(":shared:lib"), find().map { it.path })
     }
 
+    @Test fun includedBuildWithItsOwnBuildLogicIsScanned() {
+        write("settings.gradle.kts", """includeBuild("shared")""")
+        write("shared/settings.gradle.kts", "pluginManagement { includeBuild(\"build-logic\") }\ninclude(\":lib\")")
+        write("shared/build-logic/settings.gradle.kts", """include(":convention")""")
+        write("shared/build-logic/convention/build.gradle.kts", """plugins { `kotlin-dsl` }""")
+        write("shared/lib/build.gradle.kts", """plugins { id("$paparazzi") }""")
+        assertEquals(listOf(":shared:lib"), find().map { it.path })
+        // An included build that is itself a plugin build is still skipped.
+        write("shared/build.gradle.kts", """plugins { `kotlin-dsl` }""")
+        assertEquals(emptyList(), find().map { it.path })
+    }
+
     @Test fun noTools() {
         write("settings.gradle.kts", """include(":app")""")
         write("app/build.gradle.kts", """plugins { id("com.android.application") }""")

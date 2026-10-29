@@ -251,7 +251,9 @@ object Migration {
         val uncovered = tests.filter { it.target is Target.Uncovered }
         if (uncovered.isNotEmpty()) {
             report += "Not covered:"
-            for (t in uncovered) report += "  ${at(t)}  ${(t.target as Target.Uncovered).call} has no @Preview — add a @Preview with the same arguments to include it"
+            fun why(call: String) = if (call.startsWith("helper ") || call.startsWith("loop over ") || call == "filtered previews" || call == "DeviceConfigurationOverride") "couldn't be read: $call"
+                else "$call has no @Preview — add a @Preview with the same arguments to include it"
+            for ((line, n) in uncovered.groupingBy { "  ${at(it)}  ${why((it.target as Target.Uncovered).call)}" }.eachCount()) report += if (n > 1) "$line (×$n)" else line
         }
         val untested = previews.filter { covering.getValue(it).isEmpty() }
         if (untested.isNotEmpty()) {

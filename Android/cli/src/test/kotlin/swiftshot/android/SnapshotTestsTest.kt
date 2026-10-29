@@ -1165,4 +1165,14 @@ class SnapshotTestsTest {
         assertEquals(2, t.size, t.toString())
         assertTrue(t.all { it.device is DeviceSource.Unresolved }, t.toString())
     }
+
+    @Test fun deepHelperChainIsCountedNotDropped() {
+        ui()
+        val helpers = (1..12).joinToString("\n") { "    private fun h$it() { ${if (it == 12) "paparazzi.snapshot { CheckoutPreview() }" else "h${it + 1}()"} }" }
+        paparazziTest("h1()\n    }\n$helpers\n    fun x() {")
+        val t = scan().filter { it.line == 6 }
+        assertEquals(1, t.size, scan().toString())
+        assertIs<Target.Uncovered>(t.single().target)
+        assertIs<DeviceSource.Unresolved>(t.single().device)
+    }
 }

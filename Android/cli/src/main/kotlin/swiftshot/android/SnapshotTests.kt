@@ -491,7 +491,9 @@ object SnapshotTests {
                 } ?: continue
                 when {
                     hf == null || hd == null -> out += Path(prefix + link, null, c.name)
-                    hd in seen || seen.size > 8 -> {}
+                    hd in seen -> {}
+                    // Too deep to follow: counted as not covered rather than dropped.
+                    seen.size > 8 -> out += Path(prefix + link, null, c.name)
                     else -> out += paths(hf, hd, prefix + link, seen + hd)
                 }
             }

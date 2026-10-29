@@ -543,4 +543,24 @@ class MigrationTest {
             "  com.example.UiKt.Screen: the full $pixel5 screen with system UI; Roborazzi captured the content only",
         ), r.drop(at + 1).takeWhile { it.startsWith("  ") })
     }
+
+    @Test fun notCoveredSaysWhyAndCountsRepeats() {
+        settings(":app")
+        paparazzi()
+        write("app/src/main/kotlin/com/example/Ui.kt", "package com.example\n@Preview @Composable fun P() {}\n@Composable fun CheckoutScreen(state: Int) {}")
+        write("app/src/test/kotlin/com/example/LoopTest.kt", """
+            package com.example
+            class LoopTest {
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5)
+                @Test fun a() { devices().forEach { paparazzi.snapshot { P() } } }
+                @Test fun b() { listOf(1, 2, 3).forEach { paparazzi.snapshot { CheckoutScreen(it) } } }
+            }
+        """)
+        val r = lines()
+        val at = r.indexOf("Not covered:")
+        assertEquals(listOf(
+            "  app/src/test/kotlin/com/example/LoopTest.kt:4  couldn't be read: loop over devices()",
+            "  app/src/test/kotlin/com/example/LoopTest.kt:5  CheckoutScreen(it) has no @Preview — add a @Preview with the same arguments to include it (×3)",
+        ), r.drop(at + 1).takeWhile { it.startsWith("  ") }, r.joinToString("\n"))
+    }
 }
