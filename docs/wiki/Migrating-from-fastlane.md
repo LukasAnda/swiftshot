@@ -1,3 +1,7 @@
+# Migrating
+
+From fastlane snapshot and screengrab, Paparazzi and Roborazzi.
+
 - [fastlane snapshot (iOS)](#fastlane-snapshot-ios)
 - [fastlane screengrab (Android)](#fastlane-screengrab-android)
 - [Paparazzi and Roborazzi](#paparazzi-and-roborazzi)
@@ -104,8 +108,9 @@ you want: `@Preview(name = "01 Welcome", showSystemUi = true)` gives
 
 ## Paparazzi and Roborazzi
 
-Swiftshot renders `@Preview`s with the same layoutlib renderer, so a screenshot test that calls a
-previewed composable can be replaced by the preview, on the same device and settings.
+Swiftshot renders `@Preview`s with layoutlib, the renderer Paparazzi uses (Roborazzi renders with
+Robolectric), so a screenshot test that calls a previewed composable can be replaced by the preview,
+on the same device and settings.
 
 Run `swiftshot init` in the project. It never runs Gradle and removes nothing: Paparazzi and
 Roborazzi stay in the project, and only `swiftshot.json` and `swiftshot-migration.md` are written.
@@ -115,8 +120,9 @@ Roborazzi stay in the project, and only `swiftshot.json` and `swiftshot-migratio
 - Modules that use either tool: the plugin, a version-catalog alias, a convention plugin
   (`build-logic`, `buildSrc`, included builds) or test imports.
 - Each test's device: Paparazzi `DeviceConfig` presets and custom configs, Robolectric and
-  Roborazzi qualifiers, `RobolectricDeviceQualifiers`, `robolectric.properties` and
-  `@Config(qualifiers = ...)` spec strings. A device it can't read is reported, never guessed.
+  Roborazzi qualifier strings (`@Config(qualifiers = ...)`, `setQualifiers`),
+  `RobolectricDeviceQualifiers` and `robolectric.properties`. A device it can't read is reported,
+  never guessed.
 - Languages, only what the tests set. If none do, `en-US`, and the app's other string-resource
   languages are listed for you to add.
 
@@ -132,7 +138,10 @@ The same report is printed and saved. It lists:
 
 - the modules found and the device each test uses (labelled "tool default", "from @Preview" or
   "unresolved" when it was not read from the test)
-- tests without a matching `@Preview`: add a `@Preview` with the same arguments to include them
+- tests without a matching `@Preview` (add a `@Preview` with the same arguments to include them),
+  and tests it couldn't read
+- previews whose screenshot size differs from the old tool's (Paparazzi renders the full screen;
+  Swiftshot crops to the content unless the `@Preview` sets `showSystemUi`)
 - previews no test covers, which are skipped
 
 ### Side by side
