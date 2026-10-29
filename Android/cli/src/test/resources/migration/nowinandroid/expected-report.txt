@@ -130,4 +130,6 @@
 - com.google.samples.apps.nowinandroid.feature.topic.impl.TopicScreenKt.TopicScreenLoading (:feature:topic:impl)
 - com.google.samples.apps.nowinandroid.feature.topic.impl.TopicScreenKt.TopicScreenPopulated (:feature:topic:impl)
 
+No snapshot test is covered by a @Preview, so swiftshot.json renders every preview like a new setup
+
 0 of 55 snapshot tests are covered by previews; 55 aren't (listed above)

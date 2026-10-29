@@ -26,4 +26,6 @@
 - cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:217  PopupScaffold( shadowElevation = CascadeDefaults.shadowElevation + 20.dp, minSdkReader = { minSdk }, ) { DropdownMenuIt… has no @Preview — add a @Preview with the same arguments to include it
 - cascade-compose/src/test/java/me/saket/cascade/RobolectricCompatibilityTest.kt:103  captureDeviceScreenshot().captureRoboImage() has no @Preview — add a @Preview with the same arguments to include it
 
+No snapshot test is covered by a @Preview, so swiftshot.json renders every preview like a new setup
+
 0 of 9 snapshot tests are covered by previews; 9 aren't (listed above)

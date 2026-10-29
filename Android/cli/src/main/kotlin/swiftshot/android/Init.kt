@@ -18,12 +18,18 @@ object Init {
         val settings = listOf("settings.gradle.kts", "settings.gradle").map { File(root, it) }.firstOrNull { it.isFile }
             ?: throw CliError("No settings.gradle(.kts) in $root.")
         Migration.run(root)?.let { r ->
-            write(target, r.config, log)
+            // Nothing covered: a config that skips every preview would render nothing, so the regular one.
+            write(target, if (r.covered == 0) regular(root, settings) else r.config, log)
             Migration.print(r, log)
             val md = File(root, "swiftshot-migration.md").apply { writeText(Migration.markdown(r)) }
             log.ok("Wrote $md")
             return 0
         }
+        return write(target, regular(root, settings), log)
+    }
+
+    /** What init writes without Paparazzi or Roborazzi. */
+    private fun regular(root: File, settings: File): Map<String, Any?> {
         val text = settings.readText()
         val dirs = projects(text, root)
         val dir = { m: String -> dirs[m] ?: File(root, m.trim(':').replace(':', '/')) }
@@ -36,7 +42,7 @@ object Init {
         val languages = modules.flatMap { languages(dir(it)) }.distinct()
             .sortedWith(compareBy({ it != "en-US" }, { it })).ifEmpty { listOf("en-US") }
         val fastlane = File(root, "fastlane").isDirectory
-        val config = linkedMapOf<String, Any?>(
+        return linkedMapOf<String, Any?>(
             "modules" to modules.ifEmpty { null },
             "devices" to listOf("Pixel 10 Pro", "Pixel 9 Pro Fold", "Pixel Tablet"),
             "watch_devices" to if (wear.isNotEmpty()) Devices.defaultWatch else null,
@@ -48,7 +54,6 @@ object Init {
             "layout" to if (fastlane) "fastlane" else null,
             "clear_previous_screenshots" to true,
         ).filterValues { it != null }
-        return write(target, config, log)
     }
 
     private fun write(target: File, config: Map<String, Any?>, log: Log): Int {

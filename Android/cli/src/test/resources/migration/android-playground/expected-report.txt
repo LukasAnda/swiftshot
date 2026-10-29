@@ -31,4 +31,6 @@
 - fr.smarquis.playground.feature.licenses.LicensesScreenKt.LicensesScreenContentLoadingPreview (:feature:licenses:impl)
 - fr.smarquis.playground.feature.licenses.LicensesScreenKt.LicensesScreenContentPreview (:feature:licenses:impl)
 
+No snapshot test is covered by a @Preview, so swiftshot.json renders every preview like a new setup
+
 0 of 4 snapshot tests are covered by previews; 4 aren't (listed above)

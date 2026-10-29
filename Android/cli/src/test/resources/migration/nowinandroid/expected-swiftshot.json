@@ -1,13 +1,26 @@
 {
+  "modules": [
+    ":core:designsystem",
+    ":core:ui",
+    ":feature:foryou:impl",
+    ":feature:interests:impl",
+    ":feature:bookmarks:impl",
+    ":feature:topic:impl",
+    ":feature:search:impl",
+    ":feature:settings:impl"
+  ],
+  "devices": [
+    "Pixel 10 Pro",
+    "Pixel 9 Pro Fold",
+    "Pixel Tablet"
+  ],
   "languages": [
     "en-US"
   ],
+  "appearances": [
+    "light",
+    "dark"
+  ],
   "output_directory": "screenshots",
-  "clear_previous_screenshots": true,
-  "screens": [
-    {
-      "preview": "*",
-      "skip": true
-    }
-  ]
+  "clear_previous_screenshots": true
 }

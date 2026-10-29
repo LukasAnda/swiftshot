@@ -476,8 +476,14 @@ class MigrationTest {
                 @Test fun a() { composeTestRule.setContent { Screen(1) }; composeTestRule.onRoot().captureRoboImage() }
             }
         """)
-        init()
+        val c = init()
+        // Today's regular init config, not one that renders nothing.
+        assertEquals(listOf("modules", "devices", "languages", "appearances", "output_directory", "clear_previous_screenshots"), c.keys.toList())
+        assertEquals(listOf(":app"), c["modules"])
+        assertEquals(listOf("light", "dark"), c["appearances"])
         val r = lines()
+        assertTrue(r.contains("No snapshot test is covered by a @Preview, so swiftshot.json renders every preview like a new setup"), r.joinToString("\n"))
+        assertTrue(report().contains("No snapshot test is covered by a @Preview"), report())
         assertTrue(r.containsAll(listOf("Devices:", "  none (no test renders a preview)")), r.joinToString("\n"))
         assertFalse(r.any { it.contains("string resources also have") }, r.joinToString("\n"))
     }

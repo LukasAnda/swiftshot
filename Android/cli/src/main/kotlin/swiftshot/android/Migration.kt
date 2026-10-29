@@ -258,6 +258,7 @@ object Migration {
             report += "Not tested, skipped:"
             for (p in untested) report += "  ${p.fqn} (${p.module})"
         }
+        if (covered.isEmpty()) report += "No snapshot test is covered by a @Preview, so swiftshot.json renders every preview like a new setup"
         val missing = tests.size - covered.size
         report += "${covered.size} of ${tests.size} snapshot tests are covered by previews" +
             if (missing == 0) "" else "; $missing ${if (missing == 1) "isn't" else "aren't"} (listed above)"
