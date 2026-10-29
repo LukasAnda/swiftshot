@@ -181,9 +181,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - uses: LukasAnda/swiftshot@v0.7.0
+      - uses: LukasAnda/swiftshot@v0.8.0
         with:
-          version: 0.7.0      # or "latest"
+          version: 0.8.0      # or "latest"
       - uses: actions/upload-artifact@v7
         with: { name: ios-screenshots, path: fastlane/screenshots }
 
@@ -193,9 +193,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.7.0
+      - uses: LukasAnda/swiftshot@v0.8.0
         with:
-          version: 0.7.0
+          version: 0.8.0
       - uses: actions/upload-artifact@v7
         with: { name: android-screenshots, path: fastlane/metadata/android }
 ```
@@ -206,7 +206,7 @@ The action installs the release and runs `swiftshot run` with your `swiftshot.js
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.7.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.8.0 sh
 ~/.swiftshot/bin/swiftshot run
 ```
 

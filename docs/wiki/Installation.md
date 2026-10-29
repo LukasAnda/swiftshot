@@ -50,7 +50,7 @@ export PATH="$HOME/.swiftshot/bin:$PATH"
 
 | variable | default | |
 |---|---|---|
-| `SWIFTSHOT_VERSION` | latest | release to install, e.g. `0.7.0` |
+| `SWIFTSHOT_VERSION` | latest | release to install, e.g. `0.8.0` |
 | `SWIFTSHOT_PREFIX` | `~/.swiftshot` | install location |
 | `SWIFTSHOT_ANDROID_ONLY` | | set on an Apple silicon Mac to install the Android package only |
 
@@ -89,7 +89,7 @@ run `bin/swiftshot-android`.
 ## Check it
 
 ```
-swiftshot --version    # swiftshot 0.7.0, or "swiftshot 0.7.0 (android)" in a Gradle project
+swiftshot --version    # swiftshot 0.8.0, or "swiftshot 0.8.0 (android)" in a Gradle project
 swiftshot devices      # iOS: installed runtimes and devices; in a Gradle project: Android devices
 ```
 

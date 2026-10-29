@@ -154,7 +154,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.7.0
+      - uses: LukasAnda/swiftshot@v0.8.0
       - uses: actions/upload-artifact@v7
         with: { name: screenshots, path: screenshots }
 ```
