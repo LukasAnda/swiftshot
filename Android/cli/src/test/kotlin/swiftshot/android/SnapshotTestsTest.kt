@@ -303,7 +303,7 @@ class SnapshotTestsTest {
         write("app/build.gradle.kts", "plugins { id(\"io.github.takahirom.roborazzi\") }\nroborazzi {\n    generateComposePreviewRobolectricTests {\n        enable = true\n        packages = listOf(\"com.example\")\n    }\n}")
         val t = one(module(tool = SnapshotTool.ROBORAZZI))
         assertEquals(Target.AllPreviews(listOf("com.example"), includePrivate = false), t.target)
-        assertEquals(DeviceSource.FromPreview, t.device)
+        assertEquals(DeviceSource.FromPreview(TestDevices.parseQualifiers("RobolectricDeviceQualifiers.Pixel4a").first), t.device)
         assertEquals(3, t.line)
         assertEquals(File(dir, "app/build.gradle.kts"), t.file)
     }
@@ -347,7 +347,9 @@ class SnapshotTestsTest {
         """)
         val t = scan()
         assertEquals(listOf(Target.AllPreviews(listOf("com.example"), false), Target.AllPreviews(listOf("com.example"), false)), t.map { it.target })
-        assertEquals(listOf(DeviceSource.FromPreview, DeviceSource.FromPreview), t.map { it.device })
+        // Paparazzi: no DeviceConfigBuilder in the sources, so its fallback can't be read. Roborazzi: the builder only sets
+        // qualifiers for previews with a device; the rest render on the class's setup (here Robolectric's default).
+        assertEquals(listOf(DeviceSource.FromPreview(null), DeviceSource.FromPreview(DeviceSource.ToolDefault(TestDevices.robolectricDefault(), SnapshotTool.ROBORAZZI))), t.map { it.device })
         assertEquals(setOf(SnapshotTool.PAPARAZZI, SnapshotTool.ROBORAZZI), t.map { it.tool }.toSet())
     }
 
@@ -390,7 +392,8 @@ class SnapshotTestsTest {
             }
         """)
         val t = scan()
-        assertEquals(listOf(Target.Uncovered("snap(CheckoutPreview())"), Target.Uncovered("snap { CheckoutPreview() }")), t.map { it.target })
+        // The lambda passed for `content` is followed into the helper; a non-lambda argument can't be.
+        assertEquals(listOf(Target.Uncovered("snap(CheckoutPreview())"), Target.Previews(listOf(checkout.fqn))), t.map { it.target })
         assertEquals(listOf(5, 7), t.map { it.line })
     }
 
@@ -417,7 +420,7 @@ class SnapshotTestsTest {
             }
         """)
         val t = scan(module(tool = SnapshotTool.ROBORAZZI))
-        assertEquals(listOf(Target.Uncovered("composeTestRule.shoot { CheckoutPreview() }"), Target.Previews(listOf(checkout.fqn))), t.map { it.target })
+        assertEquals(listOf(Target.Previews(listOf(checkout.fqn)), Target.Previews(listOf(checkout.fqn))), t.map { it.target })
         assertEquals(listOf(8, 9), t.map { it.line })
     }
 
@@ -540,5 +543,189 @@ class SnapshotTestsTest {
         assertEquals(pixel5, one().device)
         paparazziTest("paparazzi.unsafeUpdateConfig(renderingMode = SessionParams.RenderingMode.V_SCROLL)\n        paparazzi.snapshot { CheckoutPreview() }")
         assertEquals(DeviceSource.Unresolved("renderingMode=V_SCROLL"), one().device)
+    }
+
+    // Review round 2
+
+    @Test fun generatedPreviewTestsFallbackDevice() {
+        ui()
+        val m = module(tool = SnapshotTool.ROBORAZZI)
+        write("app/build.gradle.kts", "roborazzi { generateComposePreviewRobolectricTests { enable = true; robolectricConfig = mapOf(\"sdk\" to \"[34]\", \"qualifiers\" to \"RobolectricDeviceQualifiers.Pixel5\") } }")
+        assertEquals(DeviceSource.FromPreview(roboPixel5), one(m).device)
+        write("app/build.gradle.kts", "roborazzi { generateComposePreviewRobolectricTests { enable = true; robolectricConfig.set(mapOf(\"qualifiers\" to \"\\\"w400dp-h800dp-xhdpi\\\"\")) } }")
+        assertEquals(DeviceSource.FromPreview(TestDevices.parseQualifiers("w400dp-h800dp-xhdpi").first), one(m).device)
+        write("app/build.gradle.kts", "roborazzi { generateComposePreviewRobolectricTests { enable = true; robolectricConfig = mapOf(\"sdk\" to \"[34]\") } }")
+        assertEquals(DeviceSource.FromPreview(DeviceSource.ToolDefault(TestDevices.robolectricDefault(), SnapshotTool.ROBORAZZI)), one(m).device)
+        write("app/build.gradle.kts", "roborazzi { generateComposePreviewRobolectricTests { enable = true; robolectricConfig = mapOf(\"qualifiers\" to \"MY_QUALIFIERS\") } }")
+        assertEquals(DeviceSource.FromPreview(null), one(m).device)
+    }
+
+    @Test fun scannerFallbackFromProjectDeviceConfigBuilder() {
+        ui()
+        write("app/src/test/kotlin/com/example/DeviceConfigBuilder.kt", """
+            package com.example
+            object DeviceConfigBuilder {
+                fun build(previewDevice: String): DeviceConfig {
+                    val device = DevicePreviewInfoParser.parse(previewDevice) ?: return DeviceConfig.PIXEL_5
+                    return DeviceConfig(screenHeight = device.dimensions.height.toInt())
+                }
+            }
+        """)
+        write("app/src/test/kotlin/com/example/PreviewTest.kt", """
+            package com.example
+            class PreviewTest(val preview: ComposablePreview<AndroidPreviewInfo>) {
+                companion object { fun previews() = AndroidComposablePreviewScanner().scanPackageTrees("com.example").getPreviews() }
+                @get:Rule val paparazzi = Paparazzi()
+                @Test fun snapshot() {
+                    paparazzi.unsafeUpdateConfig(deviceConfig = DeviceConfigBuilder.build(preview.previewInfo.device))
+                    paparazzi.snapshot { preview() }
+                }
+            }
+        """)
+        assertEquals(DeviceSource.FromPreview(pixel5), one().device)
+    }
+
+    @Test fun roborazziPreviewCaptureFallsBackToTheClassSetup() {
+        ui()
+        roboTest("@Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)", """
+            |    @Test fun snapshot() { preview.captureRoboImage("a.png") }
+            |    companion object { fun values() = AndroidComposablePreviewScanner().scanPackageTrees("com.example").getPreviews() }
+            |    lateinit var preview: ComposablePreview<AndroidPreviewInfo>
+        """.trimMargin())
+        val t = one(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(Target.AllPreviews(listOf("com.example"), false), t.target)
+        assertEquals(DeviceSource.FromPreview(roboPixel5), t.device)
+    }
+
+    @Test fun deviceConfigurationOverride() {
+        ui()
+        paparazziTest(listOf(
+            "paparazzi.snapshot { DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(1.5f) then DeviceConfigurationOverride.DarkMode(true) then DeviceConfigurationOverride.Locales(LocaleList(\"de-DE\"))) { CheckoutPreview() } }",
+            "paparazzi.snapshot { DeviceConfigurationOverride(override = DeviceConfigurationOverride.ForcedSize(DpSize(400.dp, 800.dp))) { CheckoutPreview() } }",
+            "paparazzi.snapshot { DeviceConfigurationOverride(DeviceConfigurationOverride.RoundScreen(true)) { CheckoutPreview() } }",
+            "paparazzi.snapshot { DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(scale)) { CheckoutPreview() } }",
+            "paparazzi.snapshot { DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(2f)) { CheckoutScreen(1) } }",
+        ).joinToString("\n        "))
+        val t = scan()
+        assertEquals(Target.Previews(listOf(checkout.fqn)), t[0].target)
+        assertEquals(pixel5, t[0].device)
+        assertEquals(TestSettings(locale = "de-DE", night = true, fontScale = 1.5), t[0].settings)
+        assertEquals(Target.Previews(listOf(checkout.fqn)), t[1].target)
+        assertEquals(DeviceSource.Unresolved("DeviceConfigurationOverride.ForcedSize"), t[1].device)
+        assertEquals(Target.Uncovered("DeviceConfigurationOverride"), t[2].target)
+        assertEquals(Target.Uncovered("DeviceConfigurationOverride"), t[3].target)
+        assertIs<Target.Uncovered>(t[4].target)
+        assertEquals(TestSettings(), t[4].settings)
+    }
+
+    /** Now in Android's layout: a shared screenshot-testing module (no plugin) with multi-device helpers. */
+    private fun sharedHelpers() {
+        write("settings.gradle.kts", "include(\":feature\", \":core:screenshot-testing\")")
+        write("feature/build.gradle.kts", "dependencies { testImplementation(projects.core.screenshotTesting) }")
+        write("feature/src/main/kotlin/com/example/Ui.kt", "package com.example\n@Preview @Composable fun CheckoutPreview() {}")
+        write("core/screenshot-testing/src/main/kotlin/com/example/testing/ScreenshotHelper.kt", """
+            package com.example.testing
+            enum class DefaultTestDevices(val description: String, val spec: String) {
+                PHONE("phone", "spec:shape=Normal,width=640,height=360,unit=dp,dpi=480"),
+                FOLDABLE("foldable", "spec:shape=Normal,width=673,height=841,unit=dp,dpi=480"),
+                TABLET("tablet", "spec:shape=Normal,width=1280,height=800,unit=dp,dpi=480"),
+            }
+            fun <A : ComponentActivity> AndroidComposeTestRule<ActivityScenarioRule<A>, A>.captureMultiDevice(
+                screenshotName: String,
+                body: @Composable () -> Unit,
+            ) {
+                DefaultTestDevices.entries.forEach {
+                    this.captureForDevice(it.description, it.spec, screenshotName, body = body)
+                }
+            }
+            fun <A : ComponentActivity> AndroidComposeTestRule<ActivityScenarioRule<A>, A>.captureForDevice(
+                deviceName: String,
+                deviceSpec: String,
+                screenshotName: String,
+                darkMode: Boolean = false,
+                body: @Composable () -> Unit,
+            ) {
+                val (width, height, dpi) = extractSpecs(deviceSpec)
+                RuntimeEnvironment.setQualifiers("w${'$'}{width}dp-h${'$'}{height}dp-${'$'}{dpi}dpi")
+                this.activity.setContent {
+                    CompositionLocalProvider(LocalInspectionMode provides true) {
+                        NiaTheme(darkTheme = darkMode) { body() }
+                    }
+                }
+                this.onRoot().captureRoboImage("src/test/screenshots/${'$'}{screenshotName}_${'$'}deviceName.png")
+            }
+        """)
+    }
+
+    @Test fun helpersInAnotherModule() {
+        sharedHelpers()
+        write("feature/src/test/kotlin/com/example/CheckoutScreenshotTests.kt", """
+            package com.example
+            import com.example.testing.captureMultiDevice
+            import com.example.testing.captureForDevice
+            class CheckoutScreenshotTests {
+                @get:Rule val composeTestRule = createAndroidComposeRule<ComponentActivity>()
+                @Test fun checkout() {
+                    composeTestRule.captureMultiDevice("Checkout") { CheckoutPreview() }
+                }
+                @Test fun screen() {
+                    composeTestRule.captureMultiDevice("Screen") { CheckoutScreen(1) }
+                }
+                @Test fun tablet() {
+                    composeTestRule.captureForDevice("tablet", "spec:width=1280dp,height=800dp,dpi=480", "Tablet") { CheckoutPreview() }
+                }
+            }
+        """)
+        val m = SnapshotModule(":feature", File(dir, "feature"), setOf(SnapshotTool.ROBORAZZI), listOf("imports"))
+        val previews = SnapshotTests.previews(m, all(":feature", ":core:screenshot-testing"))
+        val t = SnapshotTests.scan(listOf(m), previews)
+        assertEquals(listOf(7, 7, 7, 10, 10, 10, 13), t.map { it.line }, t.joinToString("\n"))
+        val fqn = "com.example.UiKt.CheckoutPreview"
+        assertEquals(List(3) { Target.Previews(listOf(fqn)) } + List(3) { Target.Uncovered("composeTestRule.captureMultiDevice(\"Screen\") { CheckoutScreen(1) }") } + Target.Previews(listOf(fqn)),
+            t.map { it.target })
+        // One test per device in the helper's list; the device comes from a computed qualifier string, so it's unresolved, per entry.
+        val devices = t.take(3).map { assertIs<DeviceSource.Unresolved>(it.device).expression }
+        assertEquals(3, devices.distinct().size)
+        assertTrue(devices[0].endsWith("for PHONE(\"phone\", \"spec:shape=Normal,width=640,height=360,unit=dp,dpi=480\")"), devices[0])
+        assertTrue(t.all { it.module == ":feature" && it.sourceSet == "test" && it.file.name == "CheckoutScreenshotTests.kt" })
+    }
+
+    @Test fun helperThatCantBeFollowedIsCounted() {
+        ui()
+        roboTest("", """
+            |    @Test fun a() { composeTestRule.captureMultiTheme("x") { CheckoutPreview() } }
+            |    @Test fun b() { composeTestRule.onNodeWithText("x").assertExists() }
+        """.trimMargin())
+        val t = one(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(Target.Uncovered("helper captureMultiTheme"), t.target)
+        assertEquals(DeviceSource.Unresolved("helper captureMultiTheme"), t.device)
+        assertEquals(8, t.line)
+    }
+
+    @Test fun paparazziHelperInAnotherFileUsesTheTestsRule() {
+        ui()
+        write("app/src/test/kotlin/com/example/util/Snap.kt", """
+            package com.example.util
+            import app.cash.paparazzi.Paparazzi
+            fun snapIt(paparazzi: Paparazzi, content: @Composable () -> Unit) {
+                paparazzi.snapshot { MyTheme { content() } }
+            }
+        """)
+        paparazziTest("snapIt(paparazzi) { CheckoutPreview() }", imports = "import com.example.util.snapIt")
+        val t = one()
+        assertEquals(Target.Previews(listOf(checkout.fqn)), t.target)
+        assertEquals(pixel5, t.device)
+        assertEquals(6, t.line)
+        assertEquals("CheckoutTest.kt", t.file.name)
+    }
+
+    @Test fun loopsOverDevicesInATest() {
+        ui()
+        paparazziTest("listOf(DeviceConfig.PIXEL_5, DeviceConfig.NEXUS_5).forEach {\n            paparazzi.unsafeUpdateConfig(deviceConfig = it)\n            paparazzi.snapshot { CheckoutPreview() }\n        }\n" +
+            "        devices().forEach { paparazzi.snapshot { CheckoutPreview() } }")
+        val t = scan()
+        assertEquals(listOf(DeviceSource.Unresolved("it for DeviceConfig.PIXEL_5"), DeviceSource.Unresolved("it for DeviceConfig.NEXUS_5")), t.take(2).map { it.device })
+        assertEquals(Target.Uncovered("loop over devices()"), t[2].target)
+        assertEquals(3, t.size)
     }
 }

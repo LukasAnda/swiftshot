@@ -16,7 +16,8 @@ sealed interface DeviceSource {
     data class Read(val screen: Screen, val label: String) : DeviceSource
     /** The test doesn't pick one, so the tool's default. */
     data class ToolDefault(val screen: Screen, val tool: SnapshotTool) : DeviceSource
-    data object FromPreview : DeviceSource
+    /** Each preview's own `device`; previews without one render on [fallback] (null when that can't be read). */
+    data class FromPreview(val fallback: DeviceSource? = null) : DeviceSource
     data class Unresolved(val expression: String) : DeviceSource
 }
 
