@@ -46,7 +46,7 @@ booted simulator. See [[Flutter]].
 
 `swiftshot init` finds Paparazzi and Roborazzi setups, reads the device and settings of each test
 and writes a `swiftshot.json` that renders each tested preview the same way. Nothing is removed
-from the project, and a report lists what isn't covered. See [[Migrating from fastlane|Migrating-from-fastlane]].
+from the project, and a report lists what isn't covered. See [[Migrating|Migrating-from-fastlane]].
 
 ## v1.0.0 · Baseline comparison
 

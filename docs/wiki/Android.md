@@ -195,7 +195,7 @@ test task renders one screenshot per test, one at a time per JVM. Swiftshot skip
 machinery and renders in parallel processes that stay up for the whole run.
 
 Coming from Paparazzi or Roborazzi? `swiftshot init` reads their tests and sets each preview to
-the devices and settings of its tests. Nothing is removed, see [[Migrating from fastlane|Migrating-from-fastlane#paparazzi-and-roborazzi]].
+the devices and settings of its tests. Nothing is removed, see [[Migrating|Migrating-from-fastlane#paparazzi-and-roborazzi]].
 
 More in [[How it works]].
 
