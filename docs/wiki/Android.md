@@ -89,9 +89,9 @@ own: keys only iOS knows, such as `scheme`, are rejected.
 | `java_home` | | JDK 21+ for Gradle and the renderer |
 | `screens` | `[]` | per-screenshot settings, below |
 
-`screens` rules match previews by name, fully qualified function or `*` glob; the first match
-wins. Keys: `preview`, `appearances`, `languages`, `devices`, `font_scales`, `full_length`,
-`delay`, `skip`, `override_preview` (the rule wins over a preview's own device and settings). On
+`screens` rules match previews by name or `*` glob, and by fully qualified function when the
+pattern has a `.`; the first match wins. Keys: `preview`, `appearances`, `languages`, `devices`, `font_scales`, `full_length`,
+`delay`, `skip`, `override_preview` (the rule wins over a preview's own device, size and settings). On
 the command line: `--screen "Stats: languages=de-DE,ja devices=Pixel*"`.
 
 ## Previews

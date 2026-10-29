@@ -6,12 +6,20 @@ import java.util.Locale
 /**
  * A `@Preview` function in a module's sources; [fqn] is `<owner class>.<function>`, the form of [Preview.composable].
  * [own]: the settings its `@Preview` annotations (direct or through multipreviews) set, leaving out those that set none.
+ * [sized]: one sets `widthDp` or `heightDp`; [systemUi]: one sets `showSystemUi = true`, [onlySystemUi]: every one does.
  */
-data class SourcePreview(val module: String, val fqn: String, val function: String, val isPrivate: Boolean = false, val own: List<PreviewOwn> = emptyList())
+data class SourcePreview(
+    val module: String, val fqn: String, val function: String, val isPrivate: Boolean = false, val own: List<PreviewOwn> = emptyList(),
+    val sized: Boolean = false, val systemUi: Boolean = false, val onlySystemUi: Boolean = false,
+)
 
 /** What one `@Preview` sets itself; null when it doesn't, [unreadable] when it sets one to something not read here. */
-data class PreviewOwn(val device: String? = null, val locale: String? = null, val night: Boolean? = null, val fontScale: Double? = null, val unreadable: Boolean = false) {
-    val isEmpty get() = this == PreviewOwn()
+data class PreviewOwn(
+    val device: String? = null, val locale: String? = null, val night: Boolean? = null, val fontScale: Double? = null, val unreadable: Boolean = false,
+    val sized: Boolean = false, val systemUi: Boolean = false,
+) {
+    /** Sets none of device, locale, uiMode, fontScale. */
+    val isEmpty get() = copy(sized = false, systemUi = false) == PreviewOwn()
 }
 
 /** What a snapshot test renders. */
@@ -157,6 +165,8 @@ object SnapshotTests {
                 "locale" -> literal?.let { o.copy(locale = it) }
                 "uiMode" -> night(v)?.let { o.copy(night = it.single()) }
                 "fontScale" -> Regex("""^(\d+(?:\.\d+)?)[fF]?$""").matchEntire(v)?.groupValues?.get(1)?.toDouble()?.let { o.copy(fontScale = it) }
+                "widthDp", "heightDp" -> o.copy(sized = true)
+                "showSystemUi" -> o.copy(systemUi = v == "true")
                 else -> o
             } ?: o.copy(unreadable = true)
         }
@@ -178,9 +188,11 @@ object SnapshotTests {
         if (src.funs.any { it.body != null && f.keyword in it.body }) return@mapNotNull null // local function
         // Modifiers between the annotations and `fun`.
         val modifiers = Regex("""(?:\b[a-z]+\s+)*$""").find(src.mask.substring(maxOf(0, f.keyword - 120), f.keyword))!!.value.split(Regex("\\s+"))
+        val all = own(src, f.annotations, multipreviews)
         SourcePreview(
             module, fqn(src, f), f.name,
-            isPrivate = "private" in modifiers, own = own(src, f.annotations, multipreviews).filterNot { it.isEmpty },
+            isPrivate = "private" in modifiers, own = all.filterNot { it.isEmpty }.map { it.copy(sized = false, systemUi = false) },
+            sized = all.any { it.sized }, systemUi = all.any { it.systemUi }, onlySystemUi = all.isNotEmpty() && all.all { it.systemUi },
         )
     }
 

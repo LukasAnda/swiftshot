@@ -179,7 +179,8 @@ class Runner(private val o: Options, private val log: Log) {
                 rule?.devices != null -> Devices.resolve(rule.devices)
                 wear -> Devices.resolve(o.watchDevices.ifEmpty { Devices.defaultWatch })
                 else -> Devices.resolve(o.devices.ifEmpty { Devices.defaults })
-            }.let { list -> if (p.widthDp > 0 || p.heightDp > 0) list.map { sized(it, p) } else list }
+            // An overriding rule's devices win over the preview's widthDp/heightDp too.
+            }.let { list -> if ((p.widthDp > 0 || p.heightDp > 0) && !(ov && rule?.devices != null)) list.map { sized(it, p) } else list }
             val languages = if (ov && rule?.languages != null) rule.languages else if (p.locale.isNotEmpty()) listOf(bcp47(p.locale)) else rule?.languages ?: o.languages
             val ownNight = p.night.takeUnless { ov && rule?.appearances != null }
             val ownScale = p.fontScale.takeUnless { ov && rule?.fontScales != null } ?: 1.0

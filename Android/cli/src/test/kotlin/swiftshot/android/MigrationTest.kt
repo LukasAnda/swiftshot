@@ -340,6 +340,9 @@ class MigrationTest {
             "  languages: en-US (no test sets a locale)",
             "  appearances: light (no test uses night mode)",
             "  font scales: 1 (no test sets one)",
+            "Sizes:",
+            "  com.example.UiKt.P: cropped to its content; Paparazzi rendered the full $nexus5 screen",
+            "  com.example.UiKt.P: cropped to its content; Paparazzi rendered the full Pixel 5 screen",
             "Not covered:",
             "  app/src/test/kotlin/com/example/DefaultTest.kt:5  CheckoutScreen(state) has no @Preview — add a @Preview with the same arguments to include it",
             "2 of 3 snapshot tests are covered by previews; 1 isn't (listed above)",
@@ -493,5 +496,45 @@ class MigrationTest {
         assertEquals(listOf(":core:ui"), c["modules"])
         assertEquals(listOf(ScreenRule("com.example.ui.CardKt.CardPreview", devices = listOf("Pixel 5")), ScreenRule("*", skip = true)), options().screens)
         assertEquals(1 to 1, Migration.run(dir)!!.let { it.covered to it.total })
+    }
+
+    @Test fun sizedPreviewRendersOnTheTestsDevice() {
+        settings(":app")
+        paparazzi()
+        write("app/src/main/kotlin/com/example/Ui.kt", "package com.example\n@Preview(widthDp = 200, heightDp = 100) @Composable fun Card() {}")
+        paparazziTest("CardTest", "DeviceConfig.PIXEL_5", "Card()")
+        init()
+        assertEquals(ScreenRule("com.example.UiKt.Card", listOf("light"), devices = listOf("Pixel 5"), fontScales = listOf(1.0), overridePreview = true), options().screens.first())
+        val d = Runner(options(), Log(false)).plan(module(), listOf(preview("com.example.UiKt.Card").copy(widthDp = 200, heightDp = 100))).single().device
+        assertEquals(1080 to 2340, d.width to d.height)
+    }
+
+    @Test fun sizesThatDifferAreReported() {
+        settings(":app", ":robo")
+        paparazzi()
+        roborazzi("robo", "dependencies { testImplementation(project(\":app\")) }")
+        write("app/src/main/kotlin/com/example/Ui.kt", """
+            package com.example
+            @Preview @Composable fun Card() {}
+            @Preview(showSystemUi = true) @Composable fun Screen() {}
+        """)
+        paparazziTest("CardTest", "DeviceConfig.PIXEL_5", "Card()")
+        paparazziTest("ScreenTest", "DeviceConfig.PIXEL_5", "Screen()")
+        write("robo/src/test/kotlin/com/example/RoboTest.kt", """
+            package com.example
+            @Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)
+            class RoboTest {
+                @get:Rule val composeTestRule = createComposeRule()
+                @Test fun a() { composeTestRule.setContent { Screen() }; composeTestRule.onRoot().captureRoboImage() }
+            }
+        """)
+        val r = lines()
+        val pixel5 = TestDevices.deviceName((TestDevices.parseQualifiers("RobolectricDeviceQualifiers.Pixel5").first as DeviceSource.Read).screen, "Pixel5")
+        val at = r.indexOf("Sizes:")
+        assertTrue(at > 0, r.joinToString("\n"))
+        assertEquals(listOf(
+            "  com.example.UiKt.Card: cropped to its content; Paparazzi rendered the full Pixel 5 screen",
+            "  com.example.UiKt.Screen: the full $pixel5 screen with system UI; Roborazzi captured the content only",
+        ), r.drop(at + 1).takeWhile { it.startsWith("  ") })
     }
 }

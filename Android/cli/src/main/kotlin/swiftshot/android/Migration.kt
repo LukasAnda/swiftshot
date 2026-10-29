@@ -65,8 +65,8 @@ object Migration {
         )
     }
 
-    /** Whether a test that renders [p] with its own settings ([fixes]) renders it with a device, locale, night mode or font scale other than its own. */
-    private fun replaces(p: SourcePreview, t: SnapshotTest): Boolean = p.own.any { o ->
+    /** Whether a test that renders [p] with its own settings ([fixes]) renders it with a device, size, locale, night mode or font scale other than its own. */
+    private fun replaces(p: SourcePreview, t: SnapshotTest): Boolean = p.sized && screen(t.device) != null || p.own.any { o ->
         val s = screen(t.device)
         val own = t.settings.fromPreview
         o.unreadable ||
@@ -219,13 +219,29 @@ object Migration {
             else "  font scales: 1 (no test sets one)"
         val own = listOf("locale" to "locale", "night" to "uiMode", "fontScale" to "fontScale").filter { (k, _) -> covered.any { k in it.settings.fromPreview } }
         if (own.isNotEmpty()) report += "  each preview's own ${own.joinToString(", ") { it.second }} (from @Preview, as the tests apply previewInfo)"
-        if (overrides.isNotEmpty()) report += "  override_preview for ${overrides.joinToString(", ")}: the tests replace the preview's own device, locale, uiMode or fontScale"
+        if (overrides.isNotEmpty()) report += "  override_preview for ${overrides.joinToString(", ")}: the tests replace the preview's own device, size, locale, uiMode or fontScale"
 
         if (renderedPlatforms.size > 1 || narrower) {
             report += "Platforms:"
             val also = projectPlatforms - testPlatforms
             report += "  ${platformOrder.filter { it in renderedPlatforms }.joinToString(", ")} (from tests" + (if (also.isEmpty()) ")" else "; the project also has ${platformOrder.filter { it in also }.joinToString(", ")})")
             for ((fqn, on) in mixed) report += "  $fqn: tested on ${platformOrder.filter { it in on }.joinToString(", ")}; also renders on ${platformOrder.filter { it in renderedPlatforms - on }.joinToString(", ")}"
+        }
+        // Paparazzi renders the full device screen, Roborazzi the composable's content; Swiftshot crops to the content unless showSystemUi.
+        val sizes = linkedMapOf<String, LinkedHashSet<String>>()
+        for (p in previews.distinctBy { it.fqn }) for (t in byFqn.getValue(p.fqn).flatMap { covering.getValue(it) }) {
+            if (platform(t) != "android" || (t.device !is DeviceSource.Read && t.device !is DeviceSource.ToolDefault)) continue
+            val device = name(t.device)
+            val why = when {
+                t.tool == SnapshotTool.PAPARAZZI && !p.onlySystemUi -> (if (p.systemUi) "its @Previews without showSystemUi are cropped" else "cropped") + " to its content; Paparazzi rendered the full $device screen"
+                t.tool == SnapshotTool.ROBORAZZI && p.systemUi -> "the full $device screen with system UI; Roborazzi captured the content only"
+                else -> continue
+            }
+            sizes.getOrPut(p.fqn) { linkedSetOf() } += why
+        }
+        if (sizes.isNotEmpty()) {
+            report += "Sizes:"
+            for ((fqn, whys) in sizes) for (why in whys) report += "  $fqn: $why"
         }
         if (extras.isNotEmpty()) {
             report += "Extra combinations:"
@@ -264,7 +280,7 @@ object Migration {
         var warn = false
         for (line in result.report) when {
             line.startsWith("  ") -> if (warn || line.contains("unresolved") || line.contains("could be read")) log.warn(line.trim()) else log.plain(line)
-            line.endsWith(":") -> { warn = line == "Not covered:"; log.step(line.removeSuffix(":")) }
+            line.endsWith(":") -> { warn = line == "Not covered:" || line == "Sizes:"; log.step(line.removeSuffix(":")) }
             else -> if (result.covered < result.total) log.warn(line) else log.ok(line)
         }
     }

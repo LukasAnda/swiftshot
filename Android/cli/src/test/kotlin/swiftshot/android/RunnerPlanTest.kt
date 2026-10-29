@@ -143,6 +143,16 @@ class RunnerPlanTest {
         assertEquals(listOf("Pixel 9", "de", true, 1.5), listOf(s.device.name, s.language, s.dark, s.fontScale))
     }
 
+    @Test fun overridePreviewDeviceBeatsPreviewSize() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","override_preview":true,"devices":["Pixel 5"]}]}""")
+        val d = plan(listOf(preview("Welcome").copy(widthDp = 200, heightDp = 100))).single().device
+        assertEquals(1080 to 2340, d.width to d.height)
+        // Without devices of its own the rule leaves the preview's size.
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","override_preview":true,"languages":["en-US"]}]}""")
+        val sized = plan(listOf(preview("Welcome").copy(widthDp = 200, heightDp = 100)), "--devices", "Pixel 5").single().device
+        assertEquals(550 to 275, sized.width to sized.height)
+    }
+
     @Test fun unknownPreviewDevice() {
         val e = assertFailsWith<CliError> { plan(listOf(preview("Welcome").copy(device = "id:nokia_3310"))) }
         assertTrue(e.message!!.contains("Welcome") && e.message!!.contains("nokia_3310"))
