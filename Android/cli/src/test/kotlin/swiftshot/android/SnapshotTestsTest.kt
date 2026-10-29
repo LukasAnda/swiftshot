@@ -50,7 +50,11 @@ class SnapshotTestsTest {
             val s = "@Preview @Composable fun InString() {}"
         """)
         assertEquals(
-            listOf(SourcePreview(":app", "com.example.AllScreens.Named", "Named"), SourcePreview(":app", "com.example.Previews.InObject", "InObject"), checkout),
+            listOf(
+                SourcePreview(":app", "com.example.AllScreens.Named", "Named", isPrivate = true, own = listOf(PreviewOwn(device = "id:pixel_5"))),
+                SourcePreview(":app", "com.example.Previews.InObject", "InObject", own = listOf(PreviewOwn(night = true))),
+                checkout,
+            ),
             SnapshotTests.previews(module(), all(":app")),
         )
     }
@@ -70,7 +74,27 @@ class SnapshotTestsTest {
         """)
         write("other/src/main/kotlin/com/example/other/Other.kt", "package com.example.other\n@Preview @Composable fun OtherPreview() {}")
         val got = SnapshotTests.previews(module(), all(":app", ":feature:cart", ":core:ui", ":other"))
-        assertEquals(listOf(SourcePreview(":feature:cart", "com.example.cart.CartKt.CartPreview", "CartPreview")), got)
+        assertEquals(listOf(SourcePreview(":feature:cart", "com.example.cart.CartKt.CartPreview", "CartPreview", own = listOf(PreviewOwn(device = "id:pixel_5"), PreviewOwn(device = "id:pixel_tablet")))), got)
+    }
+
+    @Test fun previewsOwnSettings() {
+        write("app/src/main/kotlin/com/example/Ui.kt", """
+            package com.example
+            @Preview(name = "a", device = Devices.PIXEL_TABLET, locale = "de-rDE", uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL, fontScale = 1.5f)
+            @Composable fun All() {}
+            @Preview(uiMode = 0x21) @Preview(uiMode = UI_MODE_NIGHT_NO) @Composable internal fun Modes() {}
+            @Preview(device = DEVICE, fontScale = SCALE) @Composable fun Unread() {}
+            @PreviewFontScale @Composable fun Scales() {}
+            @Composable
+            @Preview
+            private fun Plain() {}
+        """)
+        val got = SnapshotTests.previews(module(), all(":app")).associate { it.function to (it.isPrivate to it.own) }
+        assertEquals(false to listOf(PreviewOwn("id:pixel_tablet", "de-rDE", true, 1.5)), got["All"])
+        assertEquals(false to listOf(PreviewOwn(night = true), PreviewOwn(night = false)), got["Modes"])
+        assertEquals(false to listOf(PreviewOwn(unreadable = true)), got["Unread"])
+        assertEquals(listOf(0.85, 1.0, 1.15, 1.3, 1.5, 1.8, 2.0), got["Scales"]!!.second.map { it.fontScale })
+        assertEquals(true to emptyList<PreviewOwn>(), got["Plain"])
     }
 
     @Test fun paparazziCallsPreview() {

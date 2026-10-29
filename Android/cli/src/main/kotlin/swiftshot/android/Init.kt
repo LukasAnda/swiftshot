@@ -6,7 +6,8 @@ import java.io.File
 /**
  * `swiftshot init` for a Gradle project: writes swiftshot.json with the Android modules, the
  * languages the app has strings for, Play Store devices, and fastlane's folder layout when the
- * project already uses fastlane. Nothing is built.
+ * project already uses fastlane. With Paparazzi or Roborazzi tests, the config renders what they render instead
+ * ([Migration]), and swiftshot-migration.md lists what was read. Nothing is built.
  */
 object Init {
     fun run(o: Options, force: Boolean, log: Log): Int {
@@ -16,6 +17,13 @@ object Init {
         if (!File(root, "gradlew").isFile && Flutter.isProject(root)) return write(target, flutter(root), log)
         val settings = listOf("settings.gradle.kts", "settings.gradle").map { File(root, it) }.firstOrNull { it.isFile }
             ?: throw CliError("No settings.gradle(.kts) in $root.")
+        Migration.run(root)?.let { r ->
+            write(target, r.config, log)
+            Migration.print(r, log)
+            val md = File(root, "swiftshot-migration.md").apply { writeText(Migration.markdown(r)) }
+            log.ok("Wrote $md")
+            return 0
+        }
         val text = settings.readText()
         val dirs = projects(text, root)
         val dir = { m: String -> dirs[m] ?: File(root, m.trim(':').replace(':', '/')) }

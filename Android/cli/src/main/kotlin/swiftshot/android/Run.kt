@@ -13,6 +13,8 @@ class Log(val verbose: Boolean) {
     fun step(s: String) = System.err.println("${c("2", t())} ${c("36", "▸")} $s")
     fun ok(s: String) = System.err.println("${c("2", t())} ${c("32", "✔")} $s")
     fun warn(s: String) = System.err.println("${c("2", t())} ${c("33", "!")} $s")
+    /** A line under the last step, indented to its text. */
+    fun plain(s: String) = System.err.println("          $s")
     fun error(s: String) = System.err.println("${c("31", "error:")} $s")
     val seconds get() = (System.nanoTime() - start) / 1e9
 }
@@ -168,21 +170,21 @@ class Runner(private val o: Options, private val log: Log) {
             val rule = o.rule(p)
             if (rule?.skip == true) continue
             val ov = rule?.overridePreview == true
-            val watch = !m.desktop && (m.wear || p.isWatchDevice)
+            val wear = !m.desktop && (m.wear || p.isWatchDevice)
             val devices = when {
                 m.desktop -> Devices.resolveDesktop(rule?.devices?.filter { d -> Devices.desktop.any { glob(d).matches(it.name) || it.id == d } }?.ifEmpty { null }
                     ?: o.desktopDevices.ifEmpty { Devices.defaultDesktop })
                 ov && rule?.devices != null -> Devices.resolve(rule.devices)
                 p.device.isNotEmpty() -> listOf(Devices.fromPreview(p.device) ?: throw CliError("${p.name}: unknown device \"${p.device}\""))
                 rule?.devices != null -> Devices.resolve(rule.devices)
-                watch -> Devices.resolve(o.watchDevices.ifEmpty { Devices.defaultWatch })
+                wear -> Devices.resolve(o.watchDevices.ifEmpty { Devices.defaultWatch })
                 else -> Devices.resolve(o.devices.ifEmpty { Devices.defaults })
             }.let { list -> if (p.widthDp > 0 || p.heightDp > 0) list.map { sized(it, p) } else list }
             val languages = if (ov && rule?.languages != null) rule.languages else if (p.locale.isNotEmpty()) listOf(bcp47(p.locale)) else rule?.languages ?: o.languages
             val ownNight = p.night.takeUnless { ov && rule?.appearances != null }
             val ownScale = p.fontScale.takeUnless { ov && rule?.fontScales != null } ?: 1.0
-            // Wear OS has no light mode: watch screens render once, dark, with no appearance suffix.
-            val dark = ownNight?.let { listOf(it) } ?: if (watch) listOf(true) else (rule?.appearances ?: o.appearances).map { it == "dark" }
+            // Wear OS has no light mode: watch screens (a Wear module, or a round device) render once, dark, with no appearance suffix.
+            val darks = { watch: Boolean -> ownNight?.let { listOf(it) } ?: if (watch) listOf(true) else (rule?.appearances ?: o.appearances).map { it == "dark" } }
             val scales = if (ownScale != 1.0) listOf(ownScale) else rule?.fontScales ?: o.fontScales
             val systemUi = when (o.systemUi) { "always" -> true; "never" -> false; else -> p.showSystemUi }
             val full = rule?.fullLength ?: o.fullLength
@@ -192,12 +194,16 @@ class Runner(private val o: Options, private val log: Log) {
                 else -> "shrink"
             }
             val delay = ((rule?.delay ?: o.delay) * 1000).roundToInt().toLong()
-            for (device in devices) for (lang in languages) for (d in dark) for (s in scales) {
-                // Two previews that would write the same file: the later one gets a number.
-                var file = file(device, lang, p.name, d, s, (dark.size > 1 || d) && ownNight == null && !watch, (scales.size > 1 || s != 1.0) && ownScale == 1.0)
-                val n = names.merge(file.path, 1, Int::plus)!!
-                if (n > 1) file = File(file.parentFile, file.nameWithoutExtension + " $n.png")
-                shots += Shot(m, p, device, lang, d, s, mode, systemUi, delay, file)
+            for (device in devices) {
+                val watch = wear || (!m.desktop && device.round)
+                val dark = darks(watch)
+                for (lang in languages) for (d in dark) for (s in scales) {
+                    // Two previews that would write the same file: the later one gets a number.
+                    var file = file(device, lang, p.name, d, s, (dark.size > 1 || d) && ownNight == null && !watch, (scales.size > 1 || s != 1.0) && ownScale == 1.0)
+                    val n = names.merge(file.path, 1, Int::plus)!!
+                    if (n > 1) file = File(file.parentFile, file.nameWithoutExtension + " $n.png")
+                    shots += Shot(m, p, device, lang, d, s, mode, systemUi, delay, file)
+                }
             }
         }
         return shots

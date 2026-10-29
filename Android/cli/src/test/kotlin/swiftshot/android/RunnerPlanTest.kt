@@ -233,6 +233,15 @@ class RunnerPlanTest {
         assertEquals("watch", round.single().device.type)
     }
 
+    @Test fun roundRuleDeviceRendersAsAWatch() {
+        // A round spec: from a Wear test config renders like watch_devices: dark only, no appearance suffix.
+        File(dir, "swiftshot.json").writeText("""{"appearances": ["light", "dark"], "screens": [{"preview": "Tile", "devices": ["spec:width=200dp,height=200dp,dpi=320,isRound=true", "Pixel 9"]}]}""")
+        val shots = plan(listOf(preview("Tile"), preview("Home")), "--devices", "Pixel 9")
+        assertEquals(listOf("en-US/200x200dp-Tile.png", "en-US/Pixel 9-Tile-light.png", "en-US/Pixel 9-Tile-dark.png"), shots.filter { it.preview.name == "Tile" }.files())
+        assertEquals(listOf(true, false, true), shots.filter { it.preview.name == "Tile" }.map { it.dark })
+        assertEquals(listOf(false, true), shots.filter { it.preview.name == "Home" }.map { it.dark })
+    }
+
     @Test fun watchStillScalesFonts() {
         val shots = plan(listOf(preview("Tile")), "--font-scales", "1,2", module = module(":wear", wear = true))
         assertEquals(listOf("en-US/Wear OS Large Round-Tile-1x.png", "en-US/Wear OS Large Round-Tile-2x.png"), shots.files())

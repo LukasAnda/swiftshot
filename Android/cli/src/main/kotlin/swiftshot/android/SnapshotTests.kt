@@ -3,8 +3,16 @@ package swiftshot.android
 import java.io.File
 import java.util.Locale
 
-/** A `@Preview` function in a module's sources; [fqn] is `<owner class>.<function>`, the form of [Preview.composable]. */
-data class SourcePreview(val module: String, val fqn: String, val function: String)
+/**
+ * A `@Preview` function in a module's sources; [fqn] is `<owner class>.<function>`, the form of [Preview.composable].
+ * [own]: the settings its `@Preview` annotations (direct or through multipreviews) set, leaving out those that set none.
+ */
+data class SourcePreview(val module: String, val fqn: String, val function: String, val isPrivate: Boolean = false, val own: List<PreviewOwn> = emptyList())
+
+/** What one `@Preview` sets itself; null when it doesn't, [unreadable] when it sets one to something not read here. */
+data class PreviewOwn(val device: String? = null, val locale: String? = null, val night: Boolean? = null, val fontScale: Double? = null, val unreadable: Boolean = false) {
+    val isEmpty get() = this == PreviewOwn()
+}
 
 /** What a snapshot test renders. */
 sealed interface Target {
@@ -32,9 +40,26 @@ data class SnapshotTest(
  * Anything not recognised counts as not covered.
  */
 object SnapshotTests {
-    private val multipreviewsBuiltIn = setOf(
-        "Preview", "PreviewLightDark", "PreviewFontScale", "PreviewScreenSizes", "PreviewDynamicColors",
-        "WearPreviewDevices", "WearPreviewSmallRound", "WearPreviewLargeRound", "WearPreviewSquare", "WearPreviewFontScales",
+    /** The `@Preview`s AndroidX's multipreviews expand to (ui-tooling-preview, wear-tooling-preview). */
+    private val multipreviewsBuiltIn: Map<String, List<PreviewOwn>> = run {
+        fun devices(vararg d: String) = d.map { PreviewOwn(device = it) }
+        mapOf(
+            "PreviewLightDark" to listOf(PreviewOwn(), PreviewOwn(night = true)),
+            "PreviewFontScale" to listOf(0.85, 1.0, 1.15, 1.3, 1.5, 1.8, 2.0).map { PreviewOwn(fontScale = it) },
+            "PreviewScreenSizes" to devices("spec:width=411dp,height=891dp", "spec:width=673dp,height=841dp", "spec:width=1280dp,height=800dp,dpi=240", "spec:width=1920dp,height=1080dp,dpi=160"),
+            "PreviewDynamicColors" to listOf(PreviewOwn()),
+            "WearPreviewDevices" to devices("id:wearos_large_round", "id:wearos_small_round", "id:wearos_square"),
+            "WearPreviewSmallRound" to devices("id:wearos_small_round"),
+            "WearPreviewLargeRound" to devices("id:wearos_large_round"),
+            "WearPreviewSquare" to devices("id:wearos_square"),
+            "WearPreviewFontScales" to listOf(0.94, 1.0, 1.06, 1.12, 1.18, 1.24).map { PreviewOwn(device = "id:wearos_small_round", fontScale = it) },
+        )
+    }
+
+    /** `Devices.X` constants that aren't `id:` + the name in lower case. */
+    private val deviceConstants = mapOf(
+        "PHONE" to "spec:width=411dp,height=891dp", "FOLDABLE" to "spec:width=673dp,height=841dp",
+        "TABLET" to "spec:width=1280dp,height=800dp,dpi=240", "DESKTOP" to "spec:width=1920dp,height=1080dp,dpi=160",
     )
 
     /** The `@Preview` functions in the main/common sources of [module] and the modules it depends on with `project(...)`. */
@@ -81,22 +106,60 @@ object SnapshotTests {
         return paths.distinct().filter { it != path }.mapNotNull { p -> all[p]?.let { p to it } }.toMap()
     }
 
-    /** Names of annotation classes that carry `@Preview` (directly or through another multipreview). */
-    private fun multipreviews(srcs: List<KotlinSource>): Set<String> {
-        val names = multipreviewsBuiltIn.toMutableSet()
-        val declared = srcs.flatMap { src -> Regex("""\bannotation\s+class\s+(\w+)""").findAll(src.mask).map { it.groupValues[1] to src.annotationsBefore(it.range.first).map { a -> a.name } }.toList() }
+    /** Annotation classes that carry `@Preview` (directly or through another multipreview) → the `@Preview`s they expand to. */
+    private fun multipreviews(srcs: List<KotlinSource>): Map<String, List<PreviewOwn>> {
+        val found = multipreviewsBuiltIn.toMutableMap()
+        val declared = srcs.flatMap { src -> Regex("""\bannotation\s+class\s+(\w+)""").findAll(src.mask).map { it.groupValues[1] to (src to src.annotationsBefore(it.range.first)) }.toList() }
         var changed = true
-        while (changed) { changed = false; for ((n, anns) in declared) if (n !in names && anns.any { it in names }) { names += n; changed = true } }
-        return names
+        while (changed) {
+            changed = false
+            for ((n, d) in declared) if (n !in found && d.second.any { it.name == "Preview" || it.name in found }) { found[n] = own(d.first, d.second, found); changed = true }
+        }
+        return found
     }
 
-    private fun previewsIn(module: String, src: KotlinSource, multipreviews: Set<String>): List<SourcePreview> = src.funs.mapNotNull { f ->
+    private fun own(src: KotlinSource, anns: List<Ann>, multipreviews: Map<String, List<PreviewOwn>>): List<PreviewOwn> =
+        anns.flatMap { if (it.name == "Preview") listOf(own(src, it)) else multipreviews[it.name].orEmpty() }
+
+    /** `@Preview(device = …, locale = …, uiMode = …, fontScale = …)` as written. */
+    private fun own(src: KotlinSource, ann: Ann): PreviewOwn {
+        var o = PreviewOwn()
+        for ((name, range) in ann.open?.let(src::args).orEmpty()) {
+            val v = src.text(range).trim()
+            val literal = Regex("""^"([^"$\\]*)"$""").matchEntire(v)?.groupValues?.get(1)
+            o = when (name) {
+                "device" -> (literal ?: Regex("""^(?:[\w.]*\.)?Devices\.(\w+)$""").matchEntire(v)?.groupValues?.get(1)
+                    ?.let { deviceConstants[it] ?: "id:" + it.lowercase().replace("wear_os_", "wearos_") })?.let { o.copy(device = it) }
+                "locale" -> literal?.let { o.copy(locale = it) }
+                "uiMode" -> night(v)?.let { o.copy(night = it.single()) }
+                "fontScale" -> Regex("""^(\d+(?:\.\d+)?)[fF]?$""").matchEntire(v)?.groupValues?.get(1)?.toDouble()?.let { o.copy(fontScale = it) }
+                else -> o
+            } ?: o.copy(unreadable = true)
+        }
+        return o
+    }
+
+    /** A `uiMode` value's night bit, as one element (null when it leaves it unset); null when it can't be read. */
+    private fun night(v: String): List<Boolean?>? {
+        if (v.contains("UI_MODE_NIGHT_YES")) return listOf(true)
+        if (v.contains("UI_MODE_NIGHT_NO")) return listOf(false)
+        if (Regex("""^(?:[\w.]*\.)?UI_MODE_TYPE_\w+$""").matches(v)) return listOf(null)
+        val n = Regex("""^(?:0[xX]([0-9a-fA-F]+)|(\d+))$""").matchEntire(v)?.let { it.groupValues[1].toIntOrNull(16) ?: it.groupValues[2].toIntOrNull() } ?: return null
+        return listOf(when (n and 0x30) { 0x20 -> true; 0x10 -> false; else -> null })
+    }
+
+    private fun previewsIn(module: String, src: KotlinSource, multipreviews: Map<String, List<PreviewOwn>>): List<SourcePreview> = src.funs.mapNotNull { f ->
         val names = f.annotations.map { it.name }
-        if ("Composable" !in names || names.none { it in multipreviews }) return@mapNotNull null
+        if ("Composable" !in names || names.none { it == "Preview" || it in multipreviews }) return@mapNotNull null
         if (src.funs.any { it.body != null && f.keyword in it.body }) return@mapNotNull null // local function
         val chain = src.classes.filter { it.body != null && f.keyword in it.body }.sortedBy { it.body!!.first }.map { it.name }
         val owner = chain.joinToString("$").ifEmpty { src.facade }
-        SourcePreview(module, listOf(src.pkg, owner).filter { it.isNotEmpty() }.joinToString(".") + "." + f.name, f.name)
+        // Modifiers between the annotations and `fun`.
+        val modifiers = Regex("""(?:\b[a-z]+\s+)*$""").find(src.mask.substring(maxOf(0, f.keyword - 120), f.keyword))!!.value.split(Regex("\\s+"))
+        SourcePreview(
+            module, listOf(src.pkg, owner).filter { it.isNotEmpty() }.joinToString(".") + "." + f.name, f.name,
+            isPrivate = "private" in modifiers, own = own(src, f.annotations, multipreviews).filterNot { it.isEmpty },
+        )
     }
 
     /** Matches called names to previews through the calling file's imports and package. */
