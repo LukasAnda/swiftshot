@@ -218,6 +218,15 @@ object SnapshotTests {
         val paparazzi: Map<String, Int> = Regex(if (java) """\bPaparazzi\s+(\w+)\s*=\s*new\s+(?:app\.cash\.paparazzi\.)?Paparazzi\s*\("""
             else """\b(?:val|var)\s+(\w+)\s*(?::\s*[\w.]+\s*)?=\s*(?:app\.cash\.paparazzi\.)?Paparazzi\s*\(""")
             .findAll(mask).associate { it.groupValues[1] to it.range.last }
+        private val rules: List<Pair<String, Int>> = Regex(if (java) """\bPaparazzi\s+(\w+)\s*=\s*new\s+(?:app\.cash\.paparazzi\.)?Paparazzi\s*\("""
+            else """\b(?:val|var)\s+(\w+)\s*(?::\s*[\w.]+\s*)?=\s*(?:app\.cash\.paparazzi\.)?Paparazzi\s*\(""")
+            .findAll(mask).map { it.groupValues[1] to it.range.last }.toList()
+        /** The rule field [name] used at [pos]: the one in the same class when several classes in the file name theirs alike. */
+        fun rule(name: String, pos: Int): Int? {
+            val named = rules.filter { it.first == name }
+            val cls = src.classAt(pos)
+            return (if (cls == null) null else named.lastOrNull { src.classAt(it.second) == cls })?.second ?: named.lastOrNull()?.second
+        }
         /** Parameters typed `Paparazzi` (`fun shot(rule: Paparazzi)`): the caller passes the rule in. */
         val paparazziParams = Regex("""[(,]\s*(\w+)\s*:\s*(?:app\.cash\.paparazzi\.)?Paparazzi\b(?!\s*\()""").findAll(mask).map { it.groupValues[1] }.toSet()
         /** Values a scanned preview is passed in as: `preview: ComposablePreview<…>`, `component: ShowkaseBrowserComponent`. */
@@ -605,9 +614,9 @@ object SnapshotTests {
                 if (mode == null) mode = args.firstOrNull { it.first == "renderingMode" }?.let { f to it.second }
             }
             // The rule: a field in the snapshot's file, else one the path's calls pass along (`paparazzi.snapAll { }`).
-            val ctor = leaf.fs.paparazzi[site.receiver]?.let { leaf.fs to it }
+            val ctor = site.receiver?.let { r -> leaf.fs.rule(r, site.pos) }?.let { leaf.fs to it }
                 ?: path.links.reversed().firstNotNullOfOrNull { l ->
-                    l.call?.let { c -> Regex("""\w+""").findAll(l.fs.mask.substring(c.start, c.end)).map { it.value }.firstOrNull { it in l.fs.paparazzi }?.let { l.fs to l.fs.paparazzi.getValue(it) } }
+                    l.call?.let { c -> Regex("""\w+""").findAll(l.fs.mask.substring(c.start, c.end)).map { it.value }.firstOrNull { it in l.fs.paparazzi }?.let { n -> l.fs to l.fs.rule(n, c.start)!! } }
                 }
                 ?: return DeviceSource.Unresolved(site.receiver ?: "paparazzi") to TestSettings()
             val (cf, open) = ctor

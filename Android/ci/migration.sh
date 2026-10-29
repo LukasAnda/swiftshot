@@ -24,29 +24,23 @@ open(path, "w").write(s.replace("plugins {\n", 'plugins {\n    id("app.cash.papa
 PY
 tests=$proj/app/src/test/java/com/swiftshot/demo
 mkdir -p "$tests"
-# One class per file, as projects write them.
-imports='import app.cash.paparazzi.DeviceConfig
+# Three test classes in one file, each with its own rule.
+cat > "$tests/ScreenshotTests.kt" <<'KT'
+package com.swiftshot.demo
+
+import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.android.resources.Density
 import com.android.resources.NightMode
 import com.swiftshot.demo.ui.RootPreview
 import com.swiftshot.demo.ui.StatsPreview
 import org.junit.Rule
-import org.junit.Test'
-cat > "$tests/PhoneTest.kt" <<KT
-package com.swiftshot.demo
-
-$imports
+import org.junit.Test
 
 class PhoneTest {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5)
     @Test fun root() { paparazzi.snapshot { RootPreview() } }
 }
-KT
-cat > "$tests/TabletTest.kt" <<KT
-package com.swiftshot.demo
-
-$imports
 
 class TabletTest {
     @get:Rule val paparazzi = Paparazzi(
@@ -54,11 +48,6 @@ class TabletTest {
     )
     @Test fun stats() { paparazzi.snapshot { StatsPreview() } }
 }
-KT
-cat > "$tests/NoPreviewTest.kt" <<KT
-package com.swiftshot.demo
-
-$imports
 
 class NoPreviewTest {
     @get:Rule val paparazzi = Paparazzi()

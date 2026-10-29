@@ -111,6 +111,30 @@ class SnapshotTestsTest {
         assertEquals(File(dir, "app/src/test/kotlin/com/example/CheckoutTest.kt"), t.file)
     }
 
+    @Test fun eachClassInOneFileUsesItsOwnRule() {
+        ui()
+        write("app/src/test/kotlin/com/example/ManyTests.kt", """
+            package com.example
+            class PhoneTest {
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5)
+                @Test fun phone() { paparazzi.snapshot { CheckoutPreview() } }
+            }
+            class TabletTest {
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig(screenWidth = 1600, screenHeight = 2560, density = Density.XXHIGH))
+                @Test fun tablet() { paparazzi.snapshot { CheckoutPreview() } }
+            }
+            class DefaultTest {
+                @get:Rule val paparazzi = Paparazzi()
+                @Test fun plain() { paparazzi.snapshot { CheckoutPreview() } }
+            }
+        """)
+        val byClass = scan().map { it.device }
+        assertEquals(3, byClass.size, byClass.toString())
+        assertEquals(1, byClass.count { it == pixel5 }, byClass.toString())
+        assertEquals(1, byClass.count { it is DeviceSource.ToolDefault }, byClass.toString())
+        assertEquals(1, byClass.count { it is DeviceSource.Read && it.label.startsWith("DeviceConfig(screenWidth = 1600") }, byClass.toString())
+    }
+
     @Test fun deviceConfigSettingsAndConstants() {
         ui()
         write("app/src/test/kotlin/com/example/CheckoutTest.kt", """
