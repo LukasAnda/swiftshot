@@ -16,14 +16,16 @@ object Init {
         if (!File(root, "gradlew").isFile && Flutter.isProject(root)) return write(target, flutter(root), log)
         val settings = listOf("settings.gradle.kts", "settings.gradle").map { File(root, it) }.firstOrNull { it.isFile }
             ?: throw CliError("No settings.gradle(.kts) in $root.")
-        val dir = { m: String -> File(root, m.trim(':').replace(':', '/')) }
-        val all = modules(settings.readText()).filter { isAndroid(dir(it)) || isMultiplatform(dir(it)) }
+        val text = settings.readText()
+        val dirs = projects(text, root)
+        val dir = { m: String -> dirs[m] ?: File(root, m.trim(':').replace(':', '/')) }
+        val all = modules(text).filter { isAndroid(dir(it)) || isMultiplatform(dir(it)) }
         // The modules with previews (an app module that only hosts a shared one has none).
         val modules = all.filter { hasPreviews(dir(it)) }.ifEmpty { all }
         val desktop = modules.any { buildText(dir(it)).contains(Regex("""\bjvm\s*\(""")) }
         val ios = modules.any { buildText(dir(it)).contains("iosSimulatorArm64") }
-        val wear = modules.filter { isWear(File(root, it.trim(':').replace(':', '/'))) }
-        val languages = modules.flatMap { languages(File(root, it.trim(':').replace(':', '/'))) }.distinct()
+        val wear = modules.filter { isWear(dir(it)) }
+        val languages = modules.flatMap { languages(dir(it)) }.distinct()
             .sortedWith(compareBy({ it != "en-US" }, { it })).ifEmpty { listOf("en-US") }
         val fastlane = File(root, "fastlane").isDirectory
         val config = linkedMapOf<String, Any?>(
@@ -70,6 +72,22 @@ object Init {
         Regex("""include\s*\(?([^)\n]*)\)?""").findAll(settings).flatMap { m ->
             Regex("""["']([^"']+)["']""").findAll(m.groupValues[1]).map { it.groupValues[1] }
         }.map { if (it.startsWith(":")) it else ":$it" }.distinct().toList()
+
+    /** Module path → directory: the default `a/b` for `:a:b`, or the `project(":a:b").projectDir = file("x")` override. */
+    fun projects(settings: String, root: File): Map<String, File> {
+        val text = SnapshotModules.strip(settings)
+        val overrides = Regex("""(?:find)?[Pp]roject\s*\(\s*["']([^"']+)["']\s*\)\s*\??\.projectDir\s*=\s*([^\n]+)""").findAll(text).associate { m ->
+            val path = m.groupValues[1].let { if (it.startsWith(":")) it else ":$it" }
+            val rel = Regex("""["']([^"']*)["']""").findAll(m.groupValues[2]).lastOrNull()?.groupValues?.get(1) ?: ""
+            path to File(rel).let { if (it.isAbsolute) it else File(root, rel) }.normalize()
+        }
+        return modules(text).associateWith { overrides[it] ?: File(root, it.trim(':').replace(':', '/')) }
+    }
+
+    /** Directories named by `includeBuild("x")`. */
+    fun includedBuilds(settings: String, root: File): List<File> =
+        Regex("""includeBuild\s*\(?\s*["']([^"']+)["']""").findAll(SnapshotModules.strip(settings))
+            .map { File(root, it.groupValues[1]).normalize() }.distinct().toList()
 
     private fun buildText(dir: File) = listOf("build.gradle.kts", "build.gradle").map { File(dir, it) }.firstOrNull { it.isFile }?.readText() ?: ""
 
