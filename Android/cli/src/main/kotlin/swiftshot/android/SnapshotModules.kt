@@ -16,6 +16,11 @@ object SnapshotModules {
         "app.cash.paparazzi" to SnapshotTool.PAPARAZZI,
         "io.github.takahirom.roborazzi" to SnapshotTool.ROBORAZZI,
     )
+    private val importPrefixes = mapOf(
+        "app.cash.paparazzi" to SnapshotTool.PAPARAZZI,
+        "com.github.takahirom.roborazzi" to SnapshotTool.ROBORAZZI,
+        "io.github.takahirom.roborazzi" to SnapshotTool.ROBORAZZI,
+    )
     private val skipped = setOf("build", ".gradle", ".git", "node_modules", ".idea")
 
     /** Gradle path → directory, from settings (include, projectDir = file(...), includeBuild). */
@@ -71,7 +76,7 @@ object SnapshotModules {
             val imported = src.listFiles { f -> f.isDirectory && f.name.contains("test", ignoreCase = true) }.orEmpty().flatMap { walk(it).toList() }
                 .filter { it.extension == "kt" || it.extension == "java" }
                 .flatMap { f -> Regex("""(?m)^\s*import\s+([\w.]+)""").findAll(strip(f.readText())).map { it.groupValues[1] }.toList() }
-                .mapNotNull { i -> ids.entries.firstOrNull { i == it.key || i.startsWith(it.key + ".") }?.value }
+                .mapNotNull { i -> importPrefixes.entries.firstOrNull { i == it.key || i.startsWith(it.key + ".") }?.value }
             if (imported.isNotEmpty()) { tools += imported; via += "imports" }
         }
         return if (tools.isEmpty()) null else SnapshotModule(path, dir, tools, via.toList())
@@ -126,10 +131,11 @@ object SnapshotModules {
             val files = walk(b).toList()
             val scripts = files.filter { it.name.endsWith(".kt") || it.name.endsWith(".java") || it.name.endsWith(".groovy") || it.name.endsWith(".gradle.kts") || it.name.endsWith(".gradle") }
             for (f in files.filter { it.name == "build.gradle.kts" || it.name == "build.gradle" }) {
-                val chunks = strip(f.readText()).split(Regex("""\b(?:register|create)\s*\("""))
-                for (chunk in chunks.drop(1)) {
-                    val id = Regex("""\bid\s*=?\s*["']([^"']+)["']""").find(chunk)?.groupValues?.get(1) ?: continue
-                    val cls = Regex("""implementationClass\s*=\s*["']([^"']+)["']""").find(chunk)?.groupValues?.get(1)?.substringAfterLast('.') ?: continue
+                // Innermost blocks holding both: register("x") { … }, create("x") { … }, x { … }.
+                for (block in Regex("""\{([^{}]*)\}""").findAll(strip(f.readText())).map { it.groupValues[1] }) {
+                    val cls = Regex("""implementationClass\s*=\s*["']([^"']+)["']""").find(block)?.groupValues?.get(1)?.substringAfterLast('.') ?: continue
+                    val m = Regex("""\bid\s*=?\s*(?:["']([^"']+)["']|(\w+)\.plugins\.([A-Za-z0-9_.]+))""").find(block) ?: continue
+                    val id = m.groupValues[1].ifEmpty { catalogs[m.groupValues[2]]?.let { resolve(it, m.groupValues[3]) } } ?: continue
                     val decl = Regex("""\b(?:class|object)\s+${Regex.escape(cls)}\b""")
                     sources[id] = scripts.filter { it.name.endsWith(".kt") || it.name.endsWith(".java") || it.name.endsWith(".groovy") }
                         .map { strip(it.readText()) }.filter { decl.containsMatchIn(it) }.joinToString("\n")

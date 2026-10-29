@@ -18,6 +18,7 @@ class SnapshotModulesTest {
 
     private val paparazzi = "app.cash.paparazzi"
     private val roborazzi = "io.github.takahirom.roborazzi"
+    private val roboPackage = "com.github.takahirom.roborazzi"
 
     @Test fun directPluginKotlinDsl() {
         write("settings.gradle.kts", """include(":app")""")
@@ -136,7 +137,7 @@ class SnapshotModulesTest {
     @Test fun pluginAndImportsMerge() {
         write("settings.gradle.kts", """include(":ui")""")
         write("ui/build.gradle.kts", "plugins { id(\"$roborazzi\") }")
-        write("ui/src/test/kotlin/X.kt", "import app.cash.paparazzi.Paparazzi\nimport $roborazzi.captureRoboImage")
+        write("ui/src/test/kotlin/X.kt", "import app.cash.paparazzi.Paparazzi\nimport $roboPackage.captureRoboImage")
         val m = one()
         assertEquals(setOf(SnapshotTool.PAPARAZZI, SnapshotTool.ROBORAZZI), m.tools)
         assertEquals(listOf("plugin $roborazzi", "imports"), m.via)
@@ -145,8 +146,8 @@ class SnapshotModulesTest {
     @Test fun kmpSourceSets() {
         write("settings.gradle.kts", """include(":a", ":b", ":c", ":d", ":e")""")
         for ((m, set) in listOf("a" to "desktopTest", "b" to "iosTest", "c" to "androidUnitTest", "d" to "commonTest"))
-            write("$m/src/$set/kotlin/T.kt", "import $roborazzi.*")
-        write("e/src/main/kotlin/T.kt", "import $roborazzi.*")
+            write("$m/src/$set/kotlin/T.kt", "import $roboPackage.*")
+        write("e/src/main/kotlin/T.kt", "import $roboPackage.*")
         assertEquals(listOf(":a", ":b", ":c", ":d"), find().map { it.path })
     }
 
@@ -178,5 +179,53 @@ class SnapshotModulesTest {
         write("app/build.gradle.kts", """plugins { id("com.android.application") }""")
         write("app/src/test/kotlin/T.kt", "import org.junit.Test")
         assertTrue(find().isEmpty())
+    }
+
+    @Test fun legacyRoborazziImportPackageAlsoCounts() {
+        write("settings.gradle.kts", """include(":a")""")
+        write("a/src/test/kotlin/T.kt", "import $roborazzi.RoborazziRule")
+        assertEquals(setOf(SnapshotTool.ROBORAZZI), one().tools)
+    }
+
+    @Test fun conventionIdFromCatalog() {
+        write("settings.gradle.kts", """include(":feature")""")
+        write("gradle/libs.versions.toml", "[plugins]\nshots = { id = \"my.shots\" }\n")
+        write("build-logic/convention/build.gradle.kts", "gradlePlugin { plugins { register(\"x\") { id = libs.plugins.shots.get().pluginId; implementationClass = \"ShotsPlugin\" } } }")
+        write("build-logic/convention/src/main/kotlin/ShotsPlugin.kt", "class ShotsPlugin { fun apply() { pluginManager.apply(\"$paparazzi\") } }")
+        write("feature/build.gradle.kts", "plugins { id(\"my.shots\") }")
+        assertEquals(listOf("convention plugin my.shots"), one().via)
+    }
+
+    @Test fun groovyStyleGradlePluginRegistration() {
+        write("settings.gradle", "include ':feature'")
+        write("buildSrc/build.gradle", "gradlePlugin {\n plugins {\n  shots {\n   id = 'my.shots'\n   implementationClass = 'p.ShotsPlugin'\n  }\n }\n}")
+        write("buildSrc/src/main/groovy/p/ShotsPlugin.groovy", "class ShotsPlugin { void apply(p) { p.apply plugin: '$paparazzi' } }")
+        write("feature/build.gradle", "plugins { id 'my.shots' }")
+        assertEquals(listOf("convention plugin my.shots"), one().via)
+    }
+
+    @Test fun multiLineIncludeAndNoIncludeBuild() {
+        assertEquals(listOf(":a", ":b", ":c", ":d"), Init.modules("include(\n  \":a\",\n  \":b\"\n)\ninclude ':c',\n  ':d'\nincludeBuild(\"shared\")\nincludeFlat(\"flat\")"))
+    }
+
+    @Test fun projectDirWithoutLiteralFallsBackToDefault() {
+        write("settings.gradle.kts", "include(\":a\", \":b\")\nval n = \"x\"\nproject(\":a\").projectDir = File(rootDir, n)\nproject(\":b\").projectDir = file(n)")
+        val p = SnapshotModules.projects(dir)
+        assertEquals(File(dir, "a"), p[":a"])
+        assertEquals(File(dir, "b"), p[":b"])
+    }
+
+    @Test fun projectDirRootDirInterpolation() {
+        write("settings.gradle.kts", "include(\":a\", \":b\")\nproject(\":a\").projectDir = file(\"\$rootDir/mods/a\")\nproject(\":b\").projectDir = file(\"\${rootDir}/mods/b\")")
+        val p = SnapshotModules.projects(dir)
+        assertEquals(File(dir, "mods/a"), p[":a"])
+        assertEquals(File(dir, "mods/b"), p[":b"])
+    }
+
+    @Test fun projectDirFindProjectAndApplyForms() {
+        write("settings.gradle.kts", "include(\":a\", \":b\")\nfindProject(\":a\")!!.projectDir = file(\"mods/a\")\nproject(\":b\").apply { projectDir = file(\"mods/b\") }")
+        val p = SnapshotModules.projects(dir)
+        assertEquals(File(dir, "mods/a"), p[":a"])
+        assertEquals(File(dir, "mods/b"), p[":b"])
     }
 }

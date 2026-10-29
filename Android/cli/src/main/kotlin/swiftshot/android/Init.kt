@@ -67,20 +67,26 @@ object Init {
         )
     }
 
-    /** `include(":app", ":wear")`, `include ':app'`, one per line or several in one call. */
+    /** `include(":app", ":wear")`, `include ':app'`, one per line or several in one call, also across lines. Not `includeBuild`/`includeFlat`. */
     fun modules(settings: String): List<String> =
-        Regex("""include\s*\(?([^)\n]*)\)?""").findAll(settings).flatMap { m ->
-            Regex("""["']([^"']+)["']""").findAll(m.groupValues[1]).map { it.groupValues[1] }
+        Regex("""\binclude\b\s*(?:\(([^)]*)\)|((?:[^\n,]*,[ \t]*\n)*[^\n]*))""").findAll(SnapshotModules.strip(settings)).flatMap { m ->
+            Regex("""["']([^"']+)["']""").findAll(m.groupValues[1] + m.groupValues[2]).map { it.groupValues[1] }
         }.map { if (it.startsWith(":")) it else ":$it" }.distinct().toList()
 
     /** Module path → directory: the default `a/b` for `:a:b`, or the `project(":a:b").projectDir = file("x")` override. */
     fun projects(settings: String, root: File): Map<String, File> {
         val text = SnapshotModules.strip(settings)
-        val overrides = Regex("""(?:find)?[Pp]roject\s*\(\s*["']([^"']+)["']\s*\)\s*\??\.projectDir\s*=\s*([^\n]+)""").findAll(text).associate { m ->
-            val path = m.groupValues[1].let { if (it.startsWith(":")) it else ":$it" }
-            val rel = Regex("""["']([^"']*)["']""").findAll(m.groupValues[2]).lastOrNull()?.groupValues?.get(1) ?: ""
-            path to File(rel).let { if (it.isAbsolute) it else File(root, rel) }.normalize()
+        fun path(p: String) = if (p.startsWith(":")) p else ":$p"
+        val literal = Regex("""^(?:new\s+)?(?:file|File)\s*\(\s*(?:(?:rootDir|settingsDir|settings\.rootDir|rootProject\.projectDir)\s*,\s*)?["']([^"']*)["']\s*\)$""")
+        fun dir(rhs: String): File? {
+            val rel = literal.find(rhs.trim().trimEnd(';'))?.groupValues?.get(1)?.replace(Regex("""^\$\{?(?:rootDir|settingsDir)}?/"""), "") ?: return null
+            if (rel.contains('$')) return null
+            return File(rel).let { if (it.isAbsolute) it else File(root, rel) }.normalize()
         }
+        val overrides = linkedMapOf<String, File>()
+        val head = """(?:find)?[Pp]roject\s*\(\s*["']([^"']+)["']\s*\)"""
+        Regex("""$head(?:!!|\?)?\s*\.projectDir\s*=\s*([^\n]+)""").findAll(text).forEach { m -> dir(m.groupValues[2])?.let { overrides[path(m.groupValues[1])] = it } }
+        Regex("""$head(?:!!|\?)?\s*\.(?:apply|run|with)\s*\{\s*projectDir\s*=\s*([^\n}]+)""").findAll(text).forEach { m -> dir(m.groupValues[2])?.let { overrides[path(m.groupValues[1])] = it } }
         return modules(text).associateWith { overrides[it] ?: File(root, it.trim(':').replace(':', '/')) }
     }
 
