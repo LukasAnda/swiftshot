@@ -10,8 +10,8 @@ to suggest something or to say what you need most.
 | [v0.5.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.5.0) | [Compose Multiplatform](#v050--compose-multiplatform) | released |
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | [Linux as a full host](#v060--linux-as-a-full-host) | released |
 | [v0.7.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.7.0) | [Flutter](#v070--flutter) | released |
-| [v0.8.0](https://github.com/LukasAnda/swiftshot/milestone/7) | [Migration from Paparazzi and Roborazzi](#v080--migration-from-paparazzi-and-roborazzi) | planned |
-| [v0.9.0](https://github.com/LukasAnda/swiftshot/milestone/5) | [IDE plugins](#v090--ide-plugins) | planned |
+| [v0.8.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.8.0) | [Migration from Paparazzi and Roborazzi](#v080--migration-from-paparazzi-and-roborazzi) | released |
+| 1.0.0 | [Baseline comparison](#v100--baseline-comparison) | next |
 
 ## v0.3.0 · Homebrew
 
@@ -44,15 +44,14 @@ booted simulator. See [[Flutter]].
 
 ## v0.8.0 · Migration from Paparazzi and Roborazzi
 
-`swiftshot init` finds Paparazzi and Roborazzi setups (plugins, test rules, recorded snapshot
-folders) and sets Swiftshot up to match.
+`swiftshot init` finds Paparazzi and Roborazzi setups, reads the device and settings of each test
+and writes a `swiftshot.json` that renders each tested preview the same way. Nothing is removed
+from the project, and a report lists what isn't covered. See [[Migrating from fastlane|Migrating-from-fastlane]].
 
-## v0.9.0 · IDE plugins
+## v1.0.0 · Baseline comparison
 
-See screenshots while you edit, without leaving the IDE:
+Verify screenshots against a committed baseline, with an HTML diff report and a way to accept
+changes on CI. Works on GitHub, GitLab, Bitbucket, Bitrise, Codemagic and others. The first
+baseline comes from CI, not from Paparazzi or Roborazzi images.
 
-- Xcode
-- Android Studio and IntelliJ IDEA
-
-Each change re-renders only the previews it affects, across the devices and languages you
-choose.
+IDE plugins are no longer planned.

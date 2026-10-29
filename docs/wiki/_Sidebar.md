@@ -8,7 +8,7 @@
 - [[Command line]]
 - [[CI]]
 - [[Device frames]]
-- [[Migrating from fastlane]]
+- [[Migrating|Migrating-from-fastlane]]
 - [[How it works]]
 - [[Troubleshooting]]
 - [[Roadmap]]
