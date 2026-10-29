@@ -17,8 +17,8 @@ data class ScreenRule(
     val overridePreview: Boolean = false,
 ) {
     fun matches(name: String) = glob(preview).matches(name)
-    /** By display name or by the fully qualified function (`com.example.UiKt.Checkout`). */
-    fun matches(p: Preview) = matches(p.name) || matches(p.composable)
+    /** By display name, or by the fully qualified function (`com.example.UiKt.Checkout`) when the pattern has a `.`. */
+    fun matches(p: Preview) = matches(p.name) || '.' in preview && matches(p.composable)
 }
 
 fun glob(pattern: String) = Regex(pattern.split('*').joinToString(".*") { Regex.escape(it) }, RegexOption.IGNORE_CASE)

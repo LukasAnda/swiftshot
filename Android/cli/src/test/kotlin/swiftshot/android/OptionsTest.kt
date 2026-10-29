@@ -200,6 +200,14 @@ class OptionsTest {
         assertNull(parse("--screen", "Stats: skip=true").rule("Welcome"))
     }
 
+    @Test fun screenRuleMatchesTheFunctionOnlyWithADot() {
+        val card = Preview(composable = "com.example.SettingsScreenKt.ProfileCard", function = "ProfileCard", name = "Profile card")
+        assertFalse(ScreenRule("*Settings*", skip = true).matches(card))
+        assertTrue(ScreenRule("*Profile*").matches(card))
+        assertTrue(ScreenRule("com.example.SettingsScreenKt.*").matches(card))
+        assertTrue(ScreenRule("*.ProfileCard").matches(card))
+    }
+
     @Test fun globs() {
         assertTrue(glob("Pixel*").matches("pixel 9"))
         assertTrue(glob("*Fold*").matches("Pixel 9 Pro Fold (folded)"))
