@@ -123,8 +123,8 @@ Roborazzi stay in the project, and only `swiftshot.json` and `swiftshot-migratio
 ### What it writes
 
 A `screens` rule per tested preview (by fully qualified function), so each preview renders only
-on the devices and settings of its tests (`override_preview` where a test replaces the preview's own). A final rule skips the
-previews no test covers. See [[Configuration]].
+on the devices and settings of its tests (`override_preview` where a test replaces the preview's
+own). A final rule skips the previews no test covers. See [[Configuration]].
 
 ### swiftshot-migration.md
 
