@@ -204,6 +204,11 @@ so `fastlane deliver` uploads it unchanged.
 `full_length`, `delay` and `skip`, as above. `font_scales` takes the place of iOS's `text_sizes`;
 there are no `ios_versions` and no per-screen `frame`.
 
+`preview` also matches a preview's fully qualified function (`com.example.UiKt.Checkout`), which tells
+apart previews that share a name. A preview's own `device`, `locale`, `uiMode` and `fontScale` normally win
+over a rule; `"override_preview": true` (`override_preview=true` on the command line) makes the rule's
+`devices`, `languages`, `appearances` and `font_scales` win instead.
+
 ```
 swiftshot --screen "Stats: languages=de-DE,ja devices=Pixel*" --screen "Debug*: skip=true"
 ```

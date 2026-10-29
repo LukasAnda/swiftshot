@@ -122,6 +122,27 @@ class RunnerPlanTest {
         assertEquals("Pixel 9", shots.single().device.name)
     }
 
+    @Test fun ruleMatchesFullyQualifiedFunction() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"com.a.UiKt.Checkout","devices":["Pixel 5"]},{"preview":"*","skip":true}]}""")
+        val shots = plan(listOf(preview("Checkout", composable = "com.a.UiKt.Checkout"), preview("Checkout", composable = "com.b.UiKt.Checkout")))
+        assertEquals(listOf("Pixel 5"), shots.map { it.device.name })
+        assertEquals(listOf("com.a.UiKt.Checkout"), shots.map { it.preview.composable })
+    }
+
+    private val styled get() = preview("Welcome").copy(device = "id:pixel_9", locale = "de", uiMode = 0x20, fontScale = 1.5)
+
+    @Test fun overridePreviewBeatsPreviewSettings() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","override_preview":true,"devices":["Pixel 5"],"languages":["en-US"],"appearances":["light"],"font_scales":[1.0]}]}""")
+        val s = plan(listOf(styled)).single()
+        assertEquals(listOf("Pixel 5", "en-US", false, 1.0), listOf(s.device.name, s.language, s.dark, s.fontScale))
+    }
+
+    @Test fun withoutOverridePreviewSettingsStillWin() {
+        File(dir, "swiftshot.json").writeText("""{"screens":[{"preview":"*","devices":["Pixel 5"],"languages":["en-US"],"appearances":["light"],"font_scales":[1.0]}]}""")
+        val s = plan(listOf(styled)).single()
+        assertEquals(listOf("Pixel 9", "de", true, 1.5), listOf(s.device.name, s.language, s.dark, s.fontScale))
+    }
+
     @Test fun unknownPreviewDevice() {
         val e = assertFailsWith<CliError> { plan(listOf(preview("Welcome").copy(device = "id:nokia_3310"))) }
         assertTrue(e.message!!.contains("Welcome") && e.message!!.contains("nokia_3310"))

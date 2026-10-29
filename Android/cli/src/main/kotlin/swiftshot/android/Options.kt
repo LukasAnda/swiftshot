@@ -13,8 +13,12 @@ data class ScreenRule(
     val fullLength: Boolean? = null,
     val delay: Double? = null,
     val skip: Boolean = false,
+    /** The rule's devices, languages, appearances and font scales win over the preview's own. */
+    val overridePreview: Boolean = false,
 ) {
     fun matches(name: String) = glob(preview).matches(name)
+    /** By display name or by the fully qualified function (`com.example.UiKt.Checkout`). */
+    fun matches(p: Preview) = matches(p.name) || matches(p.composable)
 }
 
 fun glob(pattern: String) = Regex(pattern.split('*').joinToString(".*") { Regex.escape(it) }, RegexOption.IGNORE_CASE)
@@ -60,6 +64,7 @@ class Options {
     var frame = "none"
     var config: String? = null
 
+    fun rule(p: Preview) = screens.firstOrNull { it.matches(p) }
     fun rule(preview: String) = screens.firstOrNull { it.matches(preview) }
 
     companion object {
@@ -101,6 +106,9 @@ class Options {
               --previews "Welcome,Stats*"           Only previews matching these names or * globs
               --screen "<preview>: key=value …"     Per-screenshot settings (repeatable), e.g.
                                                     --screen "Stats: languages=de-DE devices=Pixel*"
+                                                    <preview> is a name, a * glob or a full function
+                                                    (com.example.UiKt.Stats); override_preview=true
+                                                    lets the rule beat the preview's own device/locale/uiMode/fontScale
 
             OUTPUT
               --output <dir>                        Default: screenshots
@@ -202,7 +210,7 @@ class Options {
             }
             return rule(v.substring(0, colon).trim(), values.mapValues { (k, s) ->
                 when (k) {
-                    "skip", "full_length" -> s.toBoolean()
+                    "skip", "full_length", "override_preview" -> s.toBoolean()
                     "delay" -> s.toDouble()
                     else -> list(s)
                 }
@@ -210,7 +218,7 @@ class Options {
         }
 
         fun rule(preview: String, m: Map<String, Any?>): ScreenRule {
-            for (k in m.keys) require(k in setOf("preview", "appearances", "languages", "devices", "font_scales", "full_length", "delay", "skip")) {
+            for (k in m.keys) require(k in setOf("preview", "appearances", "languages", "devices", "font_scales", "full_length", "delay", "skip", "override_preview")) {
                 "screens: unknown key \"$k\""
             }
             @Suppress("UNCHECKED_CAST")
@@ -223,6 +231,7 @@ class Options {
                 fullLength = m["full_length"] as Boolean?,
                 delay = (m["delay"] as Number?)?.toDouble(),
                 skip = m["skip"] as Boolean? ?: false,
+                overridePreview = m["override_preview"] as Boolean? ?: false,
             )
         }
     }
