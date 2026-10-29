@@ -643,14 +643,27 @@ class SnapshotTestsTest {
     }
 
     /** Now in Android's layout: a shared screenshot-testing module (no plugin) with multi-device helpers. */
-    private fun sharedHelpers() {
+    /** Now in Android's spec parser (core/screenshot-testing ScreenshotHelper.kt). */
+    private val niaExtractSpecs = """
+        private fun extractSpecs(deviceSpec: String): TestDeviceSpecs {
+            val specs = deviceSpec.substringAfter("spec:")
+                .split(",").map { it.split("=") }.associate { it[0] to it[1] }
+            val width = specs["width"]?.toInt() ?: 640
+            val height = specs["height"]?.toInt() ?: 480
+            val dpi = specs["dpi"]?.toInt() ?: 480
+            return TestDeviceSpecs(width, height, dpi)
+        }
+        data class TestDeviceSpecs(val width: Int, val height: Int, val dpi: Int)
+    """
+
+    private fun sharedHelpers(extractSpecs: String = "", phone: String = "\"spec:shape=Normal,width=640,height=360,unit=dp,dpi=480\"") {
         write("settings.gradle.kts", "include(\":feature\", \":core:screenshot-testing\")")
         write("feature/build.gradle.kts", "dependencies { testImplementation(projects.core.screenshotTesting) }")
         write("feature/src/main/kotlin/com/example/Ui.kt", "package com.example\n@Preview @Composable fun CheckoutPreview() {}")
         write("core/screenshot-testing/src/main/kotlin/com/example/testing/ScreenshotHelper.kt", """
             package com.example.testing
             enum class DefaultTestDevices(val description: String, val spec: String) {
-                PHONE("phone", "spec:shape=Normal,width=640,height=360,unit=dp,dpi=480"),
+                PHONE("phone", $phone),
                 FOLDABLE("foldable", "spec:shape=Normal,width=673,height=841,unit=dp,dpi=480"),
                 TABLET("tablet", "spec:shape=Normal,width=1280,height=800,unit=dp,dpi=480"),
             }
@@ -678,11 +691,10 @@ class SnapshotTestsTest {
                 }
                 this.onRoot().captureRoboImage("src/test/screenshots/${'$'}{screenshotName}_${'$'}deviceName.png")
             }
-        """)
+        """ + extractSpecs)
     }
 
-    @Test fun helpersInAnotherModule() {
-        sharedHelpers()
+    private fun checkoutTests(): List<SnapshotTest> {
         write("feature/src/test/kotlin/com/example/CheckoutScreenshotTests.kt", """
             package com.example
             import com.example.testing.captureMultiDevice
@@ -698,20 +710,59 @@ class SnapshotTestsTest {
                 @Test fun tablet() {
                     composeTestRule.captureForDevice("tablet", "spec:width=1280dp,height=800dp,dpi=480", "Tablet") { CheckoutPreview() }
                 }
+                @Test fun phoneDark() {
+                    composeTestRule.captureForDevice(deviceName = "phone_dark", deviceSpec = DefaultTestDevices.PHONE.spec, screenshotName = "Dark", darkMode = true) { CheckoutPreview() }
+                }
             }
         """)
         val m = SnapshotModule(":feature", File(dir, "feature"), setOf(SnapshotTool.ROBORAZZI), listOf("imports"))
         val previews = SnapshotTests.previews(m, all(":feature", ":core:screenshot-testing"))
-        val t = SnapshotTests.scan(listOf(m), previews)
-        assertEquals(listOf(7, 7, 7, 10, 10, 10, 13), t.map { it.line }, t.joinToString("\n"))
+        return SnapshotTests.scan(listOf(m), previews)
+    }
+
+    @Test fun helpersInAnotherModule() {
+        sharedHelpers()
+        val t = checkoutTests()
+        assertEquals(listOf(7, 7, 7, 10, 10, 10, 13, 16), t.map { it.line }, t.joinToString("\n"))
         val fqn = "com.example.UiKt.CheckoutPreview"
-        assertEquals(List(3) { Target.Previews(listOf(fqn)) } + List(3) { Target.Uncovered("composeTestRule.captureMultiDevice(\"Screen\") { CheckoutScreen(1) }") } + Target.Previews(listOf(fqn)),
+        assertEquals(List(3) { Target.Previews(listOf(fqn)) } + List(3) { Target.Uncovered("composeTestRule.captureMultiDevice(\"Screen\") { CheckoutScreen(1) }") } + List(2) { Target.Previews(listOf(fqn)) },
             t.map { it.target })
-        // One test per device in the helper's list; the device comes from a computed qualifier string, so it's unresolved, per entry.
+        // One test per device in the helper's list; the qualifier string is built by `extractSpecs`, which no scanned source
+        // declares, so the device is unresolved, per entry.
         val devices = t.take(3).map { assertIs<DeviceSource.Unresolved>(it.device).expression }
         assertEquals(3, devices.distinct().size)
         assertTrue(devices[0].endsWith("for PHONE(\"phone\", \"spec:shape=Normal,width=640,height=360,unit=dp,dpi=480\")"), devices[0])
         assertTrue(t.all { it.module == ":feature" && it.sourceSet == "test" && it.file.name == "CheckoutScreenshotTests.kt" })
+    }
+
+    // Now in Android's devices: literal Android Studio spec strings, turned into `w…dp-h…dp-…dpi` by extractSpecs, then Robolectric's px.
+    @Test fun specStringsInHelperDeviceList() {
+        sharedHelpers(niaExtractSpecs)
+        val t = checkoutTests()
+        fun read(i: Int) = assertIs<DeviceSource.Read>(t[i].device)
+        // Robolectric: (int) (dp * dpi / 160f); no orientation given, so landscape when wider than tall.
+        assertEquals(listOf(Screen(1920, 1080, 480, landscape = true), Screen(2019, 2523, 480), Screen(3840, 2400, 480, landscape = true)), (0..2).map { read(it).screen })
+        assertEquals("w640dp-h360dp-480dpi", read(0).label)
+        assertEquals((0..2).map { read(it).screen }, (3..5).map { read(it).screen })
+        // "1280dp".toInt() throws in extractSpecs: no device.
+        assertIs<DeviceSource.Unresolved>(t[6].device)
+        // DefaultTestDevices.PHONE.spec passed straight to captureForDevice.
+        assertEquals(Screen(1920, 1080, 480, landscape = true), read(7).screen)
+        assertEquals("spec:width=640dp,height=360dp,dpi=480,orientation=landscape", TestDevices.deviceName(read(0).screen, read(0).label))
+    }
+
+    @Test fun computedSpecStringsStayUnresolved() {
+        // A spec built at run time.
+        sharedHelpers(niaExtractSpecs, phone = "\"spec:width=${'$'}{640 * 2},height=360,dpi=480\"")
+        val t = checkoutTests()
+        assertIs<DeviceSource.Unresolved>(t[0].device)
+        assertIs<DeviceSource.Read>(t[1].device)
+        // A parser that changes the values.
+        sharedHelpers(niaExtractSpecs.replace("""specs["width"]?.toInt() ?: 640""", """specs["width"]?.toInt()?.times(2) ?: 640"""))
+        assertTrue(checkoutTests().take(3).all { it.device is DeviceSource.Unresolved })
+        // Defaults apply as in the parser: no width in the spec → 640.
+        sharedHelpers(niaExtractSpecs, phone = "\"spec:height=360,dpi=480\"")
+        assertEquals(Screen(1920, 1080, 480, landscape = true), assertIs<DeviceSource.Read>(checkoutTests()[0].device).screen)
     }
 
     @Test fun helperThatCantBeFollowedIsCounted() {
@@ -813,4 +864,138 @@ class SnapshotTestsTest {
         assertEquals(DeviceSource.Unresolved("helper shoot"), t.device)
         assertEquals(5, t.line)
     }
+
+    // Now in Android's ForYouScreenScreenshotTests: a private composable in the test class named like a preview in main.
+    @Test fun testsOwnComposableShadowsPreview() {
+        ui()
+        roboTest("@Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)", """
+            |    @Test fun own() {
+            |        composeTestRule.setContent { CheckoutPreview() }
+            |        composeTestRule.onRoot().captureRoboImage()
+            |    }
+            |    @Composable private fun CheckoutPreview() { CheckoutScreen(2) }
+        """.trimMargin())
+        assertIs<Target.Uncovered>(one(module(tool = SnapshotTool.ROBORAZZI)).target)
+    }
+
+    // Android-Playground: the Paparazzi helper lives in core:ui's testFixtures, called from other modules' tests.
+    @Test fun testFixturesHelpersAreNotTests() {
+        ui()
+        write("app/src/testFixtures/kotlin/com/example/Snap.kt", """
+            package com.example
+            import app.cash.paparazzi.Paparazzi
+            operator fun Paparazzi.invoke(content: @Composable () -> Unit) = snapshot { MyTheme { content() } }
+        """)
+        assertEquals(emptyList(), scan())
+    }
+
+    // cascade: Dropbox's Dropshots `assertSnapshot` in androidTest is neither tool's.
+    @Test fun instrumentedSnapshotHelpersAreNotCounted() {
+        ui()
+        write("app/src/androidTest/kotlin/com/example/PopupTest.kt", """
+            package com.example
+            import app.cash.paparazzi.Paparazzi
+            class PopupTest {
+                @Test fun popup() { dropshots.assertSnapshot(activity, "popup") }
+            }
+        """)
+        write("app/src/test/kotlin/com/example/OtherTest.kt", """
+            package com.example
+            class OtherTest {
+                @Test fun other() { assertSnapshot("x") }
+            }
+        """)
+        val t = scan()
+        assertEquals(listOf("OtherTest.kt"), t.map { it.file.name })
+        assertEquals(Target.Uncovered("helper assertSnapshot"), t.single().target)
+    }
+
+    // droidcon's flavorshub: the device is set in a TestWatcher rule, outside the test and its @Before functions.
+    @Test fun qualifiersSetElsewhereInTheClassAreUnresolved() {
+        ui()
+        roboTest("@Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)", """
+            |    @get:Rule val qualifiers = object : TestWatcher() {
+            |        override fun starting(description: Description) { setQualifiers(device.qualifier) }
+            |    }
+            |    @Test fun a() {
+            |        composeTestRule.setContent { CheckoutPreview() }
+            |        composeTestRule.onRoot().captureRoboImage()
+            |    }
+            |    @Test fun b() {
+            |        setQualifiers("+night")
+            |        composeTestRule.setContent { CheckoutPreview() }
+            |        composeTestRule.onRoot().captureRoboImage()
+            |    }
+        """.trimMargin())
+        val t = scan(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(listOf(DeviceSource.Unresolved("setQualifiers(device.qualifier)")), t.map { it.device }.distinct())
+        // Another test's setQualifiers isn't this test's.
+        File(dir, "app/src/test/kotlin/com/example/CheckoutTest.kt").writeText(File(dir, "app/src/test/kotlin/com/example/CheckoutTest.kt").readText()
+            .replace("override fun starting(description: Description) { setQualifiers(device.qualifier) }", ""))
+        assertEquals(listOf(roboPixel5, roboPixel5), scan(module(tool = SnapshotTool.ROBORAZZI)).map { it.device })
+    }
+
+    // flavorshub's Roborazzi preview test: each preview's own uiMode, font scale and locale, on the class's device.
+    @Test fun composeOptionsFromPreview() {
+        ui()
+        fun test(options: String) = roboTest("", """
+            |    @Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)
+            |    @Test fun snapshotPreview() {
+            |        captureRoboImage(
+            |            filePath = "x.png",
+            |            roborazziComposeOptions = RoborazziComposeOptions {
+            |                $options
+            |            }
+            |        ) { preview() }
+            |    }
+            |    companion object { val previews = AndroidComposablePreviewScanner().scanPackageTrees("com.example").getPreviews() }
+            |    val preview: ComposablePreview<AndroidPreviewInfo> = previews.first()
+        """.trimMargin())
+        test("val previewInfo = preview.previewInfo\n uiMode(previewInfo.uiMode)\n fontScale(previewInfo.fontScale)\n locale(previewInfo.locale)")
+        val t = one(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(Target.AllPreviews(listOf("com.example"), includePrivate = false), t.target)
+        assertEquals(roboPixel5, t.device)
+        assertEquals(TestSettings(fromPreview = setOf("night", "fontScale", "locale")), t.settings)
+        test("uiMode(Configuration.UI_MODE_NIGHT_YES)\n fontScale(1.5f)\n locale(\"de\")\n inspectionMode(true)")
+        assertEquals(TestSettings(locale = "de", night = true, fontScale = 1.5), one(module(tool = SnapshotTool.ROBORAZZI)).settings)
+        test("previewDevice(preview.previewInfo.device)")
+        assertEquals(DeviceSource.FromPreview(roboPixel5), one(module(tool = SnapshotTool.ROBORAZZI)).device)
+        test("size(widthDp = 100, heightDp = 100)")
+        assertEquals(DeviceSource.Unresolved("RoborazziComposeOptions"), one(module(tool = SnapshotTool.ROBORAZZI)).device)
+    }
+
+    // cascade: `import org.robolectric.annotation.Config as RobolectricConfig`.
+    @Test fun aliasedRobolectricConfig() {
+        ui()
+        write("app/src/test/kotlin/com/example/CheckoutTest.kt", """
+            package com.example
+            import org.robolectric.annotation.Config as RobolectricConfig
+            @RobolectricConfig(qualifiers = RobolectricDeviceQualifiers.Pixel5)
+            class CheckoutTest {
+                @get:Rule val composeTestRule = createComposeRule()
+                @Test fun a() {
+                    composeTestRule.setContent { CheckoutPreview() }
+                    composeTestRule.onRoot().captureRoboImage()
+                }
+            }
+        """)
+        assertEquals(roboPixel5, one(module(tool = SnapshotTool.ROBORAZZI)).device)
+    }
+
+    @Test fun unreadableOverrideAroundOtherContentReportsTheContent() {
+        ui()
+        roboTest("", """
+            |    @Test fun a() {
+            |        composeTestRule.setContent { DeviceConfigurationOverride(DeviceConfigurationOverride.DarkMode(dark)) { CheckoutScreen(1) } }
+            |        composeTestRule.onRoot().captureRoboImage()
+            |    }
+            |    @Test fun b() {
+            |        composeTestRule.setContent { DeviceConfigurationOverride(DeviceConfigurationOverride.DarkMode(dark)) { CheckoutPreview() } }
+            |        composeTestRule.onRoot().captureRoboImage()
+            |    }
+        """.trimMargin())
+        val t = scan(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(listOf(Target.Uncovered("DeviceConfigurationOverride(DeviceConfigurationOverride.DarkMode(dark)) { CheckoutScreen(1) }"), Target.Uncovered("DeviceConfigurationOverride")), t.map { it.target })
+    }
 }
+

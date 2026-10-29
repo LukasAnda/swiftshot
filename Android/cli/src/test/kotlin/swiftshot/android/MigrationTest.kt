@@ -396,4 +396,87 @@ class MigrationTest {
         assertEquals(listOf("Pixel 5"), init()["devices"])
         assertFalse(lines().any { it.contains("Swiftshot's default devices") })
     }
+
+    /** Previews with their own uiMode, locale and font scale; a Roborazzi scanner test and a Paparazzi one on the same previews. */
+    private fun ownSettingsPreviews(paparazziMode: String = "") {
+        settings(":app", ":robo", ":papa")
+        write("app/build.gradle.kts", """plugins { id("com.android.library") }""")
+        strings("app", "-ar")
+        write("app/src/main/kotlin/com/example/Ui.kt", """
+            package com.example
+            @Preview(fontScale = 1.3f) @Preview(uiMode = Configuration.UI_MODE_NIGHT_YES) @Preview(locale = "ar") @Composable fun Screen() {}
+        """)
+        roborazzi("robo", "dependencies { testImplementation(project(\":app\")) }")
+        write("robo/src/test/kotlin/com/example/PreviewTest.kt", """
+            package com.example
+            class PreviewTest(val preview: ComposablePreview<AndroidPreviewInfo>) {
+                companion object { fun previews() = AndroidComposablePreviewScanner().scanPackageTrees("com.example").getPreviews() }
+                @Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)
+                @Test fun snapshot() {
+                    captureRoboImage(roborazziComposeOptions = RoborazziComposeOptions {
+                        uiMode(preview.previewInfo.uiMode); fontScale(preview.previewInfo.fontScale); locale(preview.previewInfo.locale)
+                    }) { preview() }
+                }
+            }
+        """)
+        if (paparazziMode.isEmpty()) return
+        paparazzi("papa")
+        write("papa/build.gradle.kts", "plugins { id(\"com.android.library\"); id(\"app.cash.paparazzi\") }\ndependencies { implementation(project(\":app\")) }")
+        write("papa/src/test/kotlin/com/example/PreviewTest.kt", """
+            package com.example
+            class PaparazziPreviewTest(val preview: ComposablePreview<AndroidPreviewInfo>) {
+                companion object { fun previews() = AndroidComposablePreviewScanner().scanPackageTrees("com.example").getPreviews() }
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_4, renderingMode = SessionParams.RenderingMode.$paparazziMode)
+                @Test fun snapshot() { paparazzi.snapshot { preview() } }
+            }
+        """)
+    }
+
+    // flavorshub: the test takes each preview's own uiMode, font scale and locale, so the rule leaves them to the preview.
+    @Test fun settingsFromEachPreview() {
+        ownSettingsPreviews()
+        val c = init()
+        val pixel5 = TestDevices.deviceName((TestDevices.parseQualifiers("RobolectricDeviceQualifiers.Pixel5").first as DeviceSource.Read).screen, "Pixel5")
+        assertEquals(listOf(ScreenRule("com.example.*", devices = listOf(pixel5)), ScreenRule("*", skip = true)), options().screens)
+        assertNull(c["appearances"])
+        val r = lines()
+        assertTrue(r.contains("  each preview's own locale, uiMode, fontScale (from @Preview, as the tests apply previewInfo)"), r.joinToString("\n"))
+        assertFalse(r.any { it.contains("override_preview") || it.contains("Extra combinations") }, r.joinToString("\n"))
+        // Renders what the test renders: one shot per @Preview, each with its own setting.
+        val shots = Runner(options(), Log(false)).plan(module(), listOf(
+            Preview(composable = "com.example.UiKt.Screen", function = "Screen", name = "Screen", fontScale = 1.3),
+            Preview(composable = "com.example.UiKt.Screen", function = "Screen", name = "Screen", uiMode = 0x21),
+            Preview(composable = "com.example.UiKt.Screen", function = "Screen", name = "Screen", locale = "ar"),
+        ))
+        assertEquals(listOf(Triple("en-US", false, 1.3), Triple("en-US", true, 1.0), Triple("ar", false, 1.0)), shots.map { Triple(it.language, it.dark, it.fontScale) })
+        assertEquals(setOf(pixel5), shots.map { it.device.name }.toSet())
+    }
+
+    // flavorshub: a second test on the same previews whose device can't be read renders on the first test's device.
+    @Test fun unresolvedTestWhosePreviewsGetAnotherTestsDevice() {
+        ownSettingsPreviews(paparazziMode = "SHRINK")
+        init()
+        val r = lines()
+        assertTrue(r.any { it.contains("renderingMode=SHRINK → unresolved") && it.endsWith("its previews render on the devices other tests give them") }, r.joinToString("\n"))
+        // What it renders is unknown, so it adds no extra combinations.
+        assertFalse(r.any { it.contains("Extra combinations") }, r.joinToString("\n"))
+    }
+
+    @Test fun nothingCovered() {
+        settings(":app")
+        roborazzi()
+        strings()
+        write("app/src/main/kotlin/com/example/Ui.kt", "package com.example\n@Preview @Composable fun P() {}")
+        write("app/src/test/kotlin/com/example/ScreenTest.kt", """
+            package com.example
+            class ScreenTest {
+                @Test fun a() { composeTestRule.setContent { Screen(1) }; composeTestRule.onRoot().captureRoboImage() }
+            }
+        """)
+        init()
+        val r = lines()
+        assertTrue(r.containsAll(listOf("Devices:", "  none (no test renders a preview)")), r.joinToString("\n"))
+        assertFalse(r.any { it.contains("string resources also have") }, r.joinToString("\n"))
+    }
 }
+

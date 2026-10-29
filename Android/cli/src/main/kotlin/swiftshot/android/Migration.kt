@@ -49,7 +49,7 @@ object Migration {
 
     /** A test that renders a preview with its own device and settings rather than the preview's: a direct call, or a scanner on a fixed device or with settings set. */
     private fun fixes(t: SnapshotTest) = t.target is Target.Previews ||
-        t.target is Target.AllPreviews && (t.device is DeviceSource.Read || t.device is DeviceSource.ToolDefault || t.settings != TestSettings())
+        t.target is Target.AllPreviews && (t.device is DeviceSource.Read || t.device is DeviceSource.ToolDefault || t.settings.copy(fromPreview = emptySet()) != TestSettings())
 
     private val platformOrder = listOf("android", "desktop", "ios")
 
@@ -67,11 +67,12 @@ object Migration {
     /** Whether a test that renders [p] with its own settings ([fixes]) renders it with a device, locale, night mode or font scale other than its own. */
     private fun replaces(p: SourcePreview, t: SnapshotTest): Boolean = p.own.any { o ->
         val s = screen(t.device)
+        val own = t.settings.fromPreview
         o.unreadable ||
             o.device != null && s != null && Devices.fromPreview(o.device).let { it == null || it.width != s.widthPx || it.height != s.heightPx || it.density != s.densityDpi || it.round != s.round } ||
-            o.locale != null && !o.locale.replace("-r", "-").equals(t.settings.locale ?: "", ignoreCase = true) ||
-            o.night != null && o.night != (t.settings.night ?: false) ||
-            o.fontScale != null && o.fontScale != (t.settings.fontScale ?: 1.0)
+            o.locale != null && "locale" !in own && !o.locale.replace("-r", "-").equals(t.settings.locale ?: "", ignoreCase = true) ||
+            o.night != null && "night" !in own && o.night != (t.settings.night ?: false) ||
+            o.fontScale != null && "fontScale" !in own && o.fontScale != (t.settings.fontScale ?: 1.0)
     }
 
     fun plan(root: File, modules: List<SnapshotModule>, tests: List<SnapshotTest>, previews: List<SourcePreview>): MigrationResult {
@@ -96,26 +97,34 @@ object Migration {
         val extras = linkedMapOf<String, List<String>>()
         // A rendered rule without devices for Android tests renders on the top-level devices.
         var needsDevices = false
+        // Tests with a rule that has no devices of its own.
+        val onTopLevel = mutableSetOf<SnapshotTest>()
 
         fun rule(pattern: String, ts: Set<SnapshotTest>, p: SourcePreview? = null): LinkedHashMap<String, Any?> {
             if (ts.isEmpty()) return linkedMapOf("preview" to pattern, "skip" to true)
             val override = p != null && ts.any { fixes(it) && replaces(p, it) }
             if (override) overrides += p!!.fqn
-            val taken = ts.filter { platform(it) == "android" }.map { listOf(name(it.device) ?: "top-level devices", it.settings.locale ?: "en-US", if (it.settings.night == true) "dark" else "light", scale(it.settings.fontScale ?: 1.0) + "x") }.toSet()
+            // Tests whose device can't be read render something unknown: reported under Devices, not here.
+            val taken = ts.filter { platform(it) == "android" && it.device !is DeviceSource.Unresolved }.map { t ->
+                val own = t.settings.fromPreview
+                listOf(name(t.device) ?: "top-level devices", if ("locale" in own) "own locale" else t.settings.locale ?: "en-US",
+                    if ("night" in own) "own uiMode" else if (t.settings.night == true) "dark" else "light", if ("fontScale" in own) "own font scale" else scale(t.settings.fontScale ?: 1.0) + "x")
+            }.toSet()
             val product = (0..3).fold(listOf(emptyList<String>())) { acc, i -> acc.flatMap { c -> taken.map { it[i] }.distinct().map { c + it } } }
             product.filter { it !in taken }.takeIf { it.isNotEmpty() }?.let { extras[pattern] = it.map { c -> c.joinToString(" / ") } }
-            val locales = ts.map { it.settings.locale }
-            val appearances = ts.map { if (it.settings.night == true) "dark" else "light" }.distinct().sortedBy { it == "dark" }
-            val scales = ts.map { it.settings.fontScale ?: 1.0 }.distinct().sorted()
+            // What tests take from each preview's own @Preview isn't the rule's to set.
+            val locales = ts.filter { "locale" !in it.settings.fromPreview }.map { it.settings.locale }
+            val appearances = ts.filter { "night" !in it.settings.fromPreview }.map { if (it.settings.night == true) "dark" else "light" }.distinct().sortedBy { it == "dark" }
+            val scales = ts.filter { "fontScale" !in it.settings.fromPreview }.map { it.settings.fontScale ?: 1.0 }.distinct().sorted()
             val devices = ts.filter { platform(it) == "android" }.mapNotNull { name(it.device) }.distinct()
-            if (devices.isEmpty() && ts.any { platform(it) == "android" }) needsDevices = true
+            if (devices.isEmpty() && ts.any { platform(it) == "android" }) { needsDevices = true; onTopLevel += ts }
             return linkedMapOf<String, Any?>(
                 "preview" to pattern,
                 "devices" to devices.ifEmpty { null },
                 // Once any test sets a locale, every rule says which it renders (the default en-US where a test sets none).
-                "languages" to if (anyLocale || override && p!!.own.any { it.locale != null || it.unreadable }) locales.map { it ?: "en-US" }.distinct().sortedWith(enFirst) else null,
-                "appearances" to appearances.takeIf { override || it != listOf("light") },
-                "font_scales" to scales.takeIf { override || it != listOf(1.0) },
+                "languages" to if (anyLocale || override && p!!.own.any { it.locale != null || it.unreadable }) locales.map { it ?: "en-US" }.distinct().sortedWith(enFirst).ifEmpty { null } else null,
+                "appearances" to appearances.takeIf { (override || it != listOf("light")) && it.isNotEmpty() },
+                "font_scales" to scales.takeIf { (override || it != listOf(1.0)) && it.isNotEmpty() },
                 "override_preview" to if (override) true else null,
             ).filterValues { it != null }.let { LinkedHashMap(it) }
         }
@@ -187,8 +196,11 @@ object Migration {
                 is DeviceSource.Read -> "${name(f)} (${f.label})"
                 else -> "top-level devices"
             }
-            is DeviceSource.Unresolved -> "  ${d.expression} → unresolved (${ts.joinToString(", ") { at(it) }}); renders on the top-level devices"
+            is DeviceSource.Unresolved -> "  ${d.expression} → unresolved (${ts.joinToString(", ") { at(it) }}); " +
+                if (ts.all { it in onTopLevel }) "renders on the top-level devices" else if (ts.none { it in onTopLevel }) "its previews render on the devices other tests give them"
+                else "renders on the top-level devices where no other test gives its previews a device"
         }
+        if (android.isEmpty() && covered.none { platform(it) != "android" }) report += "  none (no test renders a preview)"
         for (p in listOf("desktop", "ios")) covered.filter { platform(it) == p }.map { it.sourceSet }.distinct().forEach { report += "  $it → ${p}_devices (Swiftshot's defaults)" }
         if (fallback) report += "  No test's device could be read: using Swiftshot's default devices"
 
@@ -196,11 +208,13 @@ object Migration {
         val tested = covered.map { it.settings.locale ?: "en-US" }.distinct().sortedWith(enFirst)
         report += if (anyLocale) "  languages: ${tested.joinToString(", ")} (from tests; en-US where a test sets none)"
             else "  languages: en-US (no test sets a locale)"
-        stringLanguages.filter { it !in tested }.takeIf { it.isNotEmpty() }?.let { report += "  string resources also have ${it.joinToString(", ")}: add them to languages to render them" }
+        stringLanguages.filter { it !in tested.ifEmpty { listOf("en-US") } }.takeIf { it.isNotEmpty() }?.let { report += "  string resources also have ${it.joinToString(", ")}: add them to languages to render them" }
         report += if (covered.any { it.settings.night == true }) "  appearances: " + covered.map { if (it.settings.night == true) "dark" else "light" }.distinct().sortedBy { it == "dark" }.joinToString(", ") + " (from tests)"
             else "  appearances: light (no test uses night mode)"
         report += if (covered.any { it.settings.fontScale != null && it.settings.fontScale != 1.0 }) "  font scales: " + covered.map { it.settings.fontScale ?: 1.0 }.distinct().sorted().joinToString(", ") { scale(it) } + " (from tests)"
             else "  font scales: 1 (no test sets one)"
+        val own = listOf("locale" to "locale", "night" to "uiMode", "fontScale" to "fontScale").filter { (k, _) -> covered.any { k in it.settings.fromPreview } }
+        if (own.isNotEmpty()) report += "  each preview's own ${own.joinToString(", ") { it.second }} (from @Preview, as the tests apply previewInfo)"
         if (overrides.isNotEmpty()) report += "  override_preview for ${overrides.joinToString(", ")}: the tests replace the preview's own device, locale, uiMode or fontScale"
 
         if (renderedPlatforms.size > 1 || narrower) {

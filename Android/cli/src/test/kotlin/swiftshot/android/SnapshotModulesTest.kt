@@ -228,4 +228,42 @@ class SnapshotModulesTest {
         assertEquals(File(dir, "mods/a"), p[":a"])
         assertEquals(File(dir, "mods/b"), p[":b"])
     }
+
+    // Android-Playground: a registration helper takes the class name and the catalog id; the plugin applies Paparazzi by class.
+    @Test fun conventionPluginRegisteredThroughHelperAppliesToolByClass() {
+        write("settings.gradle.kts", "pluginManagement { includeBuild(\"build-logic\") }\ninclude(\":feature\", \":other\")")
+        write("gradle/libs.versions.toml", "[plugins]\nplayground-screenshots = { id = \"playground.screenshots\" }\nplayground-base = { id = \"playground.base\" }\n")
+        write("build-logic/build.gradle.kts", """
+            gradlePlugin {
+                plugins {
+                    create("ScreenshotsPlugin", libs.plugins.playground.screenshots)
+                    create("BasePlugin", libs.plugins.playground.base)
+                }
+            }
+            private fun NamedDomainObjectContainer<PluginDeclaration>.create(name: String, plugin: Provider<PluginDependency>) = register(name) {
+                id = plugin.get().pluginId
+                implementationClass = "com.x.${'$'}name"
+            }
+        """.trimIndent())
+        write("build-logic/src/main/kotlin/com/x/ScreenshotsPlugin.kt", "package com.x\nimport app.cash.paparazzi.gradle.PaparazziPlugin\nclass ScreenshotsPlugin : Plugin<Project> {\n    override fun apply(target: Project) { with(target) { apply<PaparazziPlugin>() } }\n}")
+        write("build-logic/src/main/kotlin/com/x/BasePlugin.kt", "package com.x\nclass BasePlugin : Plugin<Project> {\n    // apply<PaparazziPlugin>()\n    override fun apply(target: Project) { with(target) { apply<OtherPaparazziPlugin>() } }\n}")
+        write("feature/build.gradle.kts", "plugins { alias(libs.plugins.playground.base); alias(libs.plugins.playground.screenshots) }")
+        write("other/build.gradle.kts", "plugins { alias(libs.plugins.playground.base) }")
+        val m = one()
+        assertEquals(":feature", m.path)
+        assertEquals(setOf(SnapshotTool.PAPARAZZI), m.tools)
+        assertEquals(listOf("convention plugin playground.screenshots"), m.via)
+    }
+
+    @Test fun toolPluginClassAppliedInBuildFile() {
+        write("settings.gradle.kts", "include(\":a\", \":b\", \":c\")")
+        write("a/build.gradle.kts", "import io.github.takahirom.roborazzi.RoborazziPlugin\napply<RoborazziPlugin>()")
+        write("b/build.gradle.kts", "plugins.apply(app.cash.paparazzi.gradle.PaparazziPlugin::class.java)")
+        // Not imported: some other class of that name.
+        write("c/build.gradle.kts", "apply<PaparazziPlugin>()")
+        val m = find()
+        assertEquals(listOf(":a", ":b"), m.map { it.path })
+        assertEquals(listOf("plugin class io.github.takahirom.roborazzi.RoborazziPlugin"), m[0].via)
+        assertEquals(setOf(SnapshotTool.PAPARAZZI), m[1].tools)
+    }
 }

@@ -152,24 +152,33 @@ object SnapshotTests {
         val names = f.annotations.map { it.name }
         if ("Composable" !in names || names.none { it == "Preview" || it in multipreviews }) return@mapNotNull null
         if (src.funs.any { it.body != null && f.keyword in it.body }) return@mapNotNull null // local function
-        val chain = src.classes.filter { it.body != null && f.keyword in it.body }.sortedBy { it.body!!.first }.map { it.name }
-        val owner = chain.joinToString("$").ifEmpty { src.facade }
         // Modifiers between the annotations and `fun`.
         val modifiers = Regex("""(?:\b[a-z]+\s+)*$""").find(src.mask.substring(maxOf(0, f.keyword - 120), f.keyword))!!.value.split(Regex("\\s+"))
         SourcePreview(
-            module, listOf(src.pkg, owner).filter { it.isNotEmpty() }.joinToString(".") + "." + f.name, f.name,
+            module, fqn(src, f), f.name,
             isPrivate = "private" in modifiers, own = own(src, f.annotations, multipreviews).filterNot { it.isEmpty },
         )
+    }
+
+    /** `<package>.<owner class>.<function>` for a function declared in [src]. */
+    private fun fqn(src: KotlinSource, f: Decl): String {
+        val chain = src.classes.filter { it.body != null && f.keyword in it.body }.sortedBy { it.body!!.first }.map { it.name }
+        val owner = chain.joinToString("$").ifEmpty { src.facade }
+        return listOf(src.pkg, owner).filter { it.isNotEmpty() }.joinToString(".") + "." + f.name
     }
 
     /** Matches called names to previews through the calling file's imports and package. */
     private class Resolver(previews: List<SourcePreview>) {
         private val byFunction = previews.groupBy { it.function }
+        private val fqns = previews.map { it.fqn }.toSet()
 
         fun resolve(src: KotlinSource, name: String): String? {
             val parts = name.split('.')
             val fn = parts.last()
             if (parts.size == 1) {
+                // A function of that name in the calling file (a test's own composable) is the one called.
+                val local = src.funs.filter { it.name == fn }
+                if (local.isNotEmpty() && local.none { fqn(src, it) in fqns }) return null
                 src.imports[fn]?.let { fq -> return pick(fq.substringAfterLast('.'), listOf(fq.substringBeforeLast('.', ""))) }
                 return pick(fn, listOf(src.pkg)) ?: pick(fn, src.stars)
             }
@@ -296,7 +305,8 @@ object SnapshotTests {
 
     private class Scan(val modules: List<SnapshotModule>, val resolver: Resolver, val all: Map<String, File>) {
         val tests: List<FileScan> = modules.flatMap { m ->
-            File(m.dir, "src").listFiles { f -> f.isDirectory && f.name.contains("test", ignoreCase = true) }.orEmpty().sortedBy { it.name }
+            // testFixtures holds helpers other modules' tests call: read with the library sources, not as tests.
+            File(m.dir, "src").listFiles { f -> f.isDirectory && f.name.contains("test", ignoreCase = true) && f.name != "testFixtures" }.orEmpty().sortedBy { it.name }
                 .flatMap { d -> sourceFiles(d).map { FileScan(KotlinSource(it), m.path, m.dir, d.name, true, m.tools) } }
         }
 
@@ -399,16 +409,18 @@ object SnapshotTests {
         /** One test per path and per element of the lists it loops over. */
         fun expand(path: Path): List<SnapshotTest> {
             val labels = mutableListOf<List<String>>()
-            for (l in path.links) {
+            val loops = mutableListOf<Pair<Int, Loop>>()
+            for ((level, l) in path.links.withIndex()) {
                 val body = l.decl?.body ?: continue
                 for (loop in l.fs.src.loops(body, l.call?.start ?: l.cut)) {
                     val elements = elements(l.fs, loop.over)
                         ?: return listOf(unfollowed(path, if (l.fs.helper(l.decl)) "helper ${l.decl.name}" else "loop over ${collapse(l.fs.src.text(loop.over))}"))
                     labels += elements
+                    loops += level to loop
                 }
             }
             val combos = labels.fold(listOf(emptyList<String>())) { acc, e -> acc.flatMap { a -> e.map { a + it } } }
-            return combos.map { test(path, it) }
+            return combos.map { test(path, it, loops.zip(it).toMap()) }
         }
 
         /** The elements of `listOf(…)`, a `val` holding one, or an enum's entries (`X.entries`, `X.values()`). */
@@ -448,6 +460,8 @@ object SnapshotTests {
          * is a function imported from the project.
          */
         fun unknownHelper(fs: FileScan, fn: Decl): SnapshotTest? {
+            // Instrumented tests run on a device, where neither tool runs: a `snapshot…` helper there is another library's.
+            if (instrumented(fs.sourceSet)) return null
             val usesApi = Regex("""\bapp\.cash\.paparazzi\b|\btakahirom\.roborazzi\b|\bPaparazzi\s*\(|\bRoborazziRule\b""").containsMatchIn(fs.mask)
             val call = fs.calls(fn).firstOrNull { c ->
                 Regex("""(?i)capture|snapshot|screenshot|^snap""").containsMatchIn(c.name) ||
@@ -456,7 +470,8 @@ object SnapshotTests {
             return unfollowed(Path(listOf(Link(fs, fn, call.start, call)), null), "helper ${call.name}")
         }
 
-        fun test(path: Path, labels: List<String>): SnapshotTest {
+        /** [bound]: the element each loop on the path runs with in this test, by (link index, loop). */
+        fun test(path: Path, labels: List<String>, bound: Map<Pair<Int, Loop>, String> = emptyMap()): SnapshotTest {
             path.unfollowed?.let { return unfollowed(path, "helper $it") }
             val site = path.site!!
             val root = path.links.first()
@@ -468,12 +483,13 @@ object SnapshotTests {
                 // The path starts in a helper no test here calls: the test that sets its device is somewhere else.
                 root.decl != null && fs.helper(root.decl) -> DeviceSource.Unresolved("helper ${root.decl.name}") to TestSettings()
                 site.tool == SnapshotTool.PAPARAZZI -> paparazziDevice(path, site)
-                else -> roborazziDevice(path, site)
+                else -> roborazziDevice(path, site, bound)
             }
             if (content.target !is Target.Uncovered) {
                 if (content.forcedSize) device = DeviceSource.Unresolved("DeviceConfigurationOverride.ForcedSize")
                 val o = content.settings
-                settings = TestSettings(o.locale ?: settings.locale, o.night ?: settings.night, o.fontScale ?: settings.fontScale)
+                settings = TestSettings(o.locale ?: settings.locale, o.night ?: settings.night, o.fontScale ?: settings.fontScale,
+                    settings.fromPreview - setOfNotNull("locale".takeIf { o.locale != null }, "night".takeIf { o.night != null }, "fontScale".takeIf { o.fontScale != null }))
             }
             val d = device
             if (labels.isNotEmpty() && d is DeviceSource.Unresolved) device = DeviceSource.Unresolved("${d.expression} for ${labels.joinToString(", ")}")
@@ -562,11 +578,10 @@ object SnapshotTests {
             leaf.fs.src.nodes(range.first, range.last + 1).forEach { visit(it, leaf.fs, path.links.lastIndex) }
             val uncovered = Target.Uncovered(rootCall ?: collapse(leaf.fs.src.text(range)))
             val target = when {
-                badOverride -> Target.Uncovered("DeviceConfigurationOverride")
                 ok && found.isNotEmpty() && !scannedCall -> Target.Previews(found.toList())
                 ok && scannedCall && found.isEmpty() -> scanned ?: uncovered
                 else -> uncovered
-            }
+            }.let { if (badOverride && it !is Target.Uncovered) Target.Uncovered("DeviceConfigurationOverride") else it }
             return Content(target, override, forced)
         }
 
@@ -625,33 +640,179 @@ object SnapshotTests {
             return TestDevices.parseDeviceConfig(f.src.text(start..f.src.exprEndAt(start)).trim()).first as? DeviceSource.Read
         }
 
-        fun roborazziDevice(path: Path, site: Site): Pair<DeviceSource, TestSettings> {
+        fun roborazziDevice(path: Path, site: Site, bound: Map<Pair<Int, Loop>, String> = emptyMap()): Pair<DeviceSource, TestSettings> {
             val root = path.links.first()
             val fs = root.fs
             if (!android(fs.sourceSet)) return DeviceSource.Unresolved(fs.sourceSet) to TestSettings()
             val cls = rootClass(path)
-            val scopes = fs.befores(cls).map { fs to it.body!! } + scopes(path)
+            // (file, range, link index; -1 for @Before functions)
+            val scopes = fs.befores(cls).map { Triple(fs, it.body!!, -1) } +
+                path.links.mapIndexedNotNull { i, l -> l.decl?.body?.let { Triple(l.fs, it.first until (l.call?.start ?: l.cut), i) } }
             val layers = mutableListOf<Layer>()
             properties(fs.moduleDir, fs.sourceSet, fs.src.pkg)?.let { layers += Layer(it, null, it) }
             layers += classLayers(fs, cls, 0)
             root.decl?.let { d -> config(fs.src, d)?.let(layers::add) }
             var fontScale: Double? = null
             var builder = site.scannedReceiver
-            for ((f, scope) in scopes) {
+            val setQualifiers = Regex("""\bsetQualifiers\s*\(""")
+            for ((f, scope, level) in scopes) {
                 val inPreview = fromPreview.containsMatchIn(f.mask.substring(scope.first, minOf(scope.last + 1, f.mask.length)))
                 builder = builder || inPreview
-                for (m in Regex("""\bsetQualifiers\s*\(""").findAll(f.mask).filter { it.range.first in scope }) f.src.args(m.range.last).firstOrNull()?.let {
-                    val l = layer(f.src, it.second)
+                for (m in setQualifiers.findAll(f.mask).filter { it.range.first in scope }) f.src.args(m.range.last).firstOrNull()?.let {
+                    var l = layer(f.src, it.second)
+                    if (l.value == null && level >= 0) stringValue(path, level, it.second, m.range.first, bound)?.let { v -> l = Layer(v, null, l.expression) }
                     layers += if (l.value == null && inPreview) Layer(null, null, l.expression, fromPreview = true) else l
                 }
                 val fs2 = Regex("""\bsetFontScale\s*\(\s*(\d+(?:\.\d+)?)[fF]?\s*\)""").findAll(f.mask).lastOrNull { it.range.first in scope }
                 if (fs2 != null) fontScale = fs2.groupValues[1].toDouble()
             }
+            // Qualifiers set elsewhere in the class (a rule, a helper not on the path) apply in an order not read here.
+            cls?.body?.let { b ->
+                setQualifiers.findAll(fs.mask).firstOrNull { m ->
+                    m.range.first in b && scopes.none { (f, r) -> f === fs && m.range.first in r } && fs.src.fnAt(m.range.first)?.let(fs::isTest) != true
+                }?.let { m -> layers += Layer(null, null, collapse(fs.src.text(m.range.first..fs.src.close(m.range.last)))) }
+            }
+            val options = composeOptions(path.links.last().fs, site) ?: return DeviceSource.Unresolved("RoborazziComposeOptions") to TestSettings()
             // A preview's own device wins; previews without one render on what the rest of the setup gives.
-            if (builder) return DeviceSource.FromPreview(fold(layers.filter { !it.fromPreview }).first.takeUnless { it is DeviceSource.Unresolved }) to TestSettings()
+            if (builder || options.device) return DeviceSource.FromPreview(fold(layers.filter { !it.fromPreview }).first.takeUnless { it is DeviceSource.Unresolved }) to options.settings
             var (source, settings) = fold(layers)
             fontScale?.let { settings = settings.copy(fontScale = it) }
-            return source to settings
+            val o = options.settings
+            val own = o.fromPreview
+            return source to TestSettings(
+                (o.locale ?: settings.locale).takeUnless { "locale" in own }, (o.night ?: settings.night).takeUnless { "night" in own },
+                (o.fontScale ?: settings.fontScale).takeUnless { "fontScale" in own }, own,
+            )
+        }
+
+        /** What `RoborazziComposeOptions { … }` in a capture call sets; [device] when it takes each preview's device. */
+        class ComposeOptions(val settings: TestSettings = TestSettings(), val device: Boolean = false)
+
+        /** The capture call's `roborazziComposeOptions = RoborazziComposeOptions { … }`; null when it sets something not read here. */
+        fun composeOptions(f: FileScan, site: Site): ComposeOptions? {
+            val m = Regex("""\broborazziComposeOptions\s*=\s*""").findAll(f.mask).firstOrNull { it.range.first in site.pos until site.end } ?: return ComposeOptions()
+            val open = Regex("""^RoborazziComposeOptions\s*\{""").find(f.mask.substring(m.range.last + 1))?.let { m.range.last + it.range.last + 1 } ?: return null
+            var settings = TestSettings()
+            var device = false
+            var after = open
+            for (c in f.src.calls(open + 1 until f.src.close(open))) {
+                if (c.start < after) continue
+                after = c.end
+                val v = c.open?.let { f.src.text(it + 1 until f.src.close(it)).trim() } ?: return null
+                val own = Regex("""\bpreviewInfo\b""").containsMatchIn(v)
+                when (c.name) {
+                    "uiMode" -> settings = if (own) settings.copy(fromPreview = settings.fromPreview + "night") else settings.copy(night = night(v)?.single() ?: return null)
+                    "fontScale" -> settings = if (own) settings.copy(fromPreview = settings.fromPreview + "fontScale")
+                        else settings.copy(fontScale = Regex("""^(\d+(?:\.\d+)?)[fF]?$""").matchEntire(v)?.groupValues?.get(1)?.toDouble() ?: return null)
+                    "locale" -> settings = if (own) settings.copy(fromPreview = settings.fromPreview + "locale")
+                        else settings.copy(locale = Regex("""^"([\w-]+)"$""").matchEntire(v)?.groupValues?.get(1)?.let { Locale.forLanguageTag(it).toLanguageTag() } ?: return null)
+                    "previewDevice" -> if (own) device = true else return null
+                    "inspectionMode" -> {}
+                    else -> return null
+                }
+            }
+            return ComposeOptions(settings, device)
+        }
+
+        /**
+         * A string the path builds from literals, or null: a literal, a template of names that resolve, an enum entry's
+         * property (`Devices.PHONE.spec`, `it.spec` in a loop over `Devices.entries`), a parameter's argument, a local `val`,
+         * or a value destructured from an Android Studio device spec by a parser of the shape [specComponent] reads.
+         */
+        fun stringValue(path: Path, level: Int, range: IntRange, pos: Int, bound: Map<Pair<Int, Loop>, String>, depth: Int = 0): String? {
+            if (depth > 8) return null
+            val l = path.links[level]
+            val t = l.fs.src.text(range).trim()
+            Regex("""^"([^"\\]*)"$""").matchEntire(t)?.let { lit ->
+                val out = StringBuilder()
+                var last = 0
+                val body = lit.groupValues[1]
+                for (m in Regex("""\$\{\s*(\w+)\s*}|\$(\w+)""").findAll(body)) {
+                    out.append(body, last, m.range.first)
+                    out.append(nameValue(path, level, m.groupValues[1].ifEmpty { m.groupValues[2] }, pos, bound, depth + 1) ?: return null)
+                    last = m.range.last + 1
+                }
+                if (body.substring(last).contains('$')) return null
+                return out.append(body.substring(last)).toString()
+            }
+            val parts = Regex("""^(\w+(?:\s*\.\s*\w+)*)$""").matchEntire(t)?.groupValues?.get(1)?.split(Regex("""\s*\.\s*""")) ?: return null
+            if (parts.size == 1) return nameValue(path, level, parts[0], pos, bound, depth + 1)
+            if (parts.size == 2) {
+                // `it.spec` inside a loop over an enum's entries.
+                val (key, element) = bound.entries.firstOrNull { (k, _) -> k.first == level && pos in k.second.body && loopVariable(l.fs.src, k.second) == parts[0] } ?: return null
+                val enum = l.fs.src.text(key.second.over).trim().replace(Regex("""\s*\.\s*(?:entries|values\(\))$"""), "").substringAfterLast('.')
+                return enumProperty(enum, element.substringBefore('(').trim(), parts[1])
+            }
+            return if (parts.size == 3) enumProperty(parts[0], parts[1], parts[2]) else null
+        }
+
+        /** The variable a loop binds each element to: `forEach { d -> }`, `forEach { }` (`it`), `forEachIndexed { i, d -> }`, `for (d in …)`. */
+        fun loopVariable(src: KotlinSource, loop: Loop): String {
+            Regex("""\bfor\s*\(\s*(\w+)\s+in\s*$""").find(src.mask.substring(maxOf(0, loop.over.first - 80), loop.over.first))?.let { return it.groupValues[1] }
+            val head = src.mask.substring(loop.body.first + 1, minOf(loop.body.last, loop.body.first + 120))
+            Regex("""^\s*(?:\w+\s*,\s*)?(\w+)\s*->""").find(head)?.let { return it.groupValues[1] }
+            return "it"
+        }
+
+        fun nameValue(path: Path, level: Int, name: String, pos: Int, bound: Map<Pair<Int, Loop>, String>, depth: Int): String? {
+            val l = path.links[level]
+            val src = l.fs.src
+            val body = l.decl?.body ?: return null
+            val before = body.first until minOf(pos, body.last)
+            // val (a, b, c) = parse(spec)
+            Regex("""\bval\s*\(([^()]*)\)\s*=\s*(\w+)\s*\(""").findAll(src.mask).lastOrNull { it.range.first in before && name in it.groupValues[1].split(',').map(String::trim) }?.let { m ->
+                val arg = src.args(m.range.last).singleOrNull()?.takeIf { it.first == null } ?: return null
+                val spec = stringValue(path, level, arg.second, m.range.first, bound, depth + 1) ?: return null
+                return specComponent(m.groupValues[2], m.groupValues[1].split(',').map(String::trim).indexOf(name), spec)
+            }
+            Regex("""\b(?:val|var)\s+${Regex.escape(name)}\s*(?::[^=\n]+)?=(?!=)""").findAll(src.mask).lastOrNull { it.range.first in before }?.let { m ->
+                val start = src.skipWs(m.range.last + 1)
+                return stringValue(path, level, start..src.exprEndAt(start), m.range.first, bound, depth + 1)
+            }
+            val decl = l.decl
+            if (level == 0 || name !in decl.params) return null
+            val caller = path.links[level - 1]
+            val call = caller.call ?: return null
+            val args = call.open?.let { caller.fs.src.args(it) }.orEmpty()
+            val value = args.firstOrNull { it.first == name }?.second ?: args.filter { it.first == null }.map { it.second }.getOrNull(decl.params.indexOf(name)) ?: return null
+            return stringValue(path, level - 1, value, call.start, bound, depth + 1)
+        }
+
+        /** The string literal an enum entry passes for constructor property [prop]: `PHONE("phone", "spec:…")`. */
+        fun enumProperty(enum: String, entry: String, prop: String): String? {
+            val (f, d) = classIndex[enum].orEmpty().singleOrNull { it.second.isEnum && it.second.body != null } ?: return null
+            val src = f.src
+            val header = src.mask.indexOf('(', d.keyword).takeIf { it in d.keyword until d.body!!.first } ?: return null
+            val props = src.args(header).map { Regex("""^\s*(?:(?:val|var)\s+)?(\w+)\s*:""").find(src.text(it.second))?.groupValues?.get(1) }
+            val at = Regex("""(?<![\w.])${Regex.escape(entry)}\s*\(""").findAll(src.mask).firstOrNull { it.range.first in d.body!! } ?: return null
+            val args = src.args(at.range.last)
+            val value = args.firstOrNull { it.first == prop }?.second ?: args.filter { it.first == null }.map { it.second }.getOrNull(props.indexOf(prop).takeIf { it >= 0 } ?: return null) ?: return null
+            return Regex("""^"([^"$\\]*)"$""").matchEntire(src.text(value).trim())?.groupValues?.get(1)
+        }
+
+        /**
+         * Component [index] of what [fn] returns for an Android Studio device [spec], when [fn] is a parser of Now in Android's
+         * shape (`extractSpecs`): `spec.substringAfter("spec:").split(",").map { it.split("=") }.associate { it[0] to it[1] }`, then
+         * `val width = specs["width"]?.toInt() ?: 640` per value, returned as `Specs(width, height, dpi)` of a data class.
+         * Evaluated as that code does; null when [fn] differs or it would throw.
+         */
+        fun specComponent(fn: String, index: Int, spec: String): String? {
+            val (f, d) = files.flatMap { f -> f.src.funs.filter { it.name == fn && it.body != null }.map { f to it } }.singleOrNull() ?: return null
+            val p = d.params.singleOrNull() ?: return null
+            val body = f.src.text(d.body!!)
+            val map = Regex("""\bval\s+(\w+)\s*=\s*${Regex.escape(p)}\s*\.\s*substringAfter\(\s*"spec:"\s*\)\s*\.\s*split\(\s*","\s*\)\s*\.\s*map\s*\{\s*it\s*\.\s*split\(\s*"="\s*\)\s*}\s*\.\s*associate\s*\{\s*it\s*\[\s*0\s*]\s+to\s+it\s*\[\s*1\s*]\s*}""")
+                .find(body)?.groupValues?.get(1) ?: return null
+            val ret = Regex("""\breturn\s+(\w+)\s*\(([^()]*)\)""").findAll(body).singleOrNull() ?: return null
+            val (cf, cd) = classIndex[ret.groupValues[1]].orEmpty().singleOrNull() ?: return null
+            if (!Regex("""\bdata\s+$""").containsMatchIn(cf.src.mask.substring(maxOf(0, cd.keyword - 12), cd.keyword))) return null
+            val header = cf.src.mask.indexOf('(', cd.keyword).takeIf { it > cd.keyword && (cd.body == null || it < cd.body.first) } ?: return null
+            val props = cf.src.args(header).map { Regex("""^\s*val\s+(\w+)\s*:\s*Int\s*$""").find(cf.src.text(it.second))?.groupValues?.get(1) ?: return null }
+            val values = ret.groupValues[2].split(',').map(String::trim).filter(String::isNotEmpty)
+            if (values.size != props.size || values.any { !Regex("""\w+""").matches(it) }) return null
+            val v = values.getOrNull(index) ?: return null
+            val m = Regex("""(?m)\bval\s+${Regex.escape(v)}\s*=\s*${Regex.escape(map)}\s*\[\s*"(\w+)"\s*]\s*\?\.\s*toInt\(\)\s*\?:\s*(-?\d+)\s*$""").find(body) ?: return null
+            val specs = spec.substringAfter("spec:").split(",").map { it.split("=") }.associate { (it.getOrNull(1) ?: return null).let { v1 -> it[0] to v1 } }
+            return (specs[m.groupValues[1]]?.let { it.toIntOrNull() ?: return null } ?: m.groupValues[2].toInt()).toString()
         }
 
         fun classLayers(f: FileScan, cls: Decl?, depth: Int): List<Layer> {
@@ -746,7 +907,8 @@ object SnapshotTests {
     }
 
     private fun config(s: KotlinSource, d: Decl): Layer? {
-        val ann = d.annotations.lastOrNull { it.name == "Config" } ?: return null
+        // `@Config`, or Robolectric's imported under another name (`import org.robolectric.annotation.Config as RobolectricConfig`).
+        val ann = d.annotations.lastOrNull { it.name == "Config" || s.imports[it.name] == "org.robolectric.annotation.Config" } ?: return null
         val q = s.args(ann.open ?: return null).firstOrNull { it.first == "qualifiers" } ?: return null
         return layer(s, q.second)
     }
@@ -809,6 +971,8 @@ object SnapshotTests {
         }
         return null
     }
+
+    private fun instrumented(sourceSet: String) = listOf("androidTest", "androidInstrumentedTest", "androidDeviceTest").any { sourceSet.startsWith(it) }
 
     private fun android(sourceSet: String) = sourceSet.startsWith("test") || sourceSet.startsWith("androidUnitTest") || sourceSet.startsWith("androidHostTest")
 

@@ -1,0 +1,27 @@
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:59  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold { DropdownMenuItem( text = { Text("Horizon") }, onClick = {} ) DropdownMenuItem( text = { Text("The Witch…
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:74  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold { DropdownMenuItem( text = { Text("Horizon") }, children = { DropdownMenuItem( text = { Text("Zero Dawn")…
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:122  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold(state) { Text("This should get replaced by the sub-menu") }
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:158  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold(state) { Text("This should get replaced by the sub-menu") }
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:166  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold { DropdownMenuHeader { Text("A header that overflows to the next line") } DropdownMenuItem( text = { Text…
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:181  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold { DropdownMenuHeader( contentPadding = PaddingValues(start = 0.dp, end = 16.dp) ) { Box( Modifier .fillMa…
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:203  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold( shape = RoundedCornerShape(24.dp) ) { DropdownMenuItem(text = { Text("I just called") }, onClick = {}) D…
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:217  :cascade-compose test paparazzi
+  renders: not covered: PopupScaffold( shadowElevation = CascadeDefaults.shadowElevation + 20.dp, minSdkReader = { minSdk }, ) { DropdownMenuIt…
+  device: tool default = 1080x1920px 480dpi → Nexus 5
+cascade-compose/src/test/java/me/saket/cascade/RobolectricCompatibilityTest.kt:103  :cascade-compose test roborazzi
+  renders: not covered: captureDeviceScreenshot().captureRoboImage()
+  device: RobolectricDeviceQualifiers.Pixel7 = 1078x2399px 420dpi → spec:width=410.7dp,height=913.9dp,dpi=420

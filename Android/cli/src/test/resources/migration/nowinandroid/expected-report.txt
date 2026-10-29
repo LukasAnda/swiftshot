@@ -1,0 +1,133 @@
+# Swiftshot migration
+
+## Modules
+
+- :app  Roborazzi (alias libs.plugins.roborazzi, imports): not rendered (no tests on previews)
+- :core:designsystem  Roborazzi (alias libs.plugins.roborazzi, imports): not rendered (no tests on previews)
+- :feature:foryou:impl  Roborazzi (alias libs.plugins.roborazzi): not rendered (no tests on previews)
+
+## Devices
+
+- none (no test renders a preview)
+
+## Settings
+
+- languages: en-US (no test sets a locale)
+- appearances: light (no test uses night mode)
+- font scales: 1 (no test sets one)
+
+## Not covered
+
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:153  testNiaAppScreenshotWithSize( 400.dp, 400.dp, "compactWidth_compactHeight_showsNavigationBar", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:162  testNiaAppScreenshotWithSize( 610.dp, 400.dp, "mediumWidth_compactHeight_showsNavigationBar", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:171  testNiaAppScreenshotWithSize( 900.dp, 400.dp, "expandedWidth_compactHeight_showsNavigationBar", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:180  testNiaAppScreenshotWithSize( 400.dp, 500.dp, "compactWidth_mediumHeight_showsNavigationBar", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:189  testNiaAppScreenshotWithSize( 610.dp, 500.dp, "mediumWidth_mediumHeight_showsNavigationRail", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:198  testNiaAppScreenshotWithSize( 900.dp, 500.dp, "expandedWidth_mediumHeight_showsNavigationRail", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:207  testNiaAppScreenshotWithSize( 400.dp, 1000.dp, "compactWidth_expandedHeight_showsNavigationBar", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:216  testNiaAppScreenshotWithSize( 610.dp, 1000.dp, "mediumWidth_expandedHeight_showsNavigationRail", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:225  testNiaAppScreenshotWithSize( 900.dp, 1000.dp, "expandedWidth_expandedHeight_showsNavigationRail", ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:151  testSnackbarScreenshotWithSize( 400.dp, 500.dp, "insets_snackbar_compact_medium_noSnackbar", action = { }, ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:161  testSnackbarScreenshotWithSize( 400.dp, 500.dp, "insets_snackbar_compact_medium", ) { snackbarHostState -> snackbarHost… has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:176  testSnackbarScreenshotWithSize( 600.dp, 600.dp, "insets_snackbar_medium_medium", ) { snackbarHostState -> snackbarHostS… has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:191  testSnackbarScreenshotWithSize( 900.dp, 900.dp, "insets_snackbar_expanded_expanded", ) { snackbarHostState -> snackbarH… has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:124  testSnackbarScreenshotWithSize( 400.dp, 500.dp, "snackbar_compact_medium_noSnackbar", action = { }, ) has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:134  testSnackbarScreenshotWithSize( 400.dp, 500.dp, "snackbar_compact_medium", ) { snackbarHostState -> snackbarHostState.s… has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:149  testSnackbarScreenshotWithSize( 600.dp, 600.dp, "snackbar_medium_medium", ) { snackbarHostState -> snackbarHostState.sh… has no @Preview — add a @Preview with the same arguments to include it
+- app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:164  testSnackbarScreenshotWithSize( 900.dp, 900.dp, "snackbar_expanded_expanded", ) { snackbarHostState -> snackbarHostStat… has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/BackgroundScreenshotTests.kt:48  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/BackgroundScreenshotTests.kt:57  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/ButtonScreenshotTests.kt:48  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/ButtonScreenshotTests.kt:57  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/ButtonScreenshotTests.kt:66  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/FilterChipScreenshotTests.kt:58  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/FilterChipScreenshotTests.kt:69  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/FilterChipScreenshotTests.kt:98  CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri… has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/IconButtonScreenshotTests.kt:47  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/IconButtonScreenshotTests.kt:54  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:49  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:58  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  NiaTheme { NiaLoadingWheel(contentDesc = "") } has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  NiaTheme { NiaLoadingWheel(contentDesc = "") } has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  NiaTheme { NiaLoadingWheel(contentDesc = "") } has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  NiaTheme { NiaLoadingWheel(contentDesc = "") } has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/NavigationScreenshotTests.kt:57  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/NavigationScreenshotTests.kt:79  CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri… has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TabsScreenshotTests.kt:55  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TabsScreenshotTests.kt:75  CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri… has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TagScreenshotTests.kt:52  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TagScreenshotTests.kt:76  CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri… has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TopAppBarScreenshotTests.kt:55  helper captureMultiTheme has no @Preview — add a @Preview with the same arguments to include it
+- core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TopAppBarScreenshotTests.kt:75  CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:73  composeTestRule.captureMultiDevice("ForYouScreenPopulatedFeed") { NiaTheme { ForYouScreen( isSyncing = false, onboardin… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:73  composeTestRule.captureMultiDevice("ForYouScreenPopulatedFeed") { NiaTheme { ForYouScreen( isSyncing = false, onboardin… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:73  composeTestRule.captureMultiDevice("ForYouScreenPopulatedFeed") { NiaTheme { ForYouScreen( isSyncing = false, onboardin… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:93  composeTestRule.captureMultiDevice("ForYouScreenLoading") { NiaTheme { ForYouScreen( isSyncing = false, onboardingUiSta… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:93  composeTestRule.captureMultiDevice("ForYouScreenLoading") { NiaTheme { ForYouScreen( isSyncing = false, onboardingUiSta… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:93  composeTestRule.captureMultiDevice("ForYouScreenLoading") { NiaTheme { ForYouScreen( isSyncing = false, onboardingUiSta… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:111  composeTestRule.captureMultiDevice( "ForYouScreenTopicSelection", accessibilitySuppressions = Matchers.allOf( Accessibi… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:111  composeTestRule.captureMultiDevice( "ForYouScreenTopicSelection", accessibilitySuppressions = Matchers.allOf( Accessibi… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:111  composeTestRule.captureMultiDevice( "ForYouScreenTopicSelection", accessibilitySuppressions = Matchers.allOf( Accessibi… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:131  composeTestRule.captureForDevice( deviceName = "phone_dark", deviceSpec = DefaultTestDevices.PHONE.spec, screenshotName… has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:143  composeTestRule.captureMultiDevice("ForYouScreenPopulatedAndLoading") { ForYouScreenPopulatedAndLoading() } has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:143  composeTestRule.captureMultiDevice("ForYouScreenPopulatedAndLoading") { ForYouScreenPopulatedAndLoading() } has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:143  composeTestRule.captureMultiDevice("ForYouScreenPopulatedAndLoading") { ForYouScreenPopulatedAndLoading() } has no @Preview — add a @Preview with the same arguments to include it
+- feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:150  composeTestRule.captureForDevice( deviceName = "phone_dark", deviceSpec = DefaultTestDevices.PHONE.spec, screenshotName… has no @Preview — add a @Preview with the same arguments to include it
+
+## Not tested, skipped
+
+- com.google.samples.apps.nowinandroid.core.designsystem.component.BackgroundKt.BackgroundAndroid (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.BackgroundKt.BackgroundDefault (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.BackgroundKt.BackgroundDynamic (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.BackgroundKt.GradientBackgroundAndroid (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.BackgroundKt.GradientBackgroundDefault (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.BackgroundKt.GradientBackgroundDynamic (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.ButtonKt.NiaButtonLeadingIconPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.ButtonKt.NiaButtonPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.ButtonKt.NiaOutlinedButtonPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.ChipKt.ChipPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.IconButtonKt.IconButtonPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.IconButtonKt.IconButtonPreviewUnchecked (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.LoadingWheelKt.NiaLoadingWheelPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.LoadingWheelKt.NiaOverlayLoadingWheelPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.NavigationKt.NiaNavigationBarPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.NavigationKt.NiaNavigationRailPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.TabsKt.TabsPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.TagKt.TagPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.TopAppBarKt.NiaTopAppBarPreview (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.ViewToggleKt.ViewTogglePreviewCompact (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.designsystem.component.ViewToggleKt.ViewTogglePreviewExpanded (:core:designsystem)
+- com.google.samples.apps.nowinandroid.core.ui.InterestsItemKt.InterestsCardLongDescriptionPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.InterestsItemKt.InterestsCardLongNamePreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.InterestsItemKt.InterestsCardPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.InterestsItemKt.InterestsCardSelectedPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.InterestsItemKt.InterestsCardWithEmptyDescriptionPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.NewsFeedKt.NewsFeedContentPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.NewsFeedKt.NewsFeedLoadingPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.NewsResourceCardKt.BookmarkButtonBookmarkedPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.NewsResourceCardKt.BookmarkButtonPreview (:core:ui)
+- com.google.samples.apps.nowinandroid.core.ui.NewsResourceCardKt.ExpandedNewsResourcePreview (:core:ui)
+- com.google.samples.apps.nowinandroid.feature.bookmarks.impl.BookmarksScreenKt.BookmarksGridPreview (:feature:bookmarks:impl)
+- com.google.samples.apps.nowinandroid.feature.bookmarks.impl.BookmarksScreenKt.EmptyStatePreview (:feature:bookmarks:impl)
+- com.google.samples.apps.nowinandroid.feature.bookmarks.impl.BookmarksScreenKt.LoadingStatePreview (:feature:bookmarks:impl)
+- com.google.samples.apps.nowinandroid.feature.foryou.impl.ForYouScreenKt.ForYouScreenLoading (:feature:foryou:impl)
+- com.google.samples.apps.nowinandroid.feature.foryou.impl.ForYouScreenKt.ForYouScreenOfflinePopulatedFeed (:feature:foryou:impl)
+- com.google.samples.apps.nowinandroid.feature.foryou.impl.ForYouScreenKt.ForYouScreenPopulatedAndLoading (:feature:foryou:impl)
+- com.google.samples.apps.nowinandroid.feature.foryou.impl.ForYouScreenKt.ForYouScreenPopulatedFeed (:feature:foryou:impl)
+- com.google.samples.apps.nowinandroid.feature.foryou.impl.ForYouScreenKt.ForYouScreenTopicSelection (:feature:foryou:impl)
+- com.google.samples.apps.nowinandroid.feature.interests.impl.InterestsDetailPlaceholderKt.TopicDetailPlaceholderPreview (:feature:interests:impl)
+- com.google.samples.apps.nowinandroid.feature.interests.impl.InterestsScreenKt.InterestsScreenEmpty (:feature:interests:impl)
+- com.google.samples.apps.nowinandroid.feature.interests.impl.InterestsScreenKt.InterestsScreenLoading (:feature:interests:impl)
+- com.google.samples.apps.nowinandroid.feature.interests.impl.InterestsScreenKt.InterestsScreenPopulated (:feature:interests:impl)
+- com.google.samples.apps.nowinandroid.feature.search.impl.SearchScreenKt.EmptySearchResultColumnPreview (:feature:search:impl)
+- com.google.samples.apps.nowinandroid.feature.search.impl.SearchScreenKt.RecentSearchesBodyPreview (:feature:search:impl)
+- com.google.samples.apps.nowinandroid.feature.search.impl.SearchScreenKt.SearchNotReadyBodyPreview (:feature:search:impl)
+- com.google.samples.apps.nowinandroid.feature.search.impl.SearchScreenKt.SearchScreenPreview (:feature:search:impl)
+- com.google.samples.apps.nowinandroid.feature.search.impl.SearchScreenKt.SearchToolbarPreview (:feature:search:impl)
+- com.google.samples.apps.nowinandroid.feature.settings.impl.SettingsDialogKt.PreviewSettingsDialog (:feature:settings:impl)
+- com.google.samples.apps.nowinandroid.feature.settings.impl.SettingsDialogKt.PreviewSettingsDialogLoading (:feature:settings:impl)
+- com.google.samples.apps.nowinandroid.feature.topic.impl.TopicScreenKt.TopicBodyPreview (:feature:topic:impl)
+- com.google.samples.apps.nowinandroid.feature.topic.impl.TopicScreenKt.TopicScreenLoading (:feature:topic:impl)
+- com.google.samples.apps.nowinandroid.feature.topic.impl.TopicScreenKt.TopicScreenPopulated (:feature:topic:impl)
+
+0 of 55 snapshot tests are covered by previews; 55 aren't (listed above)

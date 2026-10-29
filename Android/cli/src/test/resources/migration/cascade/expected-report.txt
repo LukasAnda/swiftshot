@@ -1,0 +1,29 @@
+# Swiftshot migration
+
+## Modules
+
+- :cascade-compose  Paparazzi, Roborazzi (plugin app.cash.paparazzi, plugin io.github.takahirom.roborazzi, imports): not rendered (no tests on previews)
+
+## Devices
+
+- none (no test renders a preview)
+
+## Settings
+
+- languages: en-US (no test sets a locale)
+- appearances: light (no test uses night mode)
+- font scales: 1 (no test sets one)
+
+## Not covered
+
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:59  PopupScaffold { DropdownMenuItem( text = { Text("Horizon") }, onClick = {} ) DropdownMenuItem( text = { Text("The Witch… has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:74  PopupScaffold { DropdownMenuItem( text = { Text("Horizon") }, children = { DropdownMenuItem( text = { Text("Zero Dawn")… has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:122  PopupScaffold(state) { Text("This should get replaced by the sub-menu") } has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:158  PopupScaffold(state) { Text("This should get replaced by the sub-menu") } has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:166  PopupScaffold { DropdownMenuHeader { Text("A header that overflows to the next line") } DropdownMenuItem( text = { Text… has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:181  PopupScaffold { DropdownMenuHeader( contentPadding = PaddingValues(start = 0.dp, end = 16.dp) ) { Box( Modifier .fillMa… has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:203  PopupScaffold( shape = RoundedCornerShape(24.dp) ) { DropdownMenuItem(text = { Text("I just called") }, onClick = {}) D… has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/CascadeDropdownMenuTest.kt:217  PopupScaffold( shadowElevation = CascadeDefaults.shadowElevation + 20.dp, minSdkReader = { minSdk }, ) { DropdownMenuIt… has no @Preview — add a @Preview with the same arguments to include it
+- cascade-compose/src/test/java/me/saket/cascade/RobolectricCompatibilityTest.kt:103  captureDeviceScreenshot().captureRoboImage() has no @Preview — add a @Preview with the same arguments to include it
+
+0 of 9 snapshot tests are covered by previews; 9 aren't (listed above)

@@ -1,0 +1,165 @@
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:153  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 400.dp, 400.dp, "compactWidth_compactHeight_showsNavigationBar", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:162  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 610.dp, 400.dp, "mediumWidth_compactHeight_showsNavigationBar", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:171  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 900.dp, 400.dp, "expandedWidth_compactHeight_showsNavigationBar", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:180  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 400.dp, 500.dp, "compactWidth_mediumHeight_showsNavigationBar", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:189  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 610.dp, 500.dp, "mediumWidth_mediumHeight_showsNavigationRail", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:198  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 900.dp, 500.dp, "expandedWidth_mediumHeight_showsNavigationRail", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:207  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 400.dp, 1000.dp, "compactWidth_expandedHeight_showsNavigationBar", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:216  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 610.dp, 1000.dp, "mediumWidth_expandedHeight_showsNavigationRail", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/NiaAppScreenSizesScreenshotTests.kt:225  :app testDemo roborazzi
+  renders: not covered: testNiaAppScreenshotWithSize( 900.dp, 1000.dp, "expandedWidth_expandedHeight_showsNavigationRail", )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:151  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 400.dp, 500.dp, "insets_snackbar_compact_medium_noSnackbar", action = { }, )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:161  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 400.dp, 500.dp, "insets_snackbar_compact_medium", ) { snackbarHostState -> snackbarHost…
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:176  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 600.dp, 600.dp, "insets_snackbar_medium_medium", ) { snackbarHostState -> snackbarHostS…
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarInsetsScreenshotTests.kt:191  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 900.dp, 900.dp, "insets_snackbar_expanded_expanded", ) { snackbarHostState -> snackbarH…
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:124  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 400.dp, 500.dp, "snackbar_compact_medium_noSnackbar", action = { }, )
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:134  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 400.dp, 500.dp, "snackbar_compact_medium", ) { snackbarHostState -> snackbarHostState.s…
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:149  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 600.dp, 600.dp, "snackbar_medium_medium", ) { snackbarHostState -> snackbarHostState.sh…
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+app/src/testDemo/kotlin/com/google/samples/apps/nowinandroid/ui/SnackbarScreenshotTests.kt:164  :app testDemo roborazzi
+  renders: not covered: testSnackbarScreenshotWithSize( 900.dp, 900.dp, "snackbar_expanded_expanded", ) { snackbarHostState -> snackbarHostStat…
+  device: w1000dp-h1000dp-480dpi = 3000x3000px 480dpi → spec:width=1000dp,height=1000dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/BackgroundScreenshotTests.kt:48  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/BackgroundScreenshotTests.kt:57  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/ButtonScreenshotTests.kt:48  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/ButtonScreenshotTests.kt:57  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/ButtonScreenshotTests.kt:66  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/FilterChipScreenshotTests.kt:58  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/FilterChipScreenshotTests.kt:69  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/FilterChipScreenshotTests.kt:98  :core:designsystem test roborazzi
+  renders: not covered: CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri…
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/IconButtonScreenshotTests.kt:47  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/IconButtonScreenshotTests.kt:54  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:49  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:58  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  :core:designsystem test roborazzi
+  renders: not covered: NiaTheme { NiaLoadingWheel(contentDesc = "") }
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  :core:designsystem test roborazzi
+  renders: not covered: NiaTheme { NiaLoadingWheel(contentDesc = "") }
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  :core:designsystem test roborazzi
+  renders: not covered: NiaTheme { NiaLoadingWheel(contentDesc = "") }
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/LoadingWheelScreenshotTests.kt:76  :core:designsystem test roborazzi
+  renders: not covered: NiaTheme { NiaLoadingWheel(contentDesc = "") }
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/NavigationScreenshotTests.kt:57  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/NavigationScreenshotTests.kt:79  :core:designsystem test roborazzi
+  renders: not covered: CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri…
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TabsScreenshotTests.kt:55  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TabsScreenshotTests.kt:75  :core:designsystem test roborazzi
+  renders: not covered: CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri…
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TagScreenshotTests.kt:52  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TagScreenshotTests.kt:76  :core:designsystem test roborazzi
+  renders: not covered: CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri…
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TopAppBarScreenshotTests.kt:55  :core:designsystem test roborazzi
+  renders: not covered: helper captureMultiTheme
+  device: unresolved: helper captureMultiTheme
+core/designsystem/src/test/kotlin/com/google/samples/apps/nowinandroid/core/designsystem/TopAppBarScreenshotTests.kt:75  :core:designsystem test roborazzi
+  renders: not covered: CompositionLocalProvider( LocalInspectionMode provides true, ) { DeviceConfigurationOverride( DeviceConfigurationOverri…
+  device: 480dpi = 960x1410px 480dpi → spec:width=320dp,height=470dp,dpi=480
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:73  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenPopulatedFeed") { NiaTheme { ForYouScreen( isSyncing = false, onboardin…
+  device: w640dp-h360dp-480dpi = 1920x1080px 480dpi landscape → spec:width=640dp,height=360dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:73  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenPopulatedFeed") { NiaTheme { ForYouScreen( isSyncing = false, onboardin…
+  device: w673dp-h841dp-480dpi = 2019x2523px 480dpi → spec:width=673dp,height=841dp,dpi=480
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:73  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenPopulatedFeed") { NiaTheme { ForYouScreen( isSyncing = false, onboardin…
+  device: w1280dp-h800dp-480dpi = 3840x2400px 480dpi landscape → spec:width=1280dp,height=800dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:93  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenLoading") { NiaTheme { ForYouScreen( isSyncing = false, onboardingUiSta…
+  device: w640dp-h360dp-480dpi = 1920x1080px 480dpi landscape → spec:width=640dp,height=360dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:93  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenLoading") { NiaTheme { ForYouScreen( isSyncing = false, onboardingUiSta…
+  device: w673dp-h841dp-480dpi = 2019x2523px 480dpi → spec:width=673dp,height=841dp,dpi=480
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:93  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenLoading") { NiaTheme { ForYouScreen( isSyncing = false, onboardingUiSta…
+  device: w1280dp-h800dp-480dpi = 3840x2400px 480dpi landscape → spec:width=1280dp,height=800dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:111  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice( "ForYouScreenTopicSelection", accessibilitySuppressions = Matchers.allOf( Accessibi…
+  device: w640dp-h360dp-480dpi = 1920x1080px 480dpi landscape → spec:width=640dp,height=360dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:111  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice( "ForYouScreenTopicSelection", accessibilitySuppressions = Matchers.allOf( Accessibi…
+  device: w673dp-h841dp-480dpi = 2019x2523px 480dpi → spec:width=673dp,height=841dp,dpi=480
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:111  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice( "ForYouScreenTopicSelection", accessibilitySuppressions = Matchers.allOf( Accessibi…
+  device: w1280dp-h800dp-480dpi = 3840x2400px 480dpi landscape → spec:width=1280dp,height=800dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:131  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureForDevice( deviceName = "phone_dark", deviceSpec = DefaultTestDevices.PHONE.spec, screenshotName…
+  device: w640dp-h360dp-480dpi = 1920x1080px 480dpi landscape → spec:width=640dp,height=360dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:143  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenPopulatedAndLoading") { ForYouScreenPopulatedAndLoading() }
+  device: w640dp-h360dp-480dpi = 1920x1080px 480dpi landscape → spec:width=640dp,height=360dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:143  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenPopulatedAndLoading") { ForYouScreenPopulatedAndLoading() }
+  device: w673dp-h841dp-480dpi = 2019x2523px 480dpi → spec:width=673dp,height=841dp,dpi=480
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:143  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureMultiDevice("ForYouScreenPopulatedAndLoading") { ForYouScreenPopulatedAndLoading() }
+  device: w1280dp-h800dp-480dpi = 3840x2400px 480dpi landscape → spec:width=1280dp,height=800dp,dpi=480,orientation=landscape
+feature/foryou/impl/src/test/kotlin/com/google/samples/apps/nowinandroid/feature/foryou/impl/ForYouScreenScreenshotTests.kt:150  :feature:foryou:impl test roborazzi
+  renders: not covered: composeTestRule.captureForDevice( deviceName = "phone_dark", deviceSpec = DefaultTestDevices.PHONE.spec, screenshotName…
+  device: w640dp-h360dp-480dpi = 1920x1080px 480dpi landscape → spec:width=640dp,height=360dp,dpi=480,orientation=landscape

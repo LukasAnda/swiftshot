@@ -70,6 +70,7 @@ object SnapshotModules {
                 ctx.conventions[id]?.let { tools += it; via += "convention plugin $id" }
             }
             for ((id, found) in ctx.conventions) if (applies(text, id)) { tools += found; via += "convention plugin $id" }
+            for ((cls, tool) in appliedClasses(text)) { tools += tool; via += "plugin class $cls" }
         }
         val src = File(dir, "src")
         if (src.isDirectory) {
@@ -92,6 +93,18 @@ object SnapshotModules {
     /** `id("x")`, `id 'x'`, `apply plugin: 'x'`, `apply(plugin = "x")`, `pluginManager.apply("x")`, `apply("x")`. */
     internal fun applies(text: String, id: String): Boolean =
         Regex("""\b(?:id|apply|plugin)\b\s*\(?\s*(?:(?:plugin)\s*[:=]\s*)?["']${Regex.escape(id)}["']""").containsMatchIn(text)
+
+    private val pluginClasses = mapOf(
+        "app.cash.paparazzi.gradle.PaparazziPlugin" to SnapshotTool.PAPARAZZI,
+        "io.github.takahirom.roborazzi.RoborazziPlugin" to SnapshotTool.ROBORAZZI,
+    )
+
+    /** The tools' plugin classes applied by class: `apply<PaparazziPlugin>()`, `PaparazziPlugin::class`, imported or written in full. */
+    internal fun appliedClasses(text: String): Map<String, SnapshotTool> = pluginClasses.filterKeys { fq ->
+        val imported = Regex("""(?m)^\s*import\s+${Regex.escape(fq)}\s*;?\s*$""").containsMatchIn(text)
+        val ref = if (imported) """(?:${Regex.escape(fq)}|(?<![\w.])${fq.substringAfterLast('.')})""" else Regex.escape(fq)
+        Regex("""\bapply\s*<\s*$ref\s*>|$ref\s*::\s*class\b""").containsMatchIn(text)
+    }
 
     /** Everything the settings and build files declare, read once per `find`. */
     private class Context(val root: File) {
@@ -136,9 +149,15 @@ object SnapshotModules {
                     val cls = Regex("""implementationClass\s*=\s*["']([^"']+)["']""").find(block)?.groupValues?.get(1)?.substringAfterLast('.') ?: continue
                     val m = Regex("""\bid\s*=?\s*(?:["']([^"']+)["']|(\w+)\.plugins\.([A-Za-z0-9_.]+))""").find(block) ?: continue
                     val id = m.groupValues[1].ifEmpty { catalogs[m.groupValues[2]]?.let { resolve(it, m.groupValues[3]) } } ?: continue
-                    val decl = Regex("""\b(?:class|object)\s+${Regex.escape(cls)}\b""")
-                    sources[id] = scripts.filter { it.name.endsWith(".kt") || it.name.endsWith(".java") || it.name.endsWith(".groovy") }
-                        .map { strip(it.readText()) }.filter { decl.containsMatchIn(it) }.joinToString("\n")
+                    sources[id] = classSource(scripts, cls)
+                }
+                // A registration helper called with the class name and the catalog id: `create("ScreenshotsPlugin", libs.plugins.x)`.
+                for (args in Regex("""\(([^()]*)\)""").findAll(strip(f.readText())).map { it.groupValues[1] }) {
+                    val cls = Regex("""^\s*["']([\w.]+)["']\s*,""").find(args)?.groupValues?.get(1)?.substringAfterLast('.') ?: continue
+                    val m = Regex(""",\s*(\w+)\.plugins\.([A-Za-z0-9_.]+?)\s*$""").find(args) ?: continue
+                    val id = catalogs[m.groupValues[1]]?.let { resolve(it, m.groupValues[2]) } ?: continue
+                    if (id in sources) continue
+                    classSource(scripts, cls).takeIf { it.isNotEmpty() }?.let { sources[id] = it }
                 }
             }
             // Precompiled script plugins: src/main/{kotlin,groovy,java}/<package>/<name>.gradle.kts
@@ -154,6 +173,7 @@ object SnapshotModules {
         fun tools(id: String, text: String): Set<SnapshotTool> {
             val found = linkedSetOf<SnapshotTool>()
             for ((tool, t) in ids) if (applies(text, tool)) found += t
+            found += appliedClasses(text).values
             for (c in catalogs.values) for (m in Regex("""findPlugin\s*\(\s*["']([^"']+)["']""").findAll(text)) {
                 resolve(c, m.groupValues[1].replace(Regex("[-_]"), "."))?.let { ids[it]?.let(found::add) }
             }
@@ -173,6 +193,13 @@ object SnapshotModules {
             }
         }
         return result
+    }
+
+    /** The Kotlin, Java or Groovy sources among [scripts] that declare class [cls]. */
+    private fun classSource(scripts: List<File>, cls: String): String {
+        val decl = Regex("""\b(?:class|object)\s+${Regex.escape(cls)}\b""")
+        return scripts.filter { it.name.endsWith(".kt") || it.name.endsWith(".java") || it.name.endsWith(".groovy") }
+            .map { strip(it.readText()) }.filter { decl.containsMatchIn(it) }.joinToString("\n")
     }
 
     /** The source with `//`, `/* */` (and with [hash], `#`) comments blanked; strings are kept unless [strings], which blanks their contents. */

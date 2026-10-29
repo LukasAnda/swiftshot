@@ -1,0 +1,122 @@
+package fr.smarquis.playground.buildlogic
+
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.CommonExtension
+import com.android.build.api.dsl.LibraryExtension
+import com.android.build.api.dsl.Lint
+import com.android.build.api.dsl.TestExtension
+import com.android.build.api.variant.AndroidComponentsExtension
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import com.android.build.api.variant.LibraryAndroidComponentsExtension
+import com.android.build.api.variant.TestAndroidComponentsExtension
+import com.android.build.api.variant.Variant
+import com.android.build.api.variant.VariantBuilder
+import fr.smarquis.playground.buildlogic.dsl.assign
+import fr.smarquis.playground.buildlogic.dsl.configure
+import fr.smarquis.playground.buildlogic.dsl.findByType
+import fr.smarquis.playground.buildlogic.dsl.getByType
+import fr.smarquis.playground.buildlogic.utils.PlaygroundGlobalCi
+import org.gradle.api.JavaVersion
+import org.gradle.api.Project
+import org.gradle.api.artifacts.VersionCatalog
+import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.plugins.JavaPluginExtension
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
+import org.jetbrains.kotlin.gradle.dsl.KotlinBaseExtension
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
+import org.jetbrains.kotlin.gradle.dsl.abi.AbiValidationExtension
+import org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation
+
+
+internal val Project.isMultiplatform: Boolean get() = pluginManager.hasPlugin("org.jetbrains.kotlin.multiplatform")
+internal val Project.isJavaPlatform: Boolean get() = pluginManager.hasPlugin("org.gradle.java-platform")
+internal val Project.isAndroid: Boolean get() = pluginManager.hasPlugin("com.android.base")
+internal val Project.isAndroidApplication: Boolean get() = pluginManager.hasPlugin("com.android.application")
+internal val Project.isAndroidLibrary: Boolean get() = pluginManager.hasPlugin("com.android.library")
+internal val Project.isAndroidTest: Boolean get() = pluginManager.hasPlugin("com.android.test")
+
+internal val Project.isCi: Boolean
+    get() = providers.environmentVariable("CI").map(String::toBoolean).getOrElse(false)
+
+internal fun Project.android(
+    configure: CommonExtension.() -> Unit,
+) = when {
+    isAndroidApplication -> androidApplication(configure)
+    isAndroidLibrary -> androidLibrary(configure)
+    isAndroidTest -> androidTest(configure)
+    else -> TODO("Unsupported project $this (isAndroid=$isAndroid)")
+}
+
+internal fun Project.androidApplication(configure: ApplicationExtension.() -> Unit) = configure<ApplicationExtension>(configure)
+internal fun Project.androidLibrary(configure: LibraryExtension.() -> Unit) = configure<LibraryExtension>(configure)
+internal fun Project.androidTest(configure: TestExtension.() -> Unit) = configure<TestExtension>(configure)
+internal fun Project.androidApplicationComponents(configure: ApplicationAndroidComponentsExtension.() -> Unit) = configure<ApplicationAndroidComponentsExtension>(configure)
+internal fun Project.androidLibraryComponents(configure: LibraryAndroidComponentsExtension.() -> Unit) = configure<LibraryAndroidComponentsExtension>(configure)
+
+internal val Project.androidExtension: AndroidComponentsExtension<out CommonExtension, out VariantBuilder, out Variant>
+    get() = androidExtensionNullable
+        ?: throw IllegalArgumentException("Failed to find any registered Android extension")
+
+internal val Project.androidExtensionNullable: AndroidComponentsExtension<out CommonExtension, out VariantBuilder, out Variant>?
+    get() = extensions.findByType<LibraryAndroidComponentsExtension>()
+        ?: extensions.findByType<ApplicationAndroidComponentsExtension>()
+        ?: extensions.findByType<TestAndroidComponentsExtension>()
+
+public fun Project.lint(configure: Lint.() -> Unit): Unit = android { lint { configure() } }
+
+internal fun Project.getVersionsCatalog(): VersionCatalog = runCatching {
+    project.extensions.getByType<VersionCatalogsExtension>().named("libs")
+}.recoverCatching {
+    throw IllegalStateException("No versions catalog found!", it)
+}.getOrThrow()
+
+internal fun <T> Project.getOrCreateExtra(
+    key: String,
+    create: (Project) -> T,
+): T = extensions.extraProperties.run {
+    @Suppress("UNCHECKED_CAST")
+    (if (has(key)) get(key) as? T else null) ?: create(project).also { set(key, it) }
+}
+
+internal inline fun <reified T : KotlinBaseExtension> Project.configureKotlin(
+    properties: PlaygroundProperties = playground(),
+    crossinline configure: T.() -> Unit = {},
+) {
+    configure<JavaPluginExtension> {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+    configure<T> {
+        val kotlin = when (this) {
+            is KotlinAndroidProjectExtension -> this
+            is KotlinJvmProjectExtension -> this
+            else -> TODO("Unsupported project extension $this ${T::class}")
+        }
+
+        // FIXME:
+        //  - https://issuetracker.google.com/issues/474474278
+        //  - https://youtrack.jetbrains.com/issue/KT-83410
+        @OptIn(ExperimentalAbiValidation::class)
+        if (kotlin !is KotlinAndroidProjectExtension) abiValidation {
+            PlaygroundGlobalCi.addToGlobalCi(project = this@configureKotlin, checkTaskProvider)
+            filters {
+                exclude {
+                    annotatedWith.addAll(
+                        "**.*Generated*",
+                    )
+                    byNames.addAll(
+                        "**.internal.**",
+                    )
+                }
+            }
+        }
+        jvmToolchain(25)
+        kotlin.compilerOptions {
+            jvmTarget = JvmTarget.JVM_11
+            allWarningsAsErrors = properties.warningsAsErrors
+        }
+        explicitApi()
+        configure()
+    }
+}

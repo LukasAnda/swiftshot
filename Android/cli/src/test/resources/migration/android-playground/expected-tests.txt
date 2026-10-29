@@ -1,0 +1,12 @@
+feature/home/impl/src/test/kotlin/fr/smarquis/playground/feature/home/HomeScreenshotTest.kt:23  :feature:home:impl test paparazzi
+  renders: not covered: helper screenshot
+  device: unresolved: helper screenshot
+feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:19  :feature:licenses:impl test paparazzi
+  renders: not covered: helper screenshot
+  device: unresolved: helper screenshot
+feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:22  :feature:licenses:impl test paparazzi
+  renders: not covered: helper screenshot
+  device: unresolved: helper screenshot
+feature/licenses/impl/src/test/kotlin/fr/smarquis/playground/feature/licenses/LicensesScreenshotTest.kt:25  :feature:licenses:impl test paparazzi
+  renders: not covered: helper screenshot
+  device: unresolved: helper screenshot

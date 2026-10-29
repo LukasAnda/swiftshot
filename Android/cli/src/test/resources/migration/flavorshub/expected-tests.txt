@@ -1,0 +1,76 @@
+paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/AccessibilityScreenshotTest.kt:62  :paparazzi-tests test paparazzi
+  renders: not covered: FlavorshubTheme { MainScreen( content = Recipes( scrollState = rememberLazyListState(), recipes = recipes, onToggleFavo…
+  device: DeviceConfig.PIXEL_4 = 1080x2280px 440dpi → Pixel 4
+paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/CustomComposePreviewTest.kt:66  :paparazzi-tests test paparazzi
+  renders: all previews in com.droidcon.flavorshub, public only
+  device: unresolved: renderingMode=SHRINK
+paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/NoOvertestingRecipeCardScreenshotTest.kt:98  :paparazzi-tests test paparazzi
+  renders: not covered: FlavorshubTheme { RecipeCard( modifier = Modifier.Companion, recipe = testCase.recipeInLocale.mainScreenRecipeItem, onF…
+  device: unresolved: renderingMode=SHRINK
+paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/ParameterizedRecipeCardScreenshotTest.kt:96  :paparazzi-tests test paparazzi
+  renders: not covered: FlavorshubTheme { RecipeCard( modifier = Modifier.Companion, recipe = recipeInLocale.mainScreenRecipeItem, onFavouriteC…
+  device: unresolved: renderingMode=SHRINK
+paparazzi-tests/src/test/java/com/droidcon/flavorshub/paparazzi/screenshots/SimpleRecipeCardScreenshotTest.kt:35  :paparazzi-tests test paparazzi
+  renders: not covered: FlavorshubTheme { RecipeCard( modifier = Modifier.Companion, recipe = MainScreenRecipeItem( id = 1, name = "Recipe Titl…
+  device: unresolved: renderingMode=SHRINK
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/AccessibilityScreenshotTest.kt:90  :roborazzi-tests test roborazzi
+  renders: not covered: FlavorshubTheme { MainScreen( content = Recipes( scrollState = rememberLazyListState(), recipes = recipes, onToggleFavo…
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/CustomComposePreviewTest.kt:71  :roborazzi-tests test roborazzi
+  renders: all previews in com.droidcon.flavorshub, public only
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440
+  settings: from @Preview: fontScale, locale, night
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:128  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("1. Show Home")
+  device: unresolved: setQualifiers(testCase.device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:131  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("2. Added 1st recipe to favorites")
+  device: unresolved: setQualifiers(testCase.device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:134  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("3. Show Favorites")
+  device: unresolved: setQualifiers(testCase.device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:137  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("4. Show Details Screen of favorited Recipe")
+  device: unresolved: setQualifiers(testCase.device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:140  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("5. Back in Favorites")
+  device: unresolved: setQualifiers(testCase.device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/NoOvertestingMultiFrameScreenshotTest.kt:143  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("6. Removed favorited Recipe")
+  device: unresolved: setQualifiers(testCase.device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:106  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("1. Show Home")
+  device: unresolved: setQualifiers(device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:109  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("2. Added 1st recipe to favorites")
+  device: unresolved: setQualifiers(device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:112  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("3. Show Favorites")
+  device: unresolved: setQualifiers(device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:115  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("4. Show Details Screen of favorited Recipe")
+  device: unresolved: setQualifiers(device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:118  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("5. Back in Favorites")
+  device: unresolved: setQualifiers(device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/ParameterizedMultiFrameScreenshotTest.kt:121  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("6. Removed favorited Recipe")
+  device: unresolved: setQualifiers(device.qualifier)
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:64  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("1. Show Home")
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:67  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("2. Added 1st recipe to favorites")
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:70  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("3. Show Favorites")
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:73  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("4. Show Details Screen of favorited Recipe")
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:76  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("5. Back in Favorites")
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440
+roborazzi-tests/src/test/java/com/droidcon/flavorshub/roborazzi/screenshots/SimpleMultiFrameScreenshotTest.kt:79  :roborazzi-tests test roborazzi
+  renders: not covered: captureScreenshot("6. Removed favorited Recipe")
+  device: RobolectricDeviceQualifiers.Pixel4 = 1080x2279px 440dpi → spec:width=392.7dp,height=828.7dp,dpi=440

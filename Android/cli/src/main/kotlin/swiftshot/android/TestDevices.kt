@@ -7,8 +7,11 @@ import kotlin.math.roundToInt
 /** A screen as a snapshot test renders it: size in px (after orientation), layout density, shape. */
 data class Screen(val widthPx: Int, val heightPx: Int, val densityDpi: Int, val round: Boolean = false, val landscape: Boolean = false)
 
-/** Settings a test sets alongside its device; null when the test doesn't say. */
-data class TestSettings(val locale: String? = null, val night: Boolean? = null, val fontScale: Double? = null)
+/**
+ * Settings a test sets alongside its device; null when the test doesn't say. [fromPreview]: the ones it takes from each
+ * preview's own `@Preview` instead (`"locale"`, `"night"`, `"fontScale"`), e.g. Roborazzi's `uiMode(previewInfo.uiMode)`.
+ */
+data class TestSettings(val locale: String? = null, val night: Boolean? = null, val fontScale: Double? = null, val fromPreview: Set<String> = emptySet())
 
 /** Where a test's device came from. */
 sealed interface DeviceSource {
