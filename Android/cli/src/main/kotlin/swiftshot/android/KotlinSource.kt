@@ -10,6 +10,7 @@ internal class Ann(val name: String, val open: Int?)
  */
 internal class Decl(
     val name: String, val keyword: Int, val body: IntRange?, val annotations: List<Ann>,
+    /** The superclass as written (`Base`, `com.example.Base`). */
     val superclass: String? = null, val params: List<String> = emptyList(), val isEnum: Boolean = false,
     /** An extension function's receiver type, simple name without type arguments (`Paparazzi`). */
     val receiver: String? = null,
@@ -106,13 +107,17 @@ internal class KotlinSource(val file: File) {
             }
         }
         val superclass = if (delegation < 0) null
-            else Regex("""([\w.]+)\s*(?:<[^>]*>)?\s*\(""").find(mask.substring(delegation, body?.first ?: i))?.groupValues?.get(1)?.substringAfterLast('.')
+            else Regex("""([\w.]+)\s*(?:<[^>]*>)?\s*\(""").find(mask.substring(delegation, body?.first ?: i))?.groupValues?.get(1)
         val isEnum = m.groups[2]?.value == "class" && Regex("""\benum\s+$""").containsMatchIn(mask.substring(maxOf(0, m.range.first - 12), m.range.first))
         Decl(name, m.range.first, body, annotationsBefore(m.range.first), superclass, isEnum = isEnum)
     }.toList()
 
     fun fnAt(pos: Int) = funs.filter { it.body != null && pos in it.body }.maxByOrNull { it.body!!.first }
     fun classAt(pos: Int) = classes.filter { it.body != null && pos in it.body }.maxByOrNull { it.body!!.first }
+    /** The classes whose bodies contain [pos], innermost first. */
+    fun enclosing(pos: Int) = classes.filter { it.body != null && pos in it.body }.sortedByDescending { it.body!!.first }
+    /** `<package>.<Outer>.<Name>` for a class declared here. */
+    fun fqn(cls: Decl) = (listOf(pkg).filter { it.isNotEmpty() } + enclosing(cls.keyword).reversed().map { it.name } + cls.name).joinToString(".")
 
     fun exprEndAt(from: Int) = exprEnd(from)
 
@@ -250,11 +255,11 @@ internal class KotlinSource(val file: File) {
         return parts
     }
 
-    /** The initializer of a `val`/`const val` named by [expr] (`DEVICE`, `Companion.DEVICE`), if declared once in this file. */
+    /** The initializer of a `val`/`const val` named by [expr] (`DEVICE`, `Companion.DEVICE`), if it is the only `val` or `var` of that name in this file. */
     fun constant(expr: String): IntRange? {
         val name = Regex("""^(?:\w+\.)*(\w+)$""").matchEntire(expr.trim())?.groupValues?.get(1) ?: return null
-        val decls = Regex("""\b(?:val|var)\s+${Regex.escape(name)}\s*(?::[^=\n]+)?=(?!=)""").findAll(mask).toList()
-        val d = decls.singleOrNull() ?: return null
+        val decls = Regex("""\b(val|var)\s+${Regex.escape(name)}\s*(?::[^=\n]+)?=(?!=)""").findAll(mask).toList()
+        val d = decls.singleOrNull()?.takeIf { it.groupValues[1] == "val" } ?: return null
         val start = skipWs(d.range.last + 1)
         return start..exprEnd(start)
     }

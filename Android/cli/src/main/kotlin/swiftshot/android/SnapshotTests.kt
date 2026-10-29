@@ -218,15 +218,10 @@ object SnapshotTests {
         val paparazzi: Map<String, Int> = Regex(if (java) """\bPaparazzi\s+(\w+)\s*=\s*new\s+(?:app\.cash\.paparazzi\.)?Paparazzi\s*\("""
             else """\b(?:val|var)\s+(\w+)\s*(?::\s*[\w.]+\s*)?=\s*(?:app\.cash\.paparazzi\.)?Paparazzi\s*\(""")
             .findAll(mask).associate { it.groupValues[1] to it.range.last }
-        private val rules: List<Pair<String, Int>> = Regex(if (java) """\bPaparazzi\s+(\w+)\s*=\s*new\s+(?:app\.cash\.paparazzi\.)?Paparazzi\s*\("""
+        /** Paparazzi rules declared here: (name, opening parenthesis of `Paparazzi(`). */
+        val rules: List<Pair<String, Int>> = Regex(if (java) """\bPaparazzi\s+(\w+)\s*=\s*new\s+(?:app\.cash\.paparazzi\.)?Paparazzi\s*\("""
             else """\b(?:val|var)\s+(\w+)\s*(?::\s*[\w.]+\s*)?=\s*(?:app\.cash\.paparazzi\.)?Paparazzi\s*\(""")
             .findAll(mask).map { it.groupValues[1] to it.range.last }.toList()
-        /** The rule field [name] used at [pos]: the one in the same class when several classes in the file name theirs alike. */
-        fun rule(name: String, pos: Int): Int? {
-            val named = rules.filter { it.first == name }
-            val cls = src.classAt(pos)
-            return (if (cls == null) null else named.lastOrNull { src.classAt(it.second) == cls })?.second ?: named.lastOrNull()?.second
-        }
         /** Parameters typed `Paparazzi` (`fun shot(rule: Paparazzi)`): the caller passes the rule in. */
         val paparazziParams = Regex("""[(,]\s*(\w+)\s*:\s*(?:app\.cash\.paparazzi\.)?Paparazzi\b(?!\s*\()""").findAll(mask).map { it.groupValues[1] }.toSet()
         /** Values a scanned preview is passed in as: `preview: ComposablePreview<…>`, `component: ShowkaseBrowserComponent`. */
@@ -337,6 +332,88 @@ object SnapshotTests {
 
         val classIndex: Map<String, List<Pair<FileScan, Decl>>> = files.flatMap { f -> f.src.classes.map { it.name to (f to it) } }.groupBy({ it.first }, { it.second })
 
+        /**
+         * The class [written] (`Base`, `com.example.Base`, `Outer.Inner`) names at [at] in [fs], as Kotlin resolves it:
+         * a class nested in an enclosing one, an import, the package, a star import. Null when none or several match.
+         */
+        fun resolveClass(fs: FileScan, written: String, at: Int): Pair<FileScan, Decl>? {
+            val parts = written.split('.').map(String::trim)
+            val head = fs.src.imports[parts[0]]
+            val cands = classIndex[if (parts.size == 1 && head != null) head.substringAfterLast('.') else parts.last()].orEmpty()
+            fun named(vararg fq: String?) = cands.filter { (f, d) -> f.src.fqn(d) in fq }
+            if (parts.size == 1) for (cls in fs.src.enclosing(at)) {
+                cands.filter { (f, d) -> f === fs && f.src.enclosing(d.keyword).firstOrNull() === cls }.takeIf { it.isNotEmpty() }?.let { return it.singleOrNull() }
+            }
+            if (head != null) return named((listOf(head) + parts.drop(1)).joinToString(".")).singleOrNull()
+            for (quals in listOf(listOf(fs.src.pkg), fs.src.stars, listOf(""))) {
+                named(*quals.map { q -> listOf(q, written).filter(String::isNotEmpty).joinToString(".") }.toTypedArray()).takeIf { it.isNotEmpty() }?.let { return it.singleOrNull() }
+            }
+            return null
+        }
+
+        /** The `val` [written] (`DEVICES`, `Devices.ALL`) names in [fs], resolved like [resolveClass]: (file, initializer). Null when none or several match. */
+        fun constantFor(fs: FileScan, written: String, at: Int): Pair<FileScan, IntRange>? {
+            val parts = written.split('.').map(String::trim)
+            val name = parts.last()
+            val declares = Regex("""\b(?:val|var)\s+${Regex.escape(name)}\b""")
+            if (parts.size > 1) {
+                val (cf, cd) = resolveClass(fs, parts.dropLast(1).joinToString("."), at) ?: return null
+                return cf.src.constant(name)?.takeIf { it.first in cd.body!! }?.let { cf to it }
+            }
+            if (declares.containsMatchIn(fs.mask)) return fs.src.constant(name)?.let { fs to it }
+            fun topLevel(f: FileScan) = f.src.constant(name)?.takeIf { r -> f.src.classAt(r.first) == null && f.src.fnAt(r.first) == null }
+            val imported = fs.src.imports[name]
+            for (pkgs in if (imported != null) listOf(listOf(imported.substringBeforeLast('.', ""))) else listOf(listOf(fs.src.pkg), fs.src.stars)) {
+                val found = files.filter { it !== fs && it.src.pkg in pkgs && declares.containsMatchIn(it.mask) }
+                if (found.isNotEmpty()) return found.singleOrNull()?.let { f -> topLevel(f)?.let { f to it } }
+            }
+            return null
+        }
+
+        /** Can't tell which rule: a superclass not read here, or several fields of the name. */
+        private val unknownRule = Pair<FileScan?, Int>(null, -1)
+
+        /** Rule field [name] declared in [cls] (of [fs]) or the classes it extends; null when none, [unknownRule] when it can't be told. */
+        fun member(fs: FileScan, cls: Decl, name: String, depth: Int = 0): Pair<FileScan?, Int>? {
+            val own = fs.rules.filter { it.first == name && fs.src.fnAt(it.second) == null && fs.src.classAt(it.second) === cls }
+            if (own.isNotEmpty()) return own.singleOrNull()?.let { fs to it.second } ?: unknownRule
+            val sup = cls.superclass ?: return null
+            if (depth > 6) return unknownRule
+            val (sf, sd) = resolveClass(fs, sup, cls.keyword) ?: return unknownRule
+            return member(sf, sd, name, depth + 1)
+        }
+
+        /** The Paparazzi rule [name] means at [pos] in [fs]: a local before it, a field of the enclosing classes (innermost first, each with its superclasses), a top-level one. */
+        fun ruleField(fs: FileScan, name: String, pos: Int): Pair<FileScan, Int>? {
+            val src = fs.src
+            val named = fs.rules.filter { it.first == name }
+            val fn = src.fnAt(pos)
+            named.filter { fn != null && src.fnAt(it.second) === fn && it.second < pos }.takeIf { it.isNotEmpty() }?.let { return it.singleOrNull()?.let { fs to it.second } }
+            for (cls in src.enclosing(pos)) member(fs, cls, name)?.let { (f, at) -> return f?.let { it to at } }
+            return named.filter { src.classAt(it.second) == null && src.fnAt(it.second) == null }.singleOrNull()?.let { fs to it.second }
+        }
+
+        /**
+         * The rule [name] means at [pos] in the function at [level] of [path]: for a parameter (or `this` in a `Paparazzi`
+         * extension), what the caller on the path passes; else [ruleField]. Null when it can't be told.
+         */
+        fun ruleAt(path: Path, level: Int, name: String, pos: Int, depth: Int = 0): Pair<FileScan, Int>? {
+            val l = path.links[level]
+            val d = l.decl
+            if (name != "this" && (d == null || name !in d.params)) return ruleField(l.fs, name, pos)
+            if (name == "this" && d?.receiver != "Paparazzi" || level == 0 || depth > 8) return null
+            val caller = path.links[level - 1]
+            val call = caller.call ?: return null
+            val passed = if (name == "this") caller.fs.mask.substring(call.start, call.nameAt).trim().removeSuffix(".").removeSuffix("?").trim().ifEmpty { "this" }
+                else {
+                    val args = call.open?.let { caller.fs.src.args(it) }.orEmpty()
+                    val value = args.firstOrNull { it.first == name }?.second ?: args.filter { it.first == null }.map { it.second }.getOrNull(d!!.params.indexOf(name)) ?: return null
+                    caller.fs.src.text(value).trim()
+                }
+            if (!Regex("""\w+""").matches(passed)) return null
+            return ruleAt(path, level - 1, passed, call.start, depth + 1)
+        }
+
         /** Functions that take a snapshot, directly or through other such functions, by name. */
         val helpers: Map<String, List<Pair<FileScan, Decl>>> = run {
             val fns = files.flatMap { f -> f.src.funs.filter { it.body != null && f.helper(it) }.map { f to it } }
@@ -443,8 +520,8 @@ object SnapshotTests {
             }
             listArgs(fs, range)?.let { return it }
             val name = Regex("""^(?:\w+\.)*(\w+)$""").matchEntire(text)?.groupValues?.get(1) ?: return null
-            (listOf(fs) + files).firstNotNullOfOrNull { f -> f.src.constant(name)?.let { listArgs(f, it) } }?.let { return it }
-            val (ef, enum) = classIndex[name].orEmpty().firstOrNull { it.second.isEnum && it.second.body != null } ?: return null
+            constantFor(fs, text, range.first)?.let { (f, r) -> return listArgs(f, r) }
+            val (ef, enum) = resolveClass(fs, text, range.first)?.takeIf { it.second.isEnum && it.second.body != null } ?: return null
             val body = enum.body!!
             var end = body.last
             var i = body.first + 1
@@ -601,24 +678,30 @@ object SnapshotTests {
 
         fun paparazziDevice(path: Path, site: Site): Pair<DeviceSource, TestSettings> {
             val root = path.links.first()
-            val leaf = path.links.last()
+            val receiver = site.receiver ?: "paparazzi"
+            val ctor = ruleAt(path, path.links.lastIndex, receiver, site.pos) ?: return DeviceSource.Unresolved(receiver) to TestSettings()
             val update = Regex("""\bunsafeUpdateConfig\s*\(""")
-            val scopes = scopes(path).reversed() + root.fs.befores(rootClass(path)).map { root.fs to it.body!! }
-            // Closest setting of each: unsafeUpdateConfig in the test (then helpers, @Before), then the constructor.
+            // (file, range, link index; -1 for @Before functions), innermost first.
+            val scopes = path.links.withIndex().reversed().mapNotNull { (i, l) -> l.decl?.body?.let { Triple(l.fs, it.first until (l.call?.start ?: l.cut), i) } } +
+                root.fs.befores(rootClass(path)).map { Triple(root.fs, it.body!!, -1) }
+            // Closest setting of each: the last unsafeUpdateConfig on this rule that sets it in the test (then helpers, @Before), then the constructor.
             var device: Pair<FileScan, IntRange>? = null
             var mode: Pair<FileScan, IntRange>? = null
-            for ((f, scope) in scopes) {
-                val m = update.findAll(f.mask).lastOrNull { it.range.first in scope } ?: continue
+            for ((f, scope, level) in scopes) for (m in update.findAll(f.mask).filter { it.range.first in scope }.toList().reversed()) {
                 val args = f.src.args(m.range.last)
+                if (args.none { it.first == null || it.first == "deviceConfig" || it.first == "renderingMode" }) continue
+                val call = collapse(f.src.text(f.src.chainStart(m.range.first)..f.src.close(m.range.last)))
+                val written = f.mask.substring(f.src.chainStart(m.range.first), m.range.first).trim().removeSuffix(".").removeSuffix("?").trim().ifEmpty { "this" }
+                val on = when {
+                    !Regex("""\w+""").matches(written) -> null
+                    level >= 0 -> ruleAt(path, level, written, m.range.first)
+                    else -> ruleField(f, written, m.range.first)
+                } ?: return DeviceSource.Unresolved(call) to TestSettings()
+                if (on != ctor) continue
+                if (args.any { it.first == null }) return DeviceSource.Unresolved(call) to TestSettings()
                 if (device == null) device = args.firstOrNull { it.first == "deviceConfig" }?.let { f to it.second }
                 if (mode == null) mode = args.firstOrNull { it.first == "renderingMode" }?.let { f to it.second }
             }
-            // The rule: a field in the snapshot's file, else one the path's calls pass along (`paparazzi.snapAll { }`).
-            val ctor = site.receiver?.let { r -> leaf.fs.rule(r, site.pos) }?.let { leaf.fs to it }
-                ?: path.links.reversed().firstNotNullOfOrNull { l ->
-                    l.call?.let { c -> Regex("""\w+""").findAll(l.fs.mask.substring(c.start, c.end)).map { it.value }.firstOrNull { it in l.fs.paparazzi }?.let { n -> l.fs to l.fs.rule(n, c.start)!! } }
-                }
-                ?: return DeviceSource.Unresolved(site.receiver ?: "paparazzi") to TestSettings()
             val (cf, open) = ctor
             val args = cf.src.args(open)
             if (device == null) device = args.firstOrNull { it.first == "deviceConfig" }?.let { cf to it.second }
@@ -633,7 +716,7 @@ object SnapshotTests {
 
         fun deviceConfig(f: FileScan, range: IntRange): Pair<DeviceSource, TestSettings> {
             val text = f.src.text(range).trim()
-            if (fromPreview.containsMatchIn(text)) return DeviceSource.FromPreview(builderFallback()) to TestSettings()
+            if (fromPreview.containsMatchIn(text)) return DeviceSource.FromPreview(builderFallback(f, range.first, text)) to TestSettings()
             val resolved = f.src.constant(text)?.let { f.src.text(it).trim() } ?: text
             return TestDevices.parseDeviceConfig(resolved)
         }
@@ -642,8 +725,9 @@ object SnapshotTests {
          * The device a project's own `DeviceConfigBuilder` (ComposablePreviewScanner's Paparazzi recipe, copied into the
          * project) returns for a preview without one: its `?: return DeviceConfig(…)`.
          */
-        fun builderFallback(): DeviceSource? {
-            val (f, d) = classIndex["DeviceConfigBuilder"].orEmpty().firstOrNull { it.second.body != null } ?: return null
+        fun builderFallback(at: FileScan, pos: Int, text: String): DeviceSource? {
+            val written = Regex("""[\w.]*\bDeviceConfigBuilder\b""").find(text)?.value ?: return null
+            val (f, d) = resolveClass(at, written, pos)?.takeIf { it.second.body != null } ?: return null
             val m = Regex("""\?:\s*return\s+""").findAll(f.mask).firstOrNull { it.range.first in d.body!! } ?: return null
             val start = f.src.skipWs(m.range.last + 1)
             return TestDevices.parseDeviceConfig(f.src.text(start..f.src.exprEndAt(start)).trim()).first as? DeviceSource.Read
@@ -768,13 +852,17 @@ object SnapshotTests {
             val src = l.fs.src
             val body = l.decl?.body ?: return null
             val before = body.first until minOf(pos, body.last)
-            // val (a, b, c) = parse(spec)
-            Regex("""\bval\s*\(([^()]*)\)\s*=\s*(\w+)\s*\(""").findAll(src.mask).lastOrNull { it.range.first in before && name in it.groupValues[1].split(',').map(String::trim) }?.let { m ->
+            // A single `val` of that name before [pos]; `val (a, b, c) = parse(spec)` counts as one.
+            val destructured = Regex("""\bval\s*\(([^()]*)\)\s*=\s*(\w+)\s*\(""").findAll(src.mask).filter { it.range.first in before && name in it.groupValues[1].split(',').map(String::trim) }.toList()
+            val decls = Regex("""\b(val|var)\s+${Regex.escape(name)}\s*(?::[^=\n]+)?=(?!=)""").findAll(src.mask).filter { it.range.first in before }.toList()
+            if (destructured.size + decls.size > 1) return null
+            destructured.singleOrNull()?.let { m ->
                 val arg = src.args(m.range.last).singleOrNull()?.takeIf { it.first == null } ?: return null
                 val spec = stringValue(path, level, arg.second, m.range.first, bound, depth + 1) ?: return null
                 return specComponent(m.groupValues[2], m.groupValues[1].split(',').map(String::trim).indexOf(name), spec)
             }
-            Regex("""\b(?:val|var)\s+${Regex.escape(name)}\s*(?::[^=\n]+)?=(?!=)""").findAll(src.mask).lastOrNull { it.range.first in before }?.let { m ->
+            decls.singleOrNull()?.let { m ->
+                if (m.groupValues[1] != "val") return null
                 val start = src.skipWs(m.range.last + 1)
                 return stringValue(path, level, start..src.exprEndAt(start), m.range.first, bound, depth + 1)
             }
@@ -830,7 +918,7 @@ object SnapshotTests {
             val parent = when {
                 sup == null -> emptyList()
                 depth > 5 -> listOf(Layer(null, null, "@Config of $sup"))
-                else -> classIndex[sup].orEmpty().sortedBy { it.first.module != f.module }.firstOrNull()?.let { (pf, pd) -> classLayers(pf, pd, depth + 1) }
+                else -> resolveClass(f, sup, cls.keyword)?.let { (pf, pd) -> classLayers(pf, pd, depth + 1) }
                     ?: listOf(Layer(null, null, "@Config of $sup"))
             }
             return parent + listOfNotNull(config(f.src, cls))

@@ -1021,5 +1021,148 @@ class SnapshotTestsTest {
         val t = scan(module(tool = SnapshotTool.ROBORAZZI))
         assertEquals(listOf(Target.Uncovered("DeviceConfigurationOverride(DeviceConfigurationOverride.DarkMode(dark)) { CheckoutScreen(1) }"), Target.Uncovered("DeviceConfigurationOverride")), t.map { it.target })
     }
-}
 
+    // Final review: an ambiguous device source is unresolved, never a first or last match.
+
+    private val tablet = DeviceSource.Read(TestDevices.paparazziPreset("PIXEL_TABLET")!!, "DeviceConfig.PIXEL_TABLET")
+    private val nexus5 = DeviceSource.Read(TestDevices.paparazziPreset("NEXUS_5")!!, "DeviceConfig.NEXUS_5")
+
+    @Test fun paparazziRuleFromTheClassItsBaseOrItsOuterClass() {
+        ui()
+        write("app/src/test/kotlin/com/example/Bases.kt", """
+            package com.example
+            abstract class TabletBase { @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_TABLET) }
+        """)
+        write("app/src/test/kotlin/com/other/TabletBase.kt", """
+            package com.other
+            abstract class TabletBase { @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.NEXUS_5) }
+        """)
+        write("app/src/test/kotlin/com/example/ManyTests.kt", """
+            package com.example
+            class PhoneTest {
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5)
+                @Test fun phone() { paparazzi.snapshot { CheckoutPreview() } }
+            }
+            class TabletTest : TabletBase() {
+                @Test fun tablet() { paparazzi.snapshot { CheckoutPreview() } }
+            }
+            class Outer {
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.NEXUS_5)
+                inner class Inner { @Test fun inner() { paparazzi.snapshot { CheckoutPreview() } } }
+            }
+            class Orphan : LibraryBase() {
+                @Test fun orphan() { paparazzi.snapshot { CheckoutPreview() } }
+            }
+        """)
+        val t = scan().filter { it.file.name == "ManyTests.kt" }.sortedBy { it.line }
+        assertEquals(listOf(pixel5, tablet, nexus5, DeviceSource.Unresolved("paparazzi")), t.map { it.device })
+    }
+
+    @Test fun paparazziParameterFollowsTheCallerNotTheFilesField() {
+        ui()
+        write("app/src/test/kotlin/com/example/ManyTests.kt", """
+            package com.example
+            fun snap(paparazzi: Paparazzi) { paparazzi.snapshot { CheckoutPreview() } }
+            class PhoneTest {
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5)
+                @Test fun phone() { snap(paparazzi) }
+            }
+            class TabletTest {
+                @get:Rule val rule = Paparazzi(deviceConfig = DeviceConfig.PIXEL_TABLET)
+                @Test fun tablet() { snap(rule) }
+                @Test fun made() { snap(Paparazzi()) }
+            }
+        """)
+        assertEquals(listOf(pixel5, tablet, DeviceSource.Unresolved("paparazzi")), scan().sortedBy { it.line }.map { it.device })
+    }
+
+    @Test fun unsafeUpdateConfigOnTheSameRuleKeepsEarlierValues() {
+        ui()
+        paparazziTest("paparazzi.unsafeUpdateConfig(deviceConfig = DeviceConfig.NEXUS_5)\n        paparazzi.unsafeUpdateConfig(theme = \"x\")\n        paparazzi.snapshot { CheckoutPreview() }")
+        assertEquals(nexus5, one().device)
+        paparazziTest("other.unsafeUpdateConfig(deviceConfig = DeviceConfig.NEXUS_5)\n        paparazzi.snapshot { CheckoutPreview() }\n    }\n    @get:Rule val other = Paparazzi()\n    fun x() {")
+        assertEquals(pixel5, one().device)
+        paparazziTest("rules.first().unsafeUpdateConfig(deviceConfig = DeviceConfig.NEXUS_5)\n        paparazzi.snapshot { CheckoutPreview() }")
+        assertIs<DeviceSource.Unresolved>(one().device)
+    }
+
+    @Test fun inheritedConfigResolvesTheSuperclassByImport() {
+        ui()
+        write("app/src/test/kotlin/com/a/BaseTest.kt", "package com.a\n@Config(qualifiers = \"w400dp-h800dp-xhdpi\")\nabstract class BaseTest")
+        write("app/src/test/kotlin/com/b/BaseTest.kt", "package com.b\n@Config(qualifiers = RobolectricDeviceQualifiers.Pixel5)\nabstract class BaseTest")
+        write("app/src/test/kotlin/com/example/T.kt", """
+            package com.example
+            import com.b.BaseTest
+            class Known : BaseTest() {
+                @Test fun a() { captureRoboImage { CheckoutPreview() } }
+            }
+        """)
+        write("app/src/test/kotlin/com/example/U.kt", """
+            package com.example
+            class Unknown : com.a.BaseTest() {
+                @Test fun a() { captureRoboImage { CheckoutPreview() } }
+            }
+        """)
+        write("app/src/test/kotlin/com/c/V.kt", """
+            package com.c
+            import com.example.CheckoutPreview
+            class Ambiguous : BaseTest() {
+                @Test fun a() { captureRoboImage { CheckoutPreview() } }
+            }
+        """)
+        val t = scan(module(tool = SnapshotTool.ROBORAZZI)).associateBy { it.file.name }
+        assertEquals(roboPixel5, t.getValue("T.kt").device)
+        assertEquals(TestDevices.parseQualifiers("w400dp-h800dp-xhdpi").first, t.getValue("U.kt").device)
+        assertIs<DeviceSource.Unresolved>(t.getValue("V.kt").device)
+    }
+
+    @Test fun deviceConfigBuilderResolvedFromTheTestsFile() {
+        ui()
+        fun builder(pkg: String, fallback: String) = write("app/src/test/kotlin/${pkg.replace('.', '/')}/DeviceConfigBuilder.kt", """
+            package $pkg
+            object DeviceConfigBuilder {
+                fun build(previewDevice: String): DeviceConfig {
+                    val device = DevicePreviewInfoParser.parse(previewDevice) ?: return DeviceConfig.$fallback
+                    return DeviceConfig(screenHeight = device.dimensions.height.toInt())
+                }
+            }
+        """)
+        builder("com.aaa", "NEXUS_5")
+        builder("com.example", "PIXEL_5")
+        write("app/src/test/kotlin/com/example/PreviewTest.kt", """
+            package com.example
+            class PreviewTest(val preview: ComposablePreview<AndroidPreviewInfo>) {
+                companion object { fun previews() = AndroidComposablePreviewScanner().scanPackageTrees("com.example").getPreviews() }
+                @get:Rule val paparazzi = Paparazzi()
+                @Test fun snapshot() {
+                    paparazzi.unsafeUpdateConfig(deviceConfig = DeviceConfigBuilder.build(preview.previewInfo.device))
+                    paparazzi.snapshot { preview() }
+                }
+            }
+        """)
+        assertEquals(DeviceSource.FromPreview(pixel5), one().device)
+        File(dir, "app/src/test/kotlin/com/example/DeviceConfigBuilder.kt").delete()
+        builder("com.bbb", "PIXEL_5")
+        assertEquals(DeviceSource.FromPreview(null), one().device)
+    }
+
+    @Test fun loopListResolvedByImport() {
+        ui()
+        write("app/src/test/kotlin/com/a/Devices.kt", "package com.a\nval DEVICES = listOf(DeviceConfig.NEXUS_5)")
+        write("app/src/test/kotlin/com/b/Devices.kt", "package com.b\nval DEVICES = listOf(DeviceConfig.PIXEL_5, DeviceConfig.PIXEL_TABLET)")
+        val loop = "DEVICES.forEach {\n            paparazzi.unsafeUpdateConfig(deviceConfig = it)\n            paparazzi.snapshot { CheckoutPreview() }\n        }"
+        paparazziTest(loop, imports = "import com.b.DEVICES")
+        assertEquals(listOf("it for DeviceConfig.PIXEL_5", "it for DeviceConfig.PIXEL_TABLET"), scan().map { (it.device as DeviceSource.Unresolved).expression })
+        paparazziTest(loop)
+        assertEquals(Target.Uncovered("loop over DEVICES"), one().target)
+    }
+
+    @Test fun qualifierValuesAreSingleVals() {
+        ui()
+        roboTest("", roboMethod("a", "", "var q = \"w400dp-h800dp-xhdpi\"\n        q = \"w800dp-h400dp-xhdpi\"\n        RuntimeEnvironment.setQualifiers(q)") +
+            roboMethod("b", "", "val s = \"w400dp-h800dp-xhdpi\"\n        listOf(1).map { val s = \"w800dp-h400dp-xhdpi\"; s }\n        RuntimeEnvironment.setQualifiers(s)"))
+        val t = scan(module(tool = SnapshotTool.ROBORAZZI))
+        assertEquals(2, t.size, t.toString())
+        assertTrue(t.all { it.device is DeviceSource.Unresolved }, t.toString())
+    }
+}
