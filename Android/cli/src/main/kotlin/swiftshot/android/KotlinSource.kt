@@ -11,6 +11,8 @@ internal class Ann(val name: String, val open: Int?)
 internal class Decl(
     val name: String, val keyword: Int, val body: IntRange?, val annotations: List<Ann>,
     val superclass: String? = null, val params: List<String> = emptyList(), val isEnum: Boolean = false,
+    /** An extension function's receiver type, simple name without type arguments (`Paparazzi`). */
+    val receiver: String? = null,
 )
 
 /** A call in composable content: [args] is inside its parentheses; [argLambda] when they hold a lambda that calls something. */
@@ -66,7 +68,7 @@ internal class KotlinSource(val file: File) {
     val facade: String = Regex("""@file\s*:\s*JvmName\s*\(\s*"([^"]+)"""").find(code)?.groupValues?.get(1)
         ?: (file.nameWithoutExtension.replaceFirstChar(Char::uppercaseChar).replace(Regex("[^A-Za-z0-9_]"), "_") + "Kt")
 
-    val funs: List<Decl> = Regex("""\bfun\s+(?:<[^>]*>\s*)?(?:[\w<>?,* ]+\.)*(\w+|`[^`\n]+`)\s*\(""").findAll(mask).map { m ->
+    val funs: List<Decl> = Regex("""\bfun\s+(?:<[^>]*>\s*)?((?:[\w<>?,* ]+\.)*)(\w+|`[^`\n]+`)\s*\(""").findAll(mask).map { m ->
         val params = args(m.range.last).mapNotNull { (_, r) ->
             Regex("""^\s*(?:(?:vararg|noinline|crossinline)\s+)*(?:@[\w.:]+(?:\s*\([^)]*\))?\s+)*(\w+)\s*:""").find(mask.substring(r.first, r.last + 1))?.groupValues?.get(1)
         }
@@ -78,7 +80,8 @@ internal class KotlinSource(val file: File) {
             i < mask.length && mask[i] == '=' -> i..exprEnd(skipWs(i + 1))
             else -> null
         }
-        Decl(m.groupValues[1].removeSurrounding("`"), m.range.first, body, annotationsBefore(m.range.first), params = params)
+        val receiver = m.groupValues[1].removeSuffix(".").substringBefore('<').trim().substringAfterLast('.').ifEmpty { null }
+        Decl(m.groupValues[2].removeSurrounding("`"), m.range.first, body, annotationsBefore(m.range.first), params = params, receiver = receiver)
     }.toList()
 
     val classes: List<Decl> = Regex("""\b(?:(companion)\s+)?(class|object|interface)\b(?:\s+(\w+))?""").findAll(mask).mapNotNull { m ->

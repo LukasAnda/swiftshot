@@ -146,6 +146,8 @@ object SnapshotTests {
         val paparazzi: Map<String, Int> = Regex(if (java) """\bPaparazzi\s+(\w+)\s*=\s*new\s+(?:app\.cash\.paparazzi\.)?Paparazzi\s*\("""
             else """\b(?:val|var)\s+(\w+)\s*(?::\s*[\w.]+\s*)?=\s*(?:app\.cash\.paparazzi\.)?Paparazzi\s*\(""")
             .findAll(mask).associate { it.groupValues[1] to it.range.last }
+        /** Parameters typed `Paparazzi` (`fun shot(rule: Paparazzi)`): the caller passes the rule in. */
+        val paparazziParams = Regex("""[(,]\s*(\w+)\s*:\s*(?:app\.cash\.paparazzi\.)?Paparazzi\b(?!\s*\()""").findAll(mask).map { it.groupValues[1] }.toSet()
         /** Values a scanned preview is passed in as: `preview: ComposablePreview<…>`, `component: ShowkaseBrowserComponent`. */
         val scannedValues = Regex("""\b(\w+)\s*:\s*(?:ComposablePreview\s*<|ShowkaseBrowserComponent\b)""").findAll(mask).map { it.groupValues[1] }.toSet()
         /** What the file's preview scanners (or Showkase) return; null when there is none. */
@@ -166,10 +168,19 @@ object SnapshotTests {
             val imported = src.imports.values.any { it.startsWith("app.cash.paparazzi") }
             for (m in Regex("""\b(\w+)\s*\.\s*(snapshot|gif)\s*(?=[({])""").findAll(mask)) {
                 val recv = m.groupValues[1]
-                if (recv !in paparazzi && !(imported && recv.contains("paparazzi", ignoreCase = true))) continue
+                val fn = src.fnAt(m.range.first)
+                val extension = recv == "this" && fn?.receiver == "Paparazzi"
+                if (recv !in paparazzi && recv !in paparazziParams && !extension && !(imported && recv.contains("paparazzi", ignoreCase = true))) continue
                 val (end, _, lambda) = src.callAt(m.range.last + 1)
                 val content = if (m.groupValues[2] == "snapshot" && !java) lambda else null
-                out += Site(m.range.first, end, SnapshotTool.PAPARAZZI, content, recv, src.fnAt(m.range.first))
+                out += Site(m.range.first, end, SnapshotTool.PAPARAZZI, content, recv, fn)
+            }
+            // `fun Paparazzi.snapAll() = snapshot { … }`: the implicit receiver is the rule.
+            for (m in Regex("""(?<![\w.`])(snapshot|gif)\s*(?=[({])""").findAll(mask)) {
+                val fn = src.fnAt(m.range.first) ?: continue
+                if (fn.receiver != "Paparazzi" || src.isDeclaration(m.range.first)) continue
+                val (end, _, lambda) = src.callAt(m.range.last + 1)
+                out += Site(m.range.first, end, SnapshotTool.PAPARAZZI, if (m.groupValues[1] == "snapshot") lambda else null, "this", fn)
             }
             for (m in Regex("""\b(captureRoboImage|captureScreenRoboImage|captureRoboGif|captureRoboLastImage|captureRoboAllImage)\s*(?=[({])""").findAll(mask)) {
                 if (src.isDeclaration(m.range.first)) continue
@@ -257,10 +268,20 @@ object SnapshotTests {
             set.groupBy({ it.second.name }, { it })
         }
 
+        /**
+         * Functions that look like they take a snapshot (a `snapshot`, `gif` or `captureRobo…` call) in a way not read here.
+         * A test calling one counts as not covered, so it isn't lost from the total.
+         */
+        val opaque: Map<String, List<Pair<FileScan, Decl>>> = files.flatMap { f ->
+            f.src.funs.filter { d -> d.body != null && f.helper(d) && helpers[d.name]?.none { it.second === d } != false &&
+                Regex("""\b(?:snapshot|gif)\s*[({]|\bcapture\w*RoboImage\b|\bcaptureRobo\w+""").containsMatchIn(f.mask.substring(d.body.first, minOf(d.body.last + 1, f.mask.length))) }
+                .map { f to it }
+        }.groupBy({ it.second.name }, { it })
+
         /** The helper a call in [fs] means; null when the name isn't a helper here, [ambiguous] when it can't be told. */
         val ambiguous = Pair<FileScan?, Decl?>(null, null)
-        fun helperFor(fs: FileScan, name: String): Pair<FileScan?, Decl?>? {
-            val c = helpers[name] ?: return null
+        fun helperFor(fs: FileScan, name: String, index: Map<String, List<Pair<FileScan, Decl>>> = helpers): Pair<FileScan?, Decl?>? {
+            val c = index[name] ?: return null
             c.firstOrNull { it.first === fs }?.let { return it }
             fs.src.imports[name]?.let { fq -> return c.filter { it.first.src.pkg == fq.substringBeforeLast('.', "") }.firstOrNull() }
             for (pick in listOf<(Pair<FileScan, Decl>) -> Boolean>(
@@ -273,8 +294,11 @@ object SnapshotTests {
             val out = mutableListOf<Path>()
             for (site in fs.sites.filter { fs.src.fnAt(it.pos) == decl }) out += Path(prefix + Link(fs, decl, site.pos, null), site)
             for (c in fs.calls(decl)) {
-                val (hf, hd) = helperFor(fs, c.name) ?: continue
                 val link = Link(fs, decl, c.start, c)
+                val (hf, hd) = helperFor(fs, c.name) ?: run {
+                    if (helperFor(fs, c.name, opaque) != null) out += Path(prefix + link, null, c.name)
+                    null
+                } ?: continue
                 when {
                     hf == null || hd == null -> out += Path(prefix + link, null, c.name)
                     hd in seen || seen.size > 8 -> {}

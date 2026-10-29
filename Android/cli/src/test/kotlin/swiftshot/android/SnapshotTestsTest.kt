@@ -728,4 +728,65 @@ class SnapshotTestsTest {
         assertEquals(Target.Uncovered("loop over devices()"), t[2].target)
         assertEquals(3, t.size)
     }
+
+    // Review round 3
+
+    @Test fun paparazziParameterHelpers() {
+        ui()
+        write("app/src/test/kotlin/com/example/Helpers.kt", """
+            package com.example
+            fun shotWith(rule: Paparazzi, content: @Composable () -> Unit) { rule.snapshot { content() } }
+        """)
+        write("app/src/test/kotlin/com/example/CheckoutTest.kt", """
+            package com.example
+            class CheckoutTest {
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5)
+                private fun shot(rule: Paparazzi) { rule.snapshot { CheckoutPreview() } }
+                @Test fun a() { shot(paparazzi) }
+                @Test fun b() { shotWith(paparazzi) { CheckoutPreview() } }
+                @Test fun c() { shotWith(paparazzi) { CheckoutScreen(1) } }
+            }
+        """)
+        val t = scan()
+        assertEquals(listOf(5, 6, 7), t.map { it.line })
+        assertEquals(listOf(Target.Previews(listOf(checkout.fqn)), Target.Previews(listOf(checkout.fqn)), Target.Uncovered("shotWith(paparazzi) { CheckoutScreen(1) }")), t.map { it.target })
+        assertTrue(t.all { it.device == pixel5 && it.file.name == "CheckoutTest.kt" }, t.toString())
+    }
+
+    @Test fun paparazziExtensionHelpers() {
+        ui()
+        write("app/src/test/kotlin/com/example/util/Snap.kt", """
+            package com.example.util
+            import com.example.CheckoutPreview
+            fun Paparazzi.snapAll(content: @Composable () -> Unit) = snapshot { MyTheme { content() } }
+            fun app.cash.paparazzi.Paparazzi.snapThis() { this.snapshot { CheckoutPreview() } }
+            fun Paparazzi.unused() { snapshot { CheckoutPreview() } }
+        """)
+        paparazziTest("paparazzi.snapAll { CheckoutPreview() }\n        paparazzi.snapThis()", imports = "import com.example.util.*\nimport com.example.CheckoutPreview")
+        val t = scan()
+        val inTest = t.filter { it.file.name == "CheckoutTest.kt" }
+        assertEquals(listOf(7, 8), inTest.map { it.line })
+        assertTrue(inTest.all { it.target == Target.Previews(listOf(checkout.fqn)) && it.device == pixel5 }, inTest.toString())
+        // The helper no test calls still counts once, its device unknown.
+        val unused = t.single { it.file.name == "Snap.kt" }
+        assertEquals(DeviceSource.Unresolved("helper unused"), unused.device)
+        assertEquals(3, t.size)
+    }
+
+    @Test fun unreadableSnapshotHelperIsCountedNotDropped() {
+        ui()
+        write("app/src/test/kotlin/com/example/CheckoutTest.kt", """
+            package com.example
+            class CheckoutTest {
+                @get:Rule val rule = MySnapshotRule()
+                private fun shoot(r: MySnapshotRule) { r.snapshot { CheckoutPreview() } }
+                @Test fun a() { shoot(rule) }
+                @Test fun b() { assertEquals(1, 1) }
+            }
+        """)
+        val t = one()
+        assertEquals(Target.Uncovered("helper shoot"), t.target)
+        assertEquals(DeviceSource.Unresolved("helper shoot"), t.device)
+        assertEquals(5, t.line)
+    }
 }
