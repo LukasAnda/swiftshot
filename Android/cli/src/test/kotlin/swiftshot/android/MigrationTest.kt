@@ -200,12 +200,19 @@ class MigrationTest {
         assertEquals(
             listOf(
                 ScreenRule("com.example.UiKt.P", devices = listOf("Pixel 5"), languages = listOf("en-US", "de"), appearances = listOf("light", "dark"), fontScales = listOf(1.0, 1.5)),
-                ScreenRule("com.example.UiKt.Q", devices = listOf("Pixel 5")),
+                ScreenRule("com.example.UiKt.Q", devices = listOf("Pixel 5"), languages = listOf("en-US")),
                 ScreenRule("*", skip = true),
             ),
             options().screens,
         )
-        assertEquals(listOf("en-US", "de"), options().languages)
+        assertEquals(listOf("en-US"), options().languages)
+        val r = lines()
+        assertTrue(r.contains("  languages: en-US, de (from tests; en-US where a test sets none)"), r.joinToString("\n"))
+        // P's two tests take 2 of the 8 combinations its rule renders.
+        val extra = r.single { it.startsWith("  com.example.UiKt.P: also renders ") }
+        assertEquals(6, extra.removePrefix("  com.example.UiKt.P: also renders ").removeSuffix(" (no test takes them)").split("; ").size, extra)
+        assertTrue(extra.contains("Pixel 5 / de / light / 1x"), extra)
+        assertFalse(r.any { it.startsWith("  com.example.UiKt.Q: also") })
     }
 
     @Test fun noLocaleOrNightInTests() {
@@ -216,11 +223,12 @@ class MigrationTest {
         paparazziTest("PTest", "DeviceConfig.PIXEL_5", "P()")
         val c = init()
         assertEquals(listOf(ScreenRule("com.example.UiKt.P", devices = listOf("Pixel 5")), ScreenRule("*", skip = true)), options().screens)
-        // Languages from string resources, as without the tools; light only, what the tests render.
-        assertEquals(listOf("en-US", "de"), c["languages"])
+        // The locale the tests render; the app's other languages are listed. Light only, what the tests render.
+        assertEquals(listOf("en-US"), c["languages"])
         assertEquals(listOf("light"), options().appearances)
         val r = lines()
-        assertTrue(r.any { it.contains("languages: en-US, de") && it.contains("string resources") }, r.joinToString("\n"))
+        assertTrue(r.contains("  languages: en-US (no test sets a locale)"), r.joinToString("\n"))
+        assertTrue(r.contains("  string resources also have de: add them to languages to render them"), r.joinToString("\n"))
         assertTrue(r.any { it.contains("appearances: light") && it.contains("no test uses night mode") }, r.joinToString("\n"))
     }
 
@@ -259,6 +267,50 @@ class MigrationTest {
         assertEquals(Devices.defaultDesktop, c["desktop_devices"])
         assertEquals(Ios.defaultDevices, c["ios_devices"])
         assertFalse(lines().any { it.contains("unresolved") }, lines().joinToString("\n"))
+        // Only desktop and iOS tests: Android isn't rendered.
+        assertEquals(listOf("desktop", "ios"), c["platforms"])
+        assertTrue(lines().contains("  desktop, ios (from tests; the project also has android)"), lines().joinToString("\n"))
+        // An Android test on another preview: every platform, and Home is listed as rendering on more than its tests.
+        write("shared/src/commonMain/kotlin/com/example/Other.kt", "package com.example\n@Preview @Composable fun Other() {}")
+        write("shared/src/androidUnitTest/kotlin/com/example/A.kt", """
+            package com.example
+            class A {
+                @Test fun a() = runComposeUiTest {
+                    setContent { Other() }
+                    onRoot().captureRoboImage()
+                }
+            }
+        """)
+        assertNull(init()["platforms"])
+        val r = lines()
+        assertTrue(r.contains("  com.example.UiKt.Home: tested on desktop, ios; also renders on android"), r.joinToString("\n"))
+        assertTrue(r.contains("  com.example.OtherKt.Other: tested on android; also renders on desktop, ios"), r.joinToString("\n"))
+    }
+
+    @Test fun scannerOnAFixedDeviceOverridesPreviews() {
+        settings(":app")
+        paparazzi()
+        write("app/src/main/kotlin/com/example/Ui.kt", "package com.example\n@Preview(device = \"id:pixel_9\", uiMode = Configuration.UI_MODE_NIGHT_YES) @Composable fun A() {}\n@Preview @Composable fun B() {}")
+        write("app/src/test/kotlin/com/example/PreviewTest.kt", """
+            package com.example
+            class PreviewTest(val preview: ComposablePreview<AndroidPreviewInfo>) {
+                companion object { fun previews() = AndroidComposablePreviewScanner().scanPackageTrees("com.example").getPreviews() }
+                @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_5)
+                @Test fun snapshot() { paparazzi.snapshot { preview() } }
+            }
+        """)
+        init()
+        assertEquals(
+            listOf(
+                ScreenRule("com.example.UiKt.A", devices = listOf("Pixel 5"), appearances = listOf("light"), fontScales = listOf(1.0), overridePreview = true),
+                ScreenRule("com.example.*", devices = listOf("Pixel 5")),
+                ScreenRule("*", skip = true),
+            ),
+            options().screens,
+        )
+        val shots = plan(preview("com.example.UiKt.A", "id:pixel_9", 0x21), preview("com.example.UiKt.B"))
+        assertEquals(listOf("A" to "Pixel 5", "B" to "Pixel 5"), shots.map { it.preview.function to it.device.name })
+        assertEquals(listOf(false, false), shots.map { it.dark })
     }
 
     @Test fun reportLines() {
@@ -285,7 +337,7 @@ class MigrationTest {
             "  DeviceConfig.PIXEL_5 → Pixel 5",
             "  Paparazzi default → $nexus5 (tool default)",
             "Settings:",
-            "  languages: en-US (string resources; no test sets a locale)",
+            "  languages: en-US (no test sets a locale)",
             "  appearances: light (no test uses night mode)",
             "  font scales: 1 (no test sets one)",
             "Not covered:",

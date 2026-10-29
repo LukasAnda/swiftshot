@@ -47,7 +47,24 @@ object Migration {
 
     private fun scale(d: Double) = if (d == Math.floor(d)) d.toLong().toString() else d.toString()
 
-    /** Whether a test that calls [p] directly renders it with a device, locale, night mode or font scale other than its own. */
+    /** A test that renders a preview with its own device and settings rather than the preview's: a direct call, or a scanner on a fixed device or with settings set. */
+    private fun fixes(t: SnapshotTest) = t.target is Target.Previews ||
+        t.target is Target.AllPreviews && (t.device is DeviceSource.Read || t.device is DeviceSource.ToolDefault || t.settings != TestSettings())
+
+    private val platformOrder = listOf("android", "desktop", "ios")
+
+    /** The platforms a module's build targets. */
+    private fun platforms(dir: File): Set<String> {
+        val b = listOf("build.gradle.kts", "build.gradle").map { File(dir, it) }.firstOrNull { it.isFile }?.let { SnapshotModules.strip(it.readText()) } ?: ""
+        val kmp = b.contains("kotlin.multiplatform") || b.contains("kotlin(\"multiplatform\")")
+        return setOfNotNull(
+            "android".takeIf { !kmp || b.contains("android") },
+            "desktop".takeIf { kmp && Regex("""\bjvm\s*\(""").containsMatchIn(b) },
+            "ios".takeIf { kmp && b.contains("ios") },
+        )
+    }
+
+    /** Whether a test that renders [p] with its own settings ([fixes]) renders it with a device, locale, night mode or font scale other than its own. */
     private fun replaces(p: SourcePreview, t: SnapshotTest): Boolean = p.own.any { o ->
         val s = screen(t.device)
         o.unreadable ||
@@ -75,13 +92,18 @@ object Migration {
             .sortedWith(enFirst).ifEmpty { listOf("en-US") }
         val anyLocale = covered.any { it.settings.locale != null }
         val overrides = mutableListOf<String>()
+        // Rule → combinations its unions render that no test takes.
+        val extras = linkedMapOf<String, List<String>>()
         // A rendered rule without devices for Android tests renders on the top-level devices.
         var needsDevices = false
 
         fun rule(pattern: String, ts: Set<SnapshotTest>, p: SourcePreview? = null): LinkedHashMap<String, Any?> {
             if (ts.isEmpty()) return linkedMapOf("preview" to pattern, "skip" to true)
-            val override = p != null && ts.any { it.target is Target.Previews && replaces(p, it) }
+            val override = p != null && ts.any { fixes(it) && replaces(p, it) }
             if (override) overrides += p!!.fqn
+            val taken = ts.filter { platform(it) == "android" }.map { listOf(name(it.device) ?: "top-level devices", it.settings.locale ?: "en-US", if (it.settings.night == true) "dark" else "light", scale(it.settings.fontScale ?: 1.0) + "x") }.toSet()
+            val product = (0..3).fold(listOf(emptyList<String>())) { acc, i -> acc.flatMap { c -> taken.map { it[i] }.distinct().map { c + it } } }
+            product.filter { it !in taken }.takeIf { it.isNotEmpty() }?.let { extras[pattern] = it.map { c -> c.joinToString(" / ") } }
             val locales = ts.map { it.settings.locale }
             val appearances = ts.map { if (it.settings.night == true) "dark" else "light" }.distinct().sortedBy { it == "dark" }
             val scales = ts.map { it.settings.fontScale ?: 1.0 }.distinct().sorted()
@@ -90,11 +112,8 @@ object Migration {
             return linkedMapOf<String, Any?>(
                 "preview" to pattern,
                 "devices" to devices.ifEmpty { null },
-                "languages" to when {
-                    locales.any { it != null } -> locales.map { it ?: "en-US" }.distinct().sortedWith(enFirst)
-                    override && p!!.own.any { it.locale != null || it.unreadable } -> stringLanguages
-                    else -> null
-                },
+                // Once any test sets a locale, every rule says which it renders (the default en-US where a test sets none).
+                "languages" to if (anyLocale || override && p!!.own.any { it.locale != null || it.unreadable }) locales.map { it ?: "en-US" }.distinct().sortedWith(enFirst) else null,
                 "appearances" to appearances.takeIf { override || it != listOf("light") },
                 "font_scales" to scales.takeIf { override || it != listOf(1.0) },
                 "override_preview" to if (override) true else null,
@@ -107,7 +126,8 @@ object Migration {
         val everything = scans.filter { (it.target as Target.AllPreviews).packages.isEmpty() }.toSet()
         fun implied(p: SourcePreview) = packages.firstOrNull { p.fqn.startsWith("$it.") }?.let { globTests.getValue(it) } ?: everything
         // A preview gets its own rule when the tests that render it aren't the ones the package rules give it.
-        val specific = previews.filter { covering.getValue(it) != implied(it) }.distinctBy { it.fqn }.sortedBy { it.fqn }
+        // So does one a scanner renders on a fixed device or with settings that replace the preview's own.
+        val specific = previews.filter { p -> covering.getValue(p) != implied(p) || covering.getValue(p).any { it.target is Target.AllPreviews && fixes(it) && replaces(p, it) } }.distinctBy { it.fqn }.sortedBy { it.fqn }
             .map { p -> rule(p.fqn, previews.filter { it.fqn == p.fqn }.flatMap { covering.getValue(it) }.toSet(), p) }
         val screens = specific + packages.map { rule("$it.*", globTests.getValue(it)) } + rule("*", everything)
 
@@ -119,6 +139,15 @@ object Migration {
         val renderModules = previews.filter { covering.getValue(it).isNotEmpty() }.map { it.module }.distinct().sorted()
         val desktop = covered.any { platform(it) == "desktop" }
         val ios = covered.any { platform(it) == "ios" }
+        val projectPlatforms = renderModules.mapNotNull { all[it] }.flatMap(::platforms).toSet()
+        val testPlatforms = covered.map(::platform).toSet()
+        val narrower = testPlatforms.isNotEmpty() && projectPlatforms.containsAll(testPlatforms) && testPlatforms != projectPlatforms
+        // Previews tested on fewer platforms than the config renders: rules can't say per platform.
+        val renderedPlatforms = if (narrower) testPlatforms else projectPlatforms + testPlatforms
+        val mixed = previews.distinctBy { it.fqn }.mapNotNull { p ->
+            val on = previews.filter { it.fqn == p.fqn }.flatMap { covering.getValue(it) }.map(::platform).toSet()
+            if (on.isEmpty() || on == renderedPlatforms) null else p.fqn to on
+        }
         val fastlane = File(root, "fastlane").isDirectory
         val config = linkedMapOf<String, Any?>(
             "modules" to renderModules.ifEmpty { null },
@@ -126,7 +155,9 @@ object Migration {
             "watch_devices" to concrete.filter { it.second }.map { it.first }.ifEmpty { null },
             "desktop_devices" to if (desktop) Devices.defaultDesktop else null,
             "ios_devices" to if (ios) Ios.defaultDevices else null,
-            "languages" to stringLanguages,
+            "platforms" to if (narrower) platformOrder.filter { it in testPlatforms } else null,
+            // The locale the tests render when they set none.
+            "languages" to listOf("en-US"),
             "output_directory" to if (fastlane) "fastlane/metadata/android" else "screenshots",
             "layout" to if (fastlane) "fastlane" else null,
             "clear_previous_screenshots" to true,
@@ -162,13 +193,26 @@ object Migration {
         if (fallback) report += "  No test's device could be read: using Swiftshot's default devices"
 
         report += "Settings:"
-        report += if (anyLocale) "  languages: " + covered.map { it.settings.locale ?: "en-US" }.distinct().sortedWith(enFirst).joinToString(", ") + " (from tests; en-US where a test sets none)"
-            else "  languages: ${stringLanguages.joinToString(", ")} (string resources; no test sets a locale)"
+        val tested = covered.map { it.settings.locale ?: "en-US" }.distinct().sortedWith(enFirst)
+        report += if (anyLocale) "  languages: ${tested.joinToString(", ")} (from tests; en-US where a test sets none)"
+            else "  languages: en-US (no test sets a locale)"
+        stringLanguages.filter { it !in tested }.takeIf { it.isNotEmpty() }?.let { report += "  string resources also have ${it.joinToString(", ")}: add them to languages to render them" }
         report += if (covered.any { it.settings.night == true }) "  appearances: " + covered.map { if (it.settings.night == true) "dark" else "light" }.distinct().sortedBy { it == "dark" }.joinToString(", ") + " (from tests)"
             else "  appearances: light (no test uses night mode)"
         report += if (covered.any { it.settings.fontScale != null && it.settings.fontScale != 1.0 }) "  font scales: " + covered.map { it.settings.fontScale ?: 1.0 }.distinct().sorted().joinToString(", ") { scale(it) } + " (from tests)"
             else "  font scales: 1 (no test sets one)"
         if (overrides.isNotEmpty()) report += "  override_preview for ${overrides.joinToString(", ")}: the tests replace the preview's own device, locale, uiMode or fontScale"
+
+        if (renderedPlatforms.size > 1 || narrower) {
+            report += "Platforms:"
+            val also = projectPlatforms - testPlatforms
+            report += "  ${platformOrder.filter { it in renderedPlatforms }.joinToString(", ")} (from tests" + (if (also.isEmpty()) ")" else "; the project also has ${platformOrder.filter { it in also }.joinToString(", ")})")
+            for ((fqn, on) in mixed) report += "  $fqn: tested on ${platformOrder.filter { it in on }.joinToString(", ")}; also renders on ${platformOrder.filter { it in renderedPlatforms - on }.joinToString(", ")}"
+        }
+        if (extras.isNotEmpty()) {
+            report += "Extra combinations:"
+            for ((pattern, combos) in extras) report += "  $pattern: also renders ${combos.joinToString("; ")} (no test takes them)"
+        }
 
         val uncovered = tests.filter { it.target is Target.Uncovered }
         if (uncovered.isNotEmpty()) {
