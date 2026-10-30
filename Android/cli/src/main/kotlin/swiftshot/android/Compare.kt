@@ -89,50 +89,85 @@ object Compare {
 
     private fun channel(p: Int, q: Int, shift: Int) = Math.abs((p ushr shift and 255) - (q ushr shift and 255))
 
-    /** Bounding boxes of the 8-connected components, merged while any two are closer than [MERGE_DISTANCE]; sorted by y, x, w, h. */
+    /** Pair checks and grid entries of the last [boxes] call (tests keep it bounded). */
+    @Volatile internal var lastBoxWork = 0L
+
+    /**
+     * Bounding boxes of the 8-connected components, merged while any two are closer than [MERGE_DISTANCE]; sorted by
+     * y, x, w, h. The merged result doesn't depend on the order of merges, and every merge of a close pair is forced, so
+     * this starts from coarser groups that would merge anyway: all differing pixels of one 16×16 cell are at most 15 px
+     * apart, so their components are close. It then unions close boxes (found through a 16 px grid) until none is close.
+     */
     internal fun boxes(mask: BooleanArray, w: Int, h: Int): List<Region> {
-        val seen = BooleanArray(mask.size)
-        val stack = IntArray(mask.size)
-        val comps = ArrayList<IntArray>()   // x0, y0, x1, y1 (half-open)
-        for (start in mask.indices) {
-            if (!mask[start] || seen[start]) continue
-            var top = 0
-            stack[top++] = start
-            seen[start] = true
-            var x0 = Int.MAX_VALUE; var y0 = Int.MAX_VALUE; var x1 = Int.MIN_VALUE; var y1 = Int.MIN_VALUE
-            while (top > 0) {
-                val p = stack[--top]
-                val x = p % w; val y = p / w
-                if (x < x0) x0 = x; if (y < y0) y0 = y; if (x + 1 > x1) x1 = x + 1; if (y + 1 > y1) y1 = y + 1
-                for (dy in -1..1) for (dx in -1..1) {
-                    val nx = x + dx; val ny = y + dy
-                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
-                    val q = ny * w + nx
-                    if (mask[q] && !seen[q]) { seen[q] = true; stack[top++] = q }
+        val c = MERGE_DISTANCE
+        val gw = (w + c - 1) / c
+        val gh = (h + c - 1) / c
+        var work = 0L
+        // One box per non-empty cell.
+        val cells = IntArray(gw * gh * 4)
+        val used = BooleanArray(gw * gh)
+        for (y in 0 until h) {
+            val row = y * w
+            val cy = y / c
+            for (x in 0 until w) {
+                if (!mask[row + x]) continue
+                val k = cy * gw + x / c
+                val o = k * 4
+                if (!used[k]) { used[k] = true; cells[o] = x; cells[o + 1] = y; cells[o + 2] = x + 1; cells[o + 3] = y + 1 }
+                else {
+                    if (x < cells[o]) cells[o] = x
+                    if (x + 1 > cells[o + 2]) cells[o + 2] = x + 1
+                    cells[o + 3] = y + 1
                 }
             }
-            comps += intArrayOf(x0, y0, x1, y1)
         }
-        // Union close pairs until none is close. Unions only grow, so the fixpoint is the same in any order.
-        var merged = true
-        while (merged) {
-            merged = false
-            var i = 0
-            while (i < comps.size) {
-                var j = i + 1
-                while (j < comps.size) {
-                    val a = comps[i]; val b = comps[j]
-                    if (gap(a, b) < MERGE_DISTANCE) {
-                        comps[i] = intArrayOf(minOf(a[0], b[0]), minOf(a[1], b[1]), maxOf(a[2], b[2]), maxOf(a[3], b[3]))
-                        comps.removeAt(j)
-                        merged = true
-                        j = i + 1   // the union may now be close to boxes already passed
-                    } else j++
+        var boxes = ArrayList<IntArray>()
+        for (k in used.indices) if (used[k]) boxes += cells.copyOfRange(k * 4, k * 4 + 4)
+        // Union every close pair (union-find), replace each group by its union, repeat until a pass merges nothing.
+        while (true) {
+            val n = boxes.size
+            // Grid buckets (CSR): box i is listed in every cell it covers.
+            val count = IntArray(gw * gh + 1)
+            for (b in boxes) for (cy in b[1] / c..(b[3] - 1) / c) for (cx in b[0] / c..(b[2] - 1) / c) count[cy * gw + cx + 1]++
+            for (k in 1 until count.size) count[k] += count[k - 1]
+            val fillAt = count.copyOf()
+            val members = IntArray(count[count.size - 1])
+            for ((i, b) in boxes.withIndex()) for (cy in b[1] / c..(b[3] - 1) / c) for (cx in b[0] / c..(b[2] - 1) / c) members[fillAt[cy * gw + cx]++] = i
+            work += members.size
+            val parent = IntArray(n) { it }
+            fun find(i: Int): Int { var r = i; while (parent[r] != r) r = parent[r]; var j = i; while (parent[j] != r) { val nx = parent[j]; parent[j] = r; j = nx }; return r }
+            val stamp = IntArray(n) { -1 }
+            var merged = false
+            for (i in 0 until n) {
+                val a = boxes[i]
+                // gap < c: a close box starts at most c px past this one's last pixel (b.x0 - a.x1 <= c - 1), and ends at most c before its first.
+                val cx0 = maxOf(0, a[0] - c) / c; val cx1 = minOf(w - 1, a[2] - 1 + c) / c
+                val cy0 = maxOf(0, a[1] - c) / c; val cy1 = minOf(h - 1, a[3] - 1 + c) / c
+                for (cy in cy0..cy1) for (cx in cx0..cx1) {
+                    val k = cy * gw + cx
+                    for (m in count[k] until count[k + 1]) {
+                        val j = members[m]
+                        if (j <= i || stamp[j] == i) continue
+                        stamp[j] = i
+                        work++
+                        if (gap(a, boxes[j]) < c) {
+                            val ri = find(i); val rj = find(j)
+                            if (ri != rj) { parent[rj] = ri; merged = true }
+                        }
+                    }
                 }
-                i++
             }
+            if (!merged) break
+            val groups = LinkedHashMap<Int, IntArray>()
+            for (i in 0 until n) {
+                val b = boxes[i]
+                val g = groups.getOrPut(find(i)) { b.copyOf() }
+                g[0] = minOf(g[0], b[0]); g[1] = minOf(g[1], b[1]); g[2] = maxOf(g[2], b[2]); g[3] = maxOf(g[3], b[3])
+            }
+            boxes = ArrayList(groups.values)
         }
-        return comps.map { Region(it[0], it[1], it[2] - it[0], it[3] - it[1]) }
+        lastBoxWork = work
+        return boxes.map { Region(it[0], it[1], it[2] - it[0], it[3] - it[1]) }
             .sortedWith(compareBy<Region>({ it.y }, { it.x }, { it.width }, { it.height }))
     }
 

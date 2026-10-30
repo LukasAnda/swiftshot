@@ -59,10 +59,12 @@ object Png {
         val interlace = h[12].toInt() and 255
         if (depth != 8 || (colorType != 2 && colorType != 6) || interlace != 0) fail()
         val bpp = if (colorType == 6) 4 else 3
-        val stride = width * bpp
-        val expected = height * (1 + stride)
         // Larger than an array can hold: no such image can be compared (its zlib data would be the wrong length or huge).
-        if (expected > Int.MAX_VALUE - 8 || width * height > Int.MAX_VALUE - 8) fail()
+        if (width > Int.MAX_VALUE || height > Int.MAX_VALUE) fail()
+        val limit = (Int.MAX_VALUE - 8).toLong()
+        val stride = width * bpp                       // < 2^34: no overflow
+        val expected = try { Math.multiplyExact(height, 1 + stride) } catch (_: ArithmeticException) { fail() }
+        if (expected > limit || width * height > limit) fail()   // width·height < 2^62
         val raw = inflate(idat.toByteArray(), expected.toInt())
         val w = width.toInt()
         val s = stride.toInt()
