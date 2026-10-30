@@ -128,10 +128,15 @@ Exit code: 0 when every screenshot was rendered, non-zero otherwise. Errors are 
 
 ```
 USAGE
-  swiftshot [run|list|devices|init] [options]
+  swiftshot [run|verify|record|accept|list|devices|init] [options]
 
 COMMANDS
   run       Build, render every preview for every device × language × appearance (default)
+  verify    Render as run does, then compare with the baseline: exit 0 same, 1 differences,
+            2 errors, 64 usage error; the report goes to <output>-report
+  record    Render as run does and write the screenshots into the baseline
+  accept    Apply a verify report to the baseline without rendering: exit 0 applied (or nothing
+            to do), 1 refused (report not from HEAD, push failed), 64 usage or invalid report
   list      Build and print the previews that were found
   devices   List the devices and their screens
   init      Write a swiftshot.json for the project here: modules, languages and Play devices
@@ -175,11 +180,22 @@ OUTPUT
   --round-corners black|transparent     Outside round watch screens (default: black, as Play requires)
   --parallel <n>                        Renderer processes (default: from cores and memory)
 
+BASELINE (verify, record; PNG only, no frames)
+  --baseline-directory <dir>            Default: screenshots-baseline
+  --report-directory <dir>              Default: <output>-report
+
+ACCEPT
+  --from <dir|zip|url>                  A verify report directory, a zip of one, or an http(s) URL of the zip
+                                        (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token)
+  --only "<id>,<id>"                    Only these screenshot ids (repeatable)
+  --push                                Commit the baseline ("Update screenshot baseline (…)") and git push
+  --author "Name <email>"               Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+
   --config <file>                       Default: ./swiftshot.json
   -v, --verbose
 ```
 
-The same exit codes as on iOS. `swiftshot devices` lists every device with its size in px and dp
+The same exit codes as on iOS; `verify`, `record` and `accept` as above, see [[Baseline format]]. `swiftshot devices` lists every device with its size in px and dp
 and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs. Compose Multiplatform
 flags: [[Compose Multiplatform]]. In a Flutter project `--devices` also takes iPhones and iPads,
 see [[Flutter]].

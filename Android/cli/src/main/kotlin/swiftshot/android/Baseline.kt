@@ -122,7 +122,7 @@ object Baseline {
 
     private val DESCRIPTIVE = listOf("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime")
 
-    private fun describe(meta: Map<*, *>): MutableMap<String, Any?> {
+    internal fun describe(meta: Map<*, *>): MutableMap<String, Any?> {
         val d = LinkedHashMap<String, Any?>()
         for (k in DESCRIPTIVE) if (meta.containsKey(k)) d[k] = meta[k]
         if (d["platform"] == "ios" && !d.containsKey("textSize")) d["textSize"] = "default"

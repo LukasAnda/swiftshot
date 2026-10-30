@@ -36,6 +36,11 @@ Examples below are abbreviated and not in the sorted key order the files use.
 | 2 | errors, with or without differences |
 | 64 | usage error |
 
+`accept`: 0 applied (or nothing to apply), 1 refused (the report's commit isn't HEAD and a commit
+other than an `accept` commit followed it, or `git push` failed), 64 usage error or invalid report
+(also: an `--only` id the reports don't list, the same id with different content in two reports, a
+zip entry leaving the report or a symbolic link, a `--from` that can't be read).
+
 ## Serialization
 
 **JSON** (every file on this page):
@@ -298,6 +303,28 @@ listed here, so a baseline image of an `error` id is never deleted.
 {"schema": 1, "commit": "…", "branch": "feature/x", "ci": true, "configHash": "8f36…",
  "fingerprint": {"android": {…}}, "ids": {"added": [], "changed": ["en-US/Pixel 9-Home"], "removed": []}}
 ```
+
+## accept
+
+`swiftshot accept --from <report> [--from <report>…] [--only <ids>] [--push] [--author "Name <email>"]`
+renders nothing. `--from` is a report directory, a zip of one (the report at its root or in its only
+top-level directory), or an `http(s)` URL of such a zip (sent `Authorization: Bearer
+$SWIFTSHOT_ARTIFACT_TOKEN` when set, only to that host). Zips: no entry may leave the target
+directory or be a symbolic link, at most 2 GB extracted.
+
+- For each `changed` and `added` id of `manifest.json`: `images/new/<id>.png` is copied into the
+  baseline; its `images` entry is the report's `result.json` screenshot entry (the fields of the
+  baseline.json example), `fingerprint` the id of the manifest's fingerprint for its platform,
+  `local` = `!ci`. Each `removed` id: its PNG and entry are deleted. Nothing else changes;
+  unreferenced fingerprints are dropped and baseline.json is rewritten canonically.
+- `--only` (comma-separated, repeatable) restricts to those ids.
+- Stale: each report's `commit` must be HEAD, or every commit after it up to HEAD must carry the
+  trailer `Swiftshot-Accept: <commit>` (any value), which `accept --push` writes.
+- `--push`: one commit of the baseline directory only, subject `Update screenshot baseline (3
+  changed, 1 added)` (non-zero parts of changed, added, removed), a `Swiftshot-Accept: <commit>`
+  trailer per report commit, author and committer `swiftshot <swiftshot@users.noreply.github.com>`
+  unless `--author`; then `git push` to the branch's upstream, else `origin HEAD`, never forced.
+  Nothing to apply or nothing changed: no commit.
 
 ## junit.xml
 

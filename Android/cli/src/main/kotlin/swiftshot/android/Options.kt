@@ -77,6 +77,11 @@ class Options {
     var reportDirectory: String? = null
     /** verify: the global tolerance (null: exact, or channel delta 1 for booted simulators). */
     var tolerance: Tolerance? = null
+    /** accept: report directories, zips or URLs (repeatable); the ids to restrict to; commit and push; the commit author. */
+    var from: List<String> = emptyList()
+    var only: Set<String>? = null
+    var push = false
+    var author: String? = null
     /** Whether `--frame` was passed (a config's frame is skipped by verify/record, a flag is an error). */
     private var frameFlag = false
     /** Where relative output, baseline and report paths from flags resolve: Flutter runs resolve them in the project. */
@@ -92,20 +97,22 @@ class Options {
 
     companion object {
         /** Flags without a value (parse and [command] read the command line alike). */
-        val BOOLEAN_FLAGS = setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license")
+        val BOOLEAN_FLAGS = setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license", "--push")
 
         val usage = """
             swiftshot — screenshot tests and Play Store screenshots from Jetpack Compose and Compose
             Multiplatform @Previews (Android and desktop; Compose Multiplatform iOS needs a Mac).
 
             USAGE
-              swiftshot [run|verify|record|list|devices|init] [options]
+              swiftshot [run|verify|record|accept|list|devices|init] [options]
 
             COMMANDS
               run       Build, render every preview for every device × language × appearance (default)
               verify    Render as run does, then compare with the baseline: exit 0 same, 1 differences,
                         2 errors, 64 usage error; the report goes to <output>-report
               record    Render as run does and write the screenshots into the baseline
+              accept    Apply a verify report to the baseline without rendering: exit 0 applied (or nothing
+                        to do), 1 refused (report not from HEAD, push failed), 64 usage or invalid report
               list      Build and print the previews that were found
               devices   List the devices and their screens
               init      Write a swiftshot.json for the project here: modules, languages and Play devices
@@ -158,6 +165,13 @@ class Options {
               --report-directory <dir>              Default: <output>-report
               (swiftshot.json: "tolerance": {"pixels": n, "max_channel_delta": d}; per screen also
                "tolerance" and "ignore_regions": [[x, y, w, h]] in dp)
+
+            ACCEPT
+              --from <dir|zip|url>                  A verify report directory, a zip of one, or an http(s) URL of the zip
+                                                    (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token)
+              --only "<id>,<id>"                    Only these screenshot ids (repeatable)
+              --push                                Commit the baseline ("Update screenshot baseline (…)") and git push
+              --author "Name <email>"               Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
 
               --config <file>                       Default: ./swiftshot.json
               -v, --verbose
@@ -229,6 +243,10 @@ class Options {
                 "--format" -> o.format = v!!
                 "--baseline-directory" -> o.baselineDirectory = v!!
                 "--report-directory" -> o.reportDirectory = v!!
+                "--from" -> o.from = o.from + v!!
+                "--only" -> o.only = o.only.orEmpty() + list(v)
+                "--push" -> o.push = true
+                "--author" -> o.author = v!!
                 "--config", "--project-dir" -> Unit
                 else -> error("Unknown option $k. `swiftshot --help` lists them.")
             }
@@ -359,7 +377,9 @@ class Options {
 
     private fun validate() {
         if (command in setOf("frame", "calibrate", "emit-table")) throw CliError("`swiftshot $command` is part of the iOS tool and needs a Mac with Xcode.")
-        require(command in setOf("run", "verify", "record", "list", "devices", "init", "auto-setup", "emit-devices")) { "Unknown command \"$command\"" }
+        require(command in setOf("run", "verify", "record", "list", "devices", "init", "auto-setup", "emit-devices", "accept")) { "Unknown command \"$command\"" }
+        if (command == "accept") { if (from.isEmpty()) throw UsageError("accept needs --from <report directory, .zip or URL>") }
+        else require(from.isEmpty() && only == null && !push && author == null) { "--from, --only, --push and --author are for accept" }
         if (command == "verify" || command == "record") {
             if (format != "png") throw UsageError("$command compares plain PNG screenshots; --format $format can't be used with it (drop --format, or use run).")
             if (frameFlag && frame != "none") throw UsageError("$command compares plain screenshots; device frames aren't written (drop --frame, or use run).")
