@@ -319,6 +319,13 @@ class AcceptTest {
         assertContains(errors.toString(), "link")
     }
 
+    @Test fun theArtifactTokenGoesOnlyOverHttps() {
+        repoWith("changed-pixels")
+        assertEquals(64, accept(token = "secret", urls = listOf("http://example.invalid/artifact.zip")))
+        assertContains(errors.toString(), "SWIFTSHOT_ARTIFACT_TOKEN is sent only over https")
+        assertFalse("secret" in errors.toString())
+    }
+
     @Test fun downloadsAZipWithTheArtifactToken() {
         repoWith("changed-pixels")
         val data = zip(report("changed-pixels"), File(tmp, "report.zip")).readBytes()

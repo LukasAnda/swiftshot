@@ -332,7 +332,8 @@ listed here, so a baseline image of an `error` id is never deleted.
 `swiftshot accept --from <report> [--from <report>…] [--only <ids>] [--push] [--author "Name <email>"]`
 renders nothing. `--from` is a report directory, a zip of one (the report at its root or in its only
 top-level directory), or an `http(s)` URL of such a zip (sent `Authorization: Bearer
-$SWIFTSHOT_ARTIFACT_TOKEN` when set, only to that host). Zips: no entry may leave the target
+$SWIFTSHOT_ARTIFACT_TOKEN` when set, only to that host and only over `https`: a token with an `http`
+URL is a usage error, except to `localhost`, `127.0.0.1` or `::1`). Zips: no entry may leave the target
 directory or be a symbolic link, at most 2 GB extracted.
 
 - For each `changed` and `added` id of `manifest.json`: `images/new/<id>.png` is copied into the

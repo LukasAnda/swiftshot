@@ -371,7 +371,11 @@ enum Download {
     }
 
     static func fetch(_ url: String, to dest: URL, token: String?, maxBytes: Int64) throws {
-        guard let origin = URL(string: url), origin.host != nil else { throw UsageError("--from \(url): not a valid URL") }
+        guard let origin = URL(string: url), let host = origin.host else { throw UsageError("--from \(url): not a valid URL") }
+        // A bearer token in plain text is anyone's on the way; this machine's own server (tests, a local proxy) is no way.
+        if token != nil, origin.scheme?.lowercased() != "https", !["localhost", "127.0.0.1", "[::1]", "::1"].contains(host.lowercased()) {
+            throw UsageError("--from \(url): SWIFTSHOT_ARTIFACT_TOKEN is sent only over https; use an https URL or unset the token")
+        }
         var current = origin
         for _ in 0..<10 {
             var request = URLRequest(url: current, timeoutInterval: 600)

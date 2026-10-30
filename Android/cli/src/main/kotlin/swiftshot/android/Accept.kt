@@ -26,6 +26,7 @@ object Accept {
     /** Download and extracted-zip size limit. */
     private const val MAX_BYTES = 2L * 1024 * 1024 * 1024
     private const val MAX_ENTRIES = 200_000
+    private val LOOPBACK = setOf("localhost", "127.0.0.1", "[::1]", "::1")
 
     /** A refusal (exit 1): the report doesn't fit the branch, or git couldn't finish. */
     private class Refused(message: String) : Exception(message)
@@ -273,6 +274,9 @@ object Accept {
     private fun download(url: String, dest: File, token: String?) {
         val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(30)).build()
         val origin = runCatching { URI(url) }.getOrElse { usage("--from $url: not a valid URL") }
+        // A bearer token in plain text is anyone's on the way; this machine's own server (tests, a local proxy) is no way.
+        if (token != null && !origin.scheme.equals("https", true) && origin.host?.lowercase() !in LOOPBACK)
+            usage("--from $url: SWIFTSHOT_ARTIFACT_TOKEN is sent only over https; use an https URL or unset the token")
         var uri = origin
         repeat(10) {
             val request = HttpRequest.newBuilder(uri).GET().header("User-Agent", "swiftshot").timeout(Duration.ofMinutes(10))

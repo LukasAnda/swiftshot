@@ -168,7 +168,8 @@ class Options {
 
             ACCEPT
               --from <dir|zip|url>                  A verify report directory, a zip of one, or an http(s) URL of the zip
-                                                    (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token)
+                                                    (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token,
+                                                    over https only, to that host only)
               --only "<id>,<id>"                    Only these screenshot ids (repeatable)
               --push                                Commit the baseline ("Update screenshot baseline (…)") and git push
               --author "Name <email>"               Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)

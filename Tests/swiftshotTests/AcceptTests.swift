@@ -439,6 +439,13 @@ final class AcceptTests: XCTestCase {
 
     // MARK: downloads
 
+    func testTheArtifactTokenGoesOnlyOverHttps() throws {
+        try repoWith("changed-pixels")
+        XCTAssertEqual(accept(token: "secret", urls: ["http://example.invalid/artifact.zip"]), 64)
+        XCTAssertTrue(errors.contains("SWIFTSHOT_ARTIFACT_TOKEN is sent only over https"), errors)
+        XCTAssertFalse(errors.contains("secret"))
+    }
+
     func testDownloadsAZipWithTheArtifactToken() throws {
         try repoWith("changed-pixels")
         let data = bytes(try zip(try report("changed-pixels"), tmp.appendingPathComponent("report.zip")))
