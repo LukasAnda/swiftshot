@@ -56,7 +56,7 @@ struct Ci: Equatable {
                       from != nil && repo != nil ? from != repo : nil, v("BITRISE_BUILD_URL"), repo)
         }
         if v("CM_BUILD_ID") != nil {
-            return ci("codemagic", v("CM_COMMIT"), flag("CM_PULL_REQUEST") ? first(v("CM_PULL_REQUEST_SOURCE"), v("CM_BRANCH")) : v("CM_BRANCH"),
+            return ci("codemagic", v("CM_COMMIT"), v("CM_BRANCH"),
                       v("CM_PULL_REQUEST_NUMBER"), nil, nil, nil)
         }
         if flag("CIRCLECI") {

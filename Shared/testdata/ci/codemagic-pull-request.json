@@ -7,6 +7,7 @@
     "CM_PULL_REQUEST": "true",
     "CM_PULL_REQUEST_DEST": "main",
     "CM_PULL_REQUEST_NUMBER": "5",
+    "CM_PULL_REQUEST_SOURCE": "decoy/branch",
     "CM_REPO_SLUG": "acme/app"
   },
   "expected": {

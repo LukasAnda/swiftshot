@@ -24,10 +24,6 @@ data class Ci(
             fun v(k: String) = env[k]?.takeIf { it.isNotEmpty() }
             fun flag(k: String) = v(k).equals("true", ignoreCase = true)
             fun first(vararg s: String?) = s.firstOrNull { !it.isNullOrEmpty() }
-            fun join(format: String, vararg keys: String): String? {
-                val parts = keys.map { v(it) ?: return null }
-                return String.format(format, *parts.toTypedArray())
-            }
             fun after(prefix: String, s: String?) = s?.removePrefix(prefix)
 
             val override = v("SWIFTSHOT_CI")
@@ -44,8 +40,10 @@ data class Ci(
                 }
                 v("BITBUCKET_BUILD_NUMBER") != null -> {
                     val pr = v("BITBUCKET_PR_ID")
+                    val origin = v("BITBUCKET_GIT_HTTP_ORIGIN")
+                    val number = v("BITBUCKET_BUILD_NUMBER")
                     Ci("bitbucket", v("BITBUCKET_COMMIT"), v("BITBUCKET_BRANCH"), pr, if (pr != null) false else null,
-                        join("%s/pipelines/results/%s", "BITBUCKET_GIT_HTTP_ORIGIN", "BITBUCKET_BUILD_NUMBER"), v("BITBUCKET_GIT_HTTP_ORIGIN"), true)
+                        if (origin != null && number != null) "$origin/pipelines/results/$number" else null, origin, true)
                 }
                 flag("BITRISE_IO") -> {
                     val from = v("BITRISEIO_PULL_REQUEST_REPOSITORY_URL")
@@ -54,8 +52,7 @@ data class Ci(
                         if (from != null && repo != null) from != repo else null, v("BITRISE_BUILD_URL"), repo, true)
                 }
                 v("CM_BUILD_ID") != null -> {
-                    val pr = flag("CM_PULL_REQUEST")
-                    Ci("codemagic", v("CM_COMMIT"), if (pr) first(v("CM_PULL_REQUEST_SOURCE"), v("CM_BRANCH")) else v("CM_BRANCH"),
+                    Ci("codemagic", v("CM_COMMIT"), v("CM_BRANCH"),
                         v("CM_PULL_REQUEST_NUMBER"), null, null, null, true)
                 }
                 flag("CIRCLECI") -> {

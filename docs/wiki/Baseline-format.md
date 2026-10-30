@@ -308,7 +308,7 @@ value counts as unset.
 | `gitlab` | `GITLAB_CI=true` | `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`, else `CI_COMMIT_SHA` | `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, else `CI_COMMIT_BRANCH` | `CI_MERGE_REQUEST_IID` | `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` differs from `CI_MERGE_REQUEST_PROJECT_ID` (both set) | `CI_JOB_URL` | `CI_PROJECT_URL` |
 | `bitbucket` | `BITBUCKET_BUILD_NUMBER` set | `BITBUCKET_COMMIT` | `BITBUCKET_BRANCH` | `BITBUCKET_PR_ID` | `false` on a pull request (fork pull requests run no pipeline), else `null` | `$BITBUCKET_GIT_HTTP_ORIGIN/pipelines/results/$BITBUCKET_BUILD_NUMBER` | `BITBUCKET_GIT_HTTP_ORIGIN` |
 | `bitrise` | `BITRISE_IO=true` | `BITRISE_GIT_COMMIT`, else `GIT_CLONE_COMMIT_HASH` | `BITRISE_GIT_BRANCH` | `BITRISE_PULL_REQUEST` | `BITRISEIO_PULL_REQUEST_REPOSITORY_URL` differs from `GIT_REPOSITORY_URL` (both set) | `BITRISE_BUILD_URL` | `GIT_REPOSITORY_URL` |
-| `codemagic` | `CM_BUILD_ID` set | `CM_COMMIT` | `CM_PULL_REQUEST_SOURCE` if `CM_PULL_REQUEST=true` (falling back to `CM_BRANCH`), else `CM_BRANCH` | `CM_PULL_REQUEST_NUMBER` | `null` | `null` | `null` |
+| `codemagic` | `CM_BUILD_ID` set | `CM_COMMIT` | `CM_BRANCH` | `CM_PULL_REQUEST_NUMBER` | `null` | `null` | `null` |
 | `circleci` | `CIRCLECI=true` | `CIRCLE_SHA1` | `CIRCLE_BRANCH` | last path segment of `CIRCLE_PULL_REQUEST` | `true` if `CIRCLE_PR_NUMBER` is set (only forks set it), else `false` if `CIRCLE_PULL_REQUEST` is set, else `null` | `CIRCLE_BUILD_URL` | `CIRCLE_REPOSITORY_URL` |
 | `azure` | `TF_BUILD=true` (case-insensitive) | `SYSTEM_PULLREQUEST_SOURCECOMMITID`, else `BUILD_SOURCEVERSION` | `SYSTEM_PULLREQUEST_SOURCEBRANCH` without `refs/heads/`, else `BUILD_SOURCEBRANCH` without `refs/heads/`, else `BUILD_SOURCEBRANCHNAME` | `SYSTEM_PULLREQUEST_PULLREQUESTNUMBER`, else `SYSTEM_PULLREQUEST_PULLREQUESTID` | `SYSTEM_PULLREQUEST_ISFORK` (`True`/`False`, case-insensitive), else `null` | `$SYSTEM_COLLECTIONURI$SYSTEM_TEAMPROJECT/_build/results?buildId=$BUILD_BUILDID` (one `/` after the collection URI) | `BUILD_REPOSITORY_URI` |
 | `jenkins` | `JENKINS_URL` set | `GIT_COMMIT` | `CHANGE_BRANCH`, else `BRANCH_NAME`, else `GIT_BRANCH` without `origin/` | `CHANGE_ID` | `true` if `CHANGE_FORK` is set, else `false` if `CHANGE_ID` is set, else `null` | `BUILD_URL` | `GIT_URL` |
@@ -353,8 +353,7 @@ Codemagic https://docs.codemagic.io/yaml-basic-configuration/environment-variabl
 CircleCI https://circleci.com/docs/reference/variables/ ·
 Azure https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables ·
 Jenkins https://www.jenkins.io/doc/book/pipeline/jenkinsfile/ and https://www.jenkins.io/doc/book/pipeline/multibranch/.
-`CM_PULL_REQUEST_SOURCE` is not in the Codemagic documentation (there `CM_BRANCH` is the pull
-request's source branch), so in practice it is `CM_BRANCH`.
+On Codemagic `CM_BRANCH` is the pull request's source branch (https://docs.codemagic.io/yaml-basic-configuration/environment-variables/).
 
 Fixtures: `Shared/testdata/ci/` (one file per case) and the baseline case `ci-github`.
 

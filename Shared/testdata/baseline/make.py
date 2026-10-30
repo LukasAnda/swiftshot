@@ -686,8 +686,7 @@ def ci_detect(env, files):
         return done("bitrise", first(g("BITRISE_GIT_COMMIT"), g("GIT_CLONE_COMMIT_HASH")), g("BITRISE_GIT_BRANCH"),
                     g("BITRISE_PULL_REQUEST"), fork != repo if fork and repo else None, g("BITRISE_BUILD_URL"), repo)
     if g("CM_BUILD_ID"):
-        pr = is_true("CM_PULL_REQUEST")
-        return done("codemagic", g("CM_COMMIT"), first(g("CM_PULL_REQUEST_SOURCE"), g("CM_BRANCH")) if pr else g("CM_BRANCH"),
+        return done("codemagic", g("CM_COMMIT"), g("CM_BRANCH"),
                     g("CM_PULL_REQUEST_NUMBER"), None, None, None)
     if is_true("CIRCLECI"):
         url = g("CIRCLE_PULL_REQUEST")
