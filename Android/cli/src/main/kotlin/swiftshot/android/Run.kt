@@ -430,14 +430,23 @@ class Runner(private val o: Options, private val log: Log) {
                 "platform" to s.module.platform, "scale" to s.device.density / 160.0,
             )
         }.plus(ios?.shots.orEmpty().map { i -> iosEntry(i) }).sortedWith(compareBy(CanonicalJson.utf8) { it["id"] as String })
-        val errors = results.filter { !it.second.ok }.sortedWith(compareBy({ it.first.language }, { it.first.device.name }, { it.first.preview.name }, { it.first.dark }))
-            .map { (s, r) ->
-                val id = RunReport.idOrNull(output, File(r.file)) ?: RunReport.id(output, s.file)
-                linkedMapOf<String, Any?>("id" to id, "message" to r.error)
-            } + ios?.errors().orEmpty()
+        val errors = errors(results) + ios?.errors().orEmpty()
         RunReport.write(output, "android", log.seconds, shots, errors, scope(modules, found, shots, ios?.scope(), ios != null), fingerprint)
         if (o.html) Gallery.write(output, shots, log.seconds)
     }
+
+    /**
+     * The report's errors for failed shots, with the id the shot would have had. A @PreviewParameter preview that
+     * failed without a value index (its provider couldn't be counted, or the renderer died before it got that far)
+     * lost an unknown number of `_N` shots: its error has no id, so the run reports no removals.
+     */
+    internal fun errors(results: List<Pair<Shot, Result>>): List<Map<String, Any?>> =
+        results.filter { !it.second.ok }.sortedWith(compareBy({ it.first.language }, { it.first.device.name }, { it.first.preview.name }, { it.first.dark }))
+            .map { (s, r) ->
+                if (s.preview.provider != null && !Regex("_\\d+\\.png$").containsMatchIn(r.file))
+                    linkedMapOf<String, Any?>("message" to "${s.preview.name} · ${s.device.name} · ${s.language}: ${r.error}")
+                else linkedMapOf("id" to (RunReport.idOrNull(output, File(r.file)) ?: RunReport.id(output, s.file)), "message" to r.error)
+            }
 
     /** An iOS screenshot as the iOS renderer reported it (id, scale, runtime, textSize when it says), under this output. */
     private fun iosEntry(i: Ios.Shot): Map<String, Any?> {

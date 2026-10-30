@@ -13,6 +13,10 @@ import java.io.File
 class FlutterIos(private val o: Options, private val log: Log, private val root: File, private val dir: File, private val sdk: File, private val output: File) {
     private val ios = Ios(o, log, output)
 
+    /** The iOS renderer's errors of the last [run] (none can be tied to this run's ids: its names differ). */
+    var errors: List<Map<String, Any?>> = emptyList()
+        private set
+
     /** Why the exact iOS renderer can't run here, or null when it can. */
     fun unavailable(): String? = when {
         !Host.mac -> "not a Mac"
@@ -99,7 +103,9 @@ class FlutterIos(private val o: Options, private val log: Log, private val root:
         }
         val config = File(dir, "ios/swiftshot-ios.json")
         config.writeText(Json.write(mapOf("screens" to screens), "  "))
-        val (status, shots) = ios.renderApp(app, devices, iosOut, listOf("--config", config.path))
+        val rendered = ios.renderApp(app, devices, iosOut, listOf("--config", config.path))
+        val (status, shots) = rendered
+        errors = errorsOf(rendered)
         val byName = variants(manifest).associateBy { it.third }
         val result = shots.mapNotNull { s ->
             val (p, scale, _) = byName[s["preview"] as String] ?: return@mapNotNull null
@@ -116,6 +122,23 @@ class FlutterIos(private val o: Options, private val log: Log, private val root:
         iosOut.deleteRecursively()
         if (status != 0) log.warn("iOS: some screenshots failed (exit $status)")
         return result
+    }
+
+    companion object {
+        /**
+         * The iOS renderer's errors as id-less report errors: its ids are the host app's preview names (`Name @1.3x`),
+         * not this run's file names, so a failure there means the run can't tell which shots it lost. A non-zero exit
+         * with no error listed is one error too.
+         */
+        fun errorsOf(rendered: Ios.Rendered): List<Map<String, Any?>> {
+            val listed = (rendered.report["errors"] as List<*>?).orEmpty().map { e ->
+                val message = if (e is Map<*, *>) listOfNotNull(e["id"]?.toString(), e["message"]?.toString()).joinToString(": ") else e.toString()
+                linkedMapOf<String, Any?>("message" to "iOS: $message")
+            }
+            return listed.ifEmpty {
+                if (rendered.status != 0) listOf(linkedMapOf<String, Any?>("message" to "iOS: the iOS renderer exited with status ${rendered.status}")) else emptyList()
+            }
+        }
     }
 
     /** The text scales a preview renders at: its own, else its screens rule's, else the run's. */

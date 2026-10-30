@@ -91,6 +91,9 @@ class Options {
     fun rule(preview: String) = screens.firstOrNull { it.matches(preview) }
 
     companion object {
+        /** Flags without a value (parse and [command] read the command line alike). */
+        val BOOLEAN_FLAGS = setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license")
+
         val usage = """
             swiftshot — screenshot tests and Play Store screenshots from Jetpack Compose and Compose
             Multiplatform @Previews (Android and desktop; Compose Multiplatform iOS needs a Mac).
@@ -168,7 +171,7 @@ class Options {
             while (i < args.size) {
                 val a = args[i]
                 if (a.startsWith("-")) {
-                    val boolean = a in setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license")
+                    val boolean = a in BOOLEAN_FLAGS
                     val (key, inline) = a.split('=', limit = 2).let { it[0] to it.getOrNull(1) }
                     val value = if (boolean || inline != null) inline else args.getOrNull(++i) ?: error("$a needs a value")
                     flags += key to value
@@ -258,7 +261,7 @@ class Options {
             while (i < args.size) {
                 val a = args[i]
                 if (!a.startsWith("-")) return a
-                val boolean = a in setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license")
+                val boolean = a in BOOLEAN_FLAGS
                 if (!boolean && '=' !in a) i++
                 i++
             }

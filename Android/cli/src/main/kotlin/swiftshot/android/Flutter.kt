@@ -86,6 +86,7 @@ class Flutter(private val o: Options, private val log: Log) {
         val manifest = File(dir, "previews.json").takeIf { it.isFile }?.let { (Json.parse(it.readText()) as List<*>).map { m -> m as Map<*, *> } }.orEmpty()
         var shots = ok
         var iosExact = false
+        var iosErrors: List<Map<String, Any?>> = emptyList()
         if (exact != null) {
             // Self-sizing components: their size in points from the headless iPhone renders.
             val ratios = devices.associate { (it["name"] as String) to (it["ratio"] as Number).toDouble() }
@@ -98,6 +99,7 @@ class Flutter(private val o: Options, private val log: Log) {
             val rendered = exact.run(manifest, measured, iosDevices)
             if (rendered != null) {
                 iosExact = true
+                iosErrors = exact.errors
                 log.ok("${rendered.size} iOS screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t1) / 1e9)}s (Flutter's iOS engine, no simulator booted)")
                 shots = ok.filter { (it["device"] as String) !in iosDevices } + rendered.map { s ->
                     mapOf("ok" to true, "file" to File(output, s.file).path, "preview" to s.preview, "device" to s.device, "language" to s.language,
@@ -127,9 +129,9 @@ class Flutter(private val o: Options, private val log: Log) {
         if (o.frame == "plain") frame(shots, devices, manifest)
         // One fingerprint for the run: the exact iOS engine only when it rendered every device.
         val renderer = if (iosExact && devices.all { it["platform"] == "ios" }) "exact-ios" else headlessRenderer
-        report(shots, results.filter { it["ok"] != true }, devices, manifest, Fingerprints.flutter(sdk, renderer, fontFiles))
+        report(shots, results.filter { it["ok"] != true }, devices, manifest, Fingerprints.flutter(sdk, renderer, fontFiles), iosErrors)
         log.ok("${shots.size} screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
-        return if (shots.isNotEmpty() && ok.size == results.size) 0 else 1
+        return if (shots.isNotEmpty() && ok.size == results.size && iosErrors.isEmpty()) 0 else 1
     }
 
     /**
@@ -271,7 +273,8 @@ class Flutter(private val o: Options, private val log: Log) {
         }
     }
 
-    private fun report(ok: List<Map<*, *>>, failed: List<Map<*, *>>, devices: List<Map<String, Any?>>, manifest: List<Map<*, *>>, fingerprint: Map<String, Any?>) {
+    private fun report(ok: List<Map<*, *>>, failed: List<Map<*, *>>, devices: List<Map<String, Any?>>, manifest: List<Map<*, *>>, fingerprint: Map<String, Any?>,
+                       iosErrors: List<Map<String, Any?>> = emptyList()) {
         val ratios = devices.associate { (it["name"] as String) to (it["ratio"] as Number?)?.toDouble() }
         val shots = ok.map { r ->
             val (w, h) = (r["size"] as String).split('x').map { it.toInt() }
@@ -285,7 +288,7 @@ class Flutter(private val o: Options, private val log: Log) {
             val message = r["error"]?.toString() ?: "failed"
             if (id != null) linkedMapOf<String, Any?>("id" to id, "message" to message)
             else linkedMapOf<String, Any?>("message" to "${r["preview"]} · ${r["device"]} · ${r["language"]}: $message")
-        }
+        } + iosErrors
         RunReport.write(output, "flutter", log.seconds, shots, errors, scope(devices, manifest, shots), mapOf("flutter" to fingerprint))
         if (o.html) Gallery.write(output, shots, log.seconds)
     }

@@ -504,4 +504,10 @@ class OptionsTest {
         assertEquals("none", parse("verify").frame)
         assertEquals("plain", parse("run").frame)
     }
+
+    @Test fun commandSkipsEveryBooleanFlag() {
+        for (flag in Options.BOOLEAN_FLAGS) assertEquals("verify", Options.command(listOf(flag, "verify")), flag)
+        assertEquals("record", Options.command(listOf("--output", "x", "--previews=A", "record")))
+        assertEquals("run", Options.command(listOf("--output", "verify")))
+    }
 }

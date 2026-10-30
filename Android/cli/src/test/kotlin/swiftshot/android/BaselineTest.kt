@@ -173,4 +173,56 @@ class BaselineTest {
         assertFalse(Baseline.glob("ab*ba", "aba"))
         assertTrue(Baseline.glob("Feed", "feed"))
     }
+
+    /** A run's output: the given ids as copies of one fixture PNG, and its report with [errors]. */
+    private fun runOutput(dir: File, ids: List<String>, errors: List<Map<String, Any?>>) {
+        val png = case("unchanged").resolve("output/en-US/iPhone 17 Pro-Über.png")
+        val shots = ids.map { id ->
+            png.copyTo(File(dir, "$id.png"), overwrite = true)
+            mapOf("id" to id, "file" to "$id.png", "platform" to "android", "module" to ":app", "device" to "Pixel 9", "language" to "en-US",
+                "appearance" to "light", "preview" to id.substringAfter("Pixel 9-").substringBefore('_'), "fontScale" to 1.0, "scale" to 2.625)
+        }
+        val scope = ScopeBuilder(emptyList()).apply { shots.forEach(::shot); previews += "Cards" }.toJson()
+        RunReport.write(dir, "android", 1.0, shots, errors, scope, mapOf("android" to Fingerprints.android(emptyList(), null, "linux-x64")))
+    }
+
+    @Test fun providerPreviewThatFailedWithoutIndexRemovesNothing() {
+        val base = File(tmp, "base-provider")
+        val first = File(tmp, "first")
+        runOutput(first, listOf("en-US/Pixel 9-Cards_1", "en-US/Pixel 9-Cards_2", "en-US/Pixel 9-Home"), emptyList())
+        assertEquals(0, Baseline.record(first, base, ci = true, log = Log(false)))
+
+        // The provider couldn't be counted: the worker reports the preview's base file, without _N.
+        val out = File(tmp, "second").apply { mkdirs() }
+        val runner = Runner(Options.parse(listOf("--project-dir", tmp.path, "--output", out.path)), Log(false))
+        val module = Module(mapOf("module" to ":app", "layoutlibRuntime" to "/r.jar", "layoutlibResources" to "/s.jar"))
+        val cards = Preview(composable = "com.example.UiKt.Cards", function = "Cards", name = "Cards", provider = "com.example.CardsProvider")
+        val device = Devices.resolve(listOf("Pixel 9")).first()
+        val shot = Shot(module, cards, device, "en-US", false, 1.0, "shrink", false, 0, File(out, "en-US/Pixel 9-Cards.png"))
+        val errors = runner.errors(listOf(shot to Result(File(out, "en-US/Pixel 9-Cards.png").path, false, error = "NoSuchMethodException: CardsProvider")))
+        assertEquals(listOf(mapOf<String, Any?>("message" to "Cards · Pixel 9 · en-US: NoSuchMethodException: CardsProvider")), errors)
+        // A failed value with its index keeps its id.
+        val indexed = runner.errors(listOf(shot to Result(File(out, "en-US/Pixel 9-Cards_2.png").path, false, error = "boom")))
+        assertEquals(listOf(mapOf<String, Any?>("id" to "en-US/Pixel 9-Cards_2", "message" to "boom")), indexed)
+
+        runOutput(out, listOf("en-US/Pixel 9-Home"), errors)
+        val v = Baseline.evaluate(out, base, File(tmp, "provider-report"), CompareConfig(null, emptyList()), env)
+        assertEquals(0, v.counts["removed"])
+        assertEquals(2, v.exitCode)
+        assertEquals(emptyList<Any?>(), (Json.parse(File(tmp, "provider-report/manifest.json").readText()) as Map<*, *>).let { (it["ids"] as Map<*, *>)["removed"] })
+        assertEquals(2, Baseline.record(out, base, ci = true, log = Log(false)))
+        assertTrue(File(base, "en-US/Pixel 9-Cards_1.png").isFile)
+        assertTrue(File(base, "en-US/Pixel 9-Cards_2.png").isFile)
+        assertEquals(setOf("en-US/Pixel 9-Cards_1", "en-US/Pixel 9-Cards_2", "en-US/Pixel 9-Home"), (baselineJson(base)["images"] as Map<*, *>).keys)
+    }
+
+    @Test fun flutterIosRendererErrorsAreIdLess() {
+        val withErrors = Ios.Rendered(1, emptyList(), mapOf("errors" to listOf("Home · iPhone 17 Pro: timed out", mapOf("id" to "en-US/iPhone 17 Pro-Feed @1.3x", "message" to "crashed"))))
+        assertEquals(
+            listOf(mapOf<String, Any?>("message" to "iOS: Home · iPhone 17 Pro: timed out"), mapOf<String, Any?>("message" to "iOS: en-US/iPhone 17 Pro-Feed @1.3x: crashed")),
+            FlutterIos.errorsOf(withErrors),
+        )
+        assertEquals(listOf(mapOf<String, Any?>("message" to "iOS: the iOS renderer exited with status 3")), FlutterIos.errorsOf(Ios.Rendered(3, emptyList(), mapOf("errors" to emptyList<Any>()))))
+        assertEquals(emptyList<Map<String, Any?>>(), FlutterIos.errorsOf(Ios.Rendered(0, emptyList(), emptyMap<String, Any?>())))
+    }
 }
