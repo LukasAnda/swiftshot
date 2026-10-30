@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="1" failures="0" errors="1">
+  <testcase classname="swiftshot" name="error 1">
+    <error message="The run rendered no screenshots"/>
+  </testcase>
+</testsuite>

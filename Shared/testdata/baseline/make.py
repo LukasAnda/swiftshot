@@ -515,6 +515,8 @@ def verify(case):
         if "id" in err:
             failed.setdefault(err["id"], err["message"])  # first per id wins
     unattributed = [e for e in report["errors"] if "id" not in e]
+    if not report["screenshots"] and not report["errors"]:  # a run that rendered nothing is an error, not a mass removal
+        unattributed = [{"message": "The run rendered no screenshots"}]
     stray = {sid for sid in bfiles if sid not in listed}
     entries, compared, local = [], [], False
     for sid in sorted(set(out_imgs) | set(listed) | set(failed) | (stray & set(out_imgs)), key=key_order):
@@ -764,6 +766,13 @@ def cases():
     out.append(case("added", imgs, imgs + [(android("Onboarding"), base(9))]))
 
     out.append(case("removed", imgs + [(android("Legacy"), base(9))], imgs))
+
+    # A report with no screenshots and no errors: an error (unattributed), nothing removed.
+    two = [(android("Home"), base(1)), (android("Legacy"), base(9))]
+    empty = case("empty-run", two, two)
+    empty["report"]["screenshots"] = []
+    empty["output_files"] = {}
+    out.append(empty)
 
     # Baseline images outside the run's scope, one dimension each, are not reported.
     imgs = [(ios("Home One"), base(1))]

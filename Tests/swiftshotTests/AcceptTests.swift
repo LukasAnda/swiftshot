@@ -446,6 +446,30 @@ final class AcceptTests: XCTestCase {
         XCTAssertFalse(errors.contains("secret"))
     }
 
+    func testAcceptWarnsWhenAllRemovals() throws {
+        try repoWith("removed")
+        let r = try report("removed")
+        try setManifest(r) { m in
+            var ids = m["ids"]!.object!
+            ids["removed"] = .array([.string("en-US/Pixel 9-Home"), .string("en-US/Pixel 9-Legacy")])
+            m["ids"] = .object(ids)
+        }
+        XCTAssertEqual(accept(r), 0, errors)
+        XCTAssertTrue(errors.contains("Every change in the report is a removal (2 screenshots); check the run rendered what you expected"), errors)
+        XCTAssertFalse(exists(baseline.appendingPathComponent("en-US/Pixel 9-Legacy.png")))
+    }
+
+    func testNullImagesInBaselineJsonIsAUsageError() throws {
+        try repoWith("changed-pixels")
+        let bj = baseline.appendingPathComponent("baseline.json")
+        var json = try readJSON(bj).object!
+        json["images"] = .null
+        try JSON.object(json).pretty().write(to: bj, atomically: true, encoding: .utf8)
+        try git(repo, "commit", "-qam", "null images")
+        XCTAssertEqual(accept(try report("changed-pixels")), 64, errors)
+        XCTAssertTrue(errors.contains("\"images\" must be an object"), errors)
+    }
+
     func testReportWithErrorsWarnsAndStillApplies() throws {
         try repoWith("changed-pixels")
         let r = try report("changed-pixels")

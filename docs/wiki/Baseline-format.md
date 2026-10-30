@@ -46,8 +46,8 @@ Examples below are abbreviated and not in the sorted key order the files use.
 | 2 | errors, with or without differences |
 | 64 | usage error |
 
-`verify` and `record`: a baseline.json that isn't valid (not JSON, `fingerprints` or `images` not an
-object of objects, an `images` id that isn't a relative `/`-separated path without `.` or `..`
+`verify` and `record`: a baseline.json that isn't valid (not JSON, `fingerprints` or `images` `null`
+or not an object of objects, an `images` id that isn't a relative `/`-separated path without `.` or `..`
 parts) is a usage error. `record`: 2 when the run had errors (images with errors keep their
 baseline entry), or when it rendered nothing but would remove baseline images (then nothing
 changes); else 0. baseline.json is written last (temp file, then rename).
@@ -56,7 +56,7 @@ changes); else 0. baseline.json is written last (temp file, then rename).
 other than an `accept` commit followed it, or `git push` failed), 64 usage error or invalid report
 (also: an `--only` id the reports don't list, the same id with different content in two reports, a
 zip entry leaving the report or a symbolic link, a damaged zip, a `--from` that can't be read, a
-malformed manifest.json, result.json or baseline.json). Interrupted: 1.
+malformed manifest.json, result.json or baseline.json). Interrupted: 2.
 
 ## Serialization
 
@@ -124,6 +124,9 @@ The run report keeps its current keys and gains:
 - `errors` become objects: `{"id": "<id>", "message": "…"}`, the id being the one the failed shot
   would have had. An error the run can't tie to a shot (e.g. a module that doesn't compile) has
   no `id`. Several errors for one id: the first in report order counts, the rest are ignored.
+
+`screenshots` and `errors` must be arrays when present; anything else is an error
+(`swiftshot-report.json in <dir>: "screenshots" must be an array`, exit 2).
 
 The verify inputs are the report's `screenshots`, `errors`, `scope` and `fingerprint`; the output
 directory is not listed.
@@ -243,6 +246,10 @@ stray PNGs whose id is in `screenshots`. For each id, in this order:
 
 `error` is never `removed`, and `accept` never deletes the baseline image of an `error` id.
 
+A run whose report lists no screenshots and no errors is an error, not a mass removal:
+`status: "error"`, `errors: [{"message": "The run rendered no screenshots"}]` (an error without
+`id`, so removals are suppressed as in step 1; `removed` is 0).
+
 **In scope**: `platform` ∈ `platforms`, `device` ∈ `devices`, `language` ∈ `languages`,
 `appearance` ∈ `appearances`; `module` ∈ `modules`, `runtime` ∈ `runtimes`, `textSize` ∈
 `textSizes`, `fontScale` ∈ `fontScales`, each if the image has that key; and `previewFilter` is
@@ -355,6 +362,8 @@ directory or be a symbolic link, at most 2 GB extracted.
   `local` = `!ci`. Each `removed` id: its PNG and entry are deleted. Nothing else changes;
   unreferenced fingerprints are dropped and baseline.json is rewritten canonically.
 - `--only` (comma-separated, repeatable) restricts to those ids.
+- When every selected change is `removed` (and there is at least one), a warning:
+  `Every change in the report is a removal (N screenshots); check the run rendered what you expected`.
 - A report whose `result.json` `status` is `error`: a warning, then its listed ids are applied as
   usual (ids with errors are in none of the lists, so they keep their baseline).
 - Stale: each report's `commit` must be HEAD, or every commit after it up to HEAD must carry the

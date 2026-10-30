@@ -505,6 +505,15 @@ class OptionsTest {
         assertEquals("plain", parse("run").frame)
     }
 
+    /** Shared/boolean-flags.txt lists every flag either CLI reads without a value; this CLI's flags are among them. */
+    @Test fun booleanFlagsAreInTheSharedFile() {
+        val file = File(System.getProperty("swiftshot.testdata") ?: error("swiftshot.testdata not set")).parentFile.resolve("boolean-flags.txt")
+        val shared = file.readLines()
+        assertEquals(shared.sorted(), shared, "one flag per line, sorted")
+        assertEquals(shared.distinct(), shared)
+        assertTrue(shared.containsAll(Options.BOOLEAN_FLAGS), "missing from $file: ${Options.BOOLEAN_FLAGS - shared.toSet()}")
+    }
+
     @Test fun commandSkipsEveryBooleanFlag() {
         for (flag in Options.BOOLEAN_FLAGS) assertEquals("verify", Options.command(listOf(flag, "verify")), flag)
         assertEquals("record", Options.command(listOf("--output", "x", "--previews=A", "record")))

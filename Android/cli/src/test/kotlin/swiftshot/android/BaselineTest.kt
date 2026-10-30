@@ -36,7 +36,7 @@ class BaselineTest {
 
     @Test fun everyFixtureCaseMatchesByteForByte() {
         val all = cases()
-        assertEquals(23, all.size, "fixture cases")
+        assertEquals(24, all.size, "fixture cases")
         val problems = mutableListOf<String>()
         for (case in all) {
             val report = File(tmp, case.name)
@@ -251,6 +251,27 @@ class BaselineTest {
         val before = files(base).mapValues { it.value.readBytes().toList() }
         assertEquals(2, Baseline.record(out, base, ci = true, log = Log(false)))
         assertEquals(before, files(base).mapValues { it.value.readBytes().toList() })
+    }
+
+    @Test fun baselineJsonNullImagesIsInvalid() {
+        val base = File(tmp, "base-null-images").also { case("removed").resolve("baseline").copyRecursively(it) }
+        val out = output("removed")
+        for (key in listOf("images", "fingerprints")) {
+            File(base, "baseline.json").writeText(CanonicalJson.pretty(baselineJson(case("removed").resolve("baseline")).toMutableMap().apply { put(key, null) }))
+            val e = kotlin.test.assertFailsWith<UsageError>(key) { Baseline.evaluate(out, base, File(tmp, "null-report"), CompareConfig(null, emptyList()), env) }
+            assertTrue("\"$key\" must be an object" in e.message!!, e.message)
+            kotlin.test.assertFailsWith<UsageError>(key) { Baseline.record(out, base, ci = true, log = Log(false)) }
+        }
+    }
+
+    @Test fun reportScreenshotsNotArrayIsError() {
+        val out = output("removed")
+        val reportFile = File(out, "swiftshot-report.json")
+        for (key in listOf("screenshots", "errors")) {
+            reportFile.writeText(CanonicalJson.pretty((Json.parse(case("removed").resolve("output/swiftshot-report.json").readText()) as Map<*, *>).entries.associate { (k, v) -> k as String to if (k == key) emptyMap<String, Any?>() else v }))
+            val e = kotlin.test.assertFailsWith<CliError>(key) { Baseline.evaluate(out, case("removed").resolve("baseline"), File(tmp, "array-report"), CompareConfig(null, emptyList()), env) }
+            assertEquals("swiftshot-report.json in $out: \"$key\" must be an array", e.message)
+        }
     }
 
     @Test fun invalidBaselineJsonIsAUsageError() {

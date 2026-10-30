@@ -27,7 +27,7 @@ final class BaselineTests: XCTestCase {
 
     func testEveryFixtureCaseMatchesByteForByte() throws {
         let all = fixtureCases()
-        XCTAssertEqual(all.count, 23, "fixture cases")
+        XCTAssertEqual(all.count, 24, "fixture cases")
         var problems: [String] = []
         var passed: [String] = []
         for c in all {
@@ -172,6 +172,37 @@ final class BaselineTests: XCTestCase {
         XCTAssertEqual(try Baseline.record(output: out, baseline: base, ci: true, log: console), 2)
         XCTAssertEqual(files(base).mapValues(bytes), before)
         XCTAssertTrue(console.text.contains("Nothing rendered"), console.text)
+    }
+
+    func testBaselineJsonNullImagesIsInvalid() throws {
+        let base = tmp.appendingPathComponent("base-null-images")
+        try copyTree(fixture("removed").appendingPathComponent("baseline"), base)
+        let out = try output("removed")
+        let original = try baselineJson(fixture("removed").appendingPathComponent("baseline")).object!
+        for key in ["images", "fingerprints"] {
+            var json = original
+            json[key] = .null
+            try Data(JSON.object(json).pretty().utf8).write(to: base.appendingPathComponent("baseline.json"))
+            XCTAssertThrowsError(try Baseline.evaluate(output: out, baseline: base, report: tmp.appendingPathComponent("null-report"), config: CompareConfig(tolerance: nil, rules: []), env: env)) {
+                XCTAssertTrue($0 is UsageError && "\($0)".contains("\"\(key)\" must be an object"), "\($0)")
+            }
+            XCTAssertThrowsError(try Baseline.record(output: out, baseline: base, ci: true, log: Console(capture: true))) { XCTAssertTrue($0 is UsageError, "\($0)") }
+        }
+    }
+
+    func testReportScreenshotsNotArrayIsError() throws {
+        let out = try output("removed")
+        let original = try readJSON(fixture("removed").appendingPathComponent("output/swiftshot-report.json")).object!
+        for key in ["screenshots", "errors"] {
+            var r = original
+            r[key] = .object([:])
+            try Data(JSON.object(r).pretty().utf8).write(to: out.appendingPathComponent("swiftshot-report.json"))
+            XCTAssertThrowsError(try Baseline.evaluate(output: out, baseline: fixture("removed").appendingPathComponent("baseline"), report: tmp.appendingPathComponent("array-report"),
+                                                       config: CompareConfig(tolerance: nil, rules: []), env: env)) {
+                XCTAssertTrue($0 is CLIError, "\($0)")
+                XCTAssertEqual("\($0)", "swiftshot-report.json in \(out.path): \"\(key)\" must be an array")
+            }
+        }
     }
 
     func testInvalidBaselineJsonIsAUsageError() throws {

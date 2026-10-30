@@ -87,6 +87,7 @@ enum Accept {
         }
         let written = try write(baseline, selected)
         let counts = ["changed", "added", "removed"].map { k in selected.filter { $0.kind == k }.count }
+        if counts[2] == selected.count { log.warn("Every change in the report is a removal (\(counts[2]) screenshots); check the run rendered what you expected") }
         let summary = message(changed: counts[0], added: counts[1], removed: counts[2])
         log.ok("\(summary.dropFirst("Update screenshot baseline (".count).dropLast()) → \(baseline.path)")
         if !push { return 0 }

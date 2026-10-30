@@ -138,6 +138,38 @@ class AcceptTest {
         assertEquals(setOf("241d8bd3b005"), (json(bj)["fingerprints"] as Map<*, *>).keys)
     }
 
+    @Test fun acceptWarnsWhenAllRemovals() {
+        repoWith("removed")
+        val r = report("removed")
+        setManifest(r) { m -> m["ids"] = (m["ids"] as Map<*, *>) + ("removed" to listOf("en-US/Pixel 9-Home", "en-US/Pixel 9-Legacy")) }
+        assertEquals(0, accept(r))
+        assertContains(errors.toString(), "Every change in the report is a removal (2 screenshots); check the run rendered what you expected")
+        assertFalse(File(baseline, "en-US/Pixel 9-Legacy.png").exists())
+    }
+
+    @Test fun interruptedAcceptExits2() {
+        repoWith("changed-pixels")
+        val r = report("changed-pixels")
+        Thread.currentThread().interrupt()
+        try {
+            assertEquals(2, accept(r))
+            assertTrue(Thread.currentThread().isInterrupted, "the interrupt flag is restored")
+        } finally {
+            Thread.interrupted()
+        }
+        assertContains(errors.toString(), "accept was interrupted")
+    }
+
+    @Test fun nullImagesInBaselineJsonIsAUsageError() {
+        repoWith("changed-pixels")
+        val bj = File(baseline, "baseline.json")
+        @Suppress("UNCHECKED_CAST")
+        bj.writeText(CanonicalJson.pretty((json(bj) as Map<String, Any?>) + ("images" to null)))
+        git(repo, "commit", "-qam", "null images")
+        assertEquals(64, accept(report("changed-pixels")))
+        assertContains(errors.toString(), "\"images\" must be an object")
+    }
+
     @Test fun errorIdsAreNeverTouched() {
         repoWith("render-error")
         val files = baseline.walkTopDown().filter { it.isFile }.associate { it.path to it.readBytes().toList() }

@@ -2,6 +2,17 @@ import XCTest
 @testable import swiftshot
 
 final class OptionsTests: XCTestCase {
+    /// Shared/boolean-flags.txt lists every flag either CLI reads without a value; the Swift CLI reads exactly those.
+    func testBooleanFlagsAreTheSharedFile() throws {
+        let shared = try String(contentsOf: repoRoot.appendingPathComponent("Shared/boolean-flags.txt"), encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        XCTAssertEqual(shared.last, "", "ends with a newline")
+        let flags = Array(shared.dropLast())
+        XCTAssertEqual(flags, flags.sorted(), "one flag per line, sorted")
+        XCTAssertEqual(Set(flags), Options.booleanFlags)
+        XCTAssertEqual(flags.count, Set(flags).count)
+    }
+
     func testDefaultsWithoutConfig() throws {
         let o = try Options.parse(["--config", emptyConfig()])
         XCTAssertEqual(o.command, "run")

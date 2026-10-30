@@ -61,7 +61,7 @@ object Accept {
             log.error(e.message ?: e.toString()); 1
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            log.error("accept was interrupted; the baseline may be partly updated (git status shows what changed)"); 1
+            log.error("accept was interrupted; the baseline may be partly updated (git status shows what changed)"); 2
         } catch (e: Exception) {
             log.error("$e (the baseline may be partly updated; git status shows what changed)"); 1
         } finally {
@@ -99,6 +99,7 @@ object Accept {
         }
         val written = write(baseline, selected)
         val counts = listOf("changed", "added", "removed").map { k -> selected.count { it.kind == k } }
+        if (counts[2] == selected.size) log.warn("Every change in the report is a removal (${counts[2]} screenshots); check the run rendered what you expected")
         val summary = message(counts[0], counts[1], counts[2])
         log.ok("${summary.removePrefix("Update screenshot baseline (").removeSuffix(")")} → $baseline")
         if (!push) return 0
@@ -135,7 +136,7 @@ object Accept {
     private fun write(baseline: File, selected: List<Change>): List<String> {
         val jsonFile = File(baseline, "baseline.json")
         val json = jsonFile.takeIf { it.isFile }?.let { runCatching { Json.parse(it.readText()) as Map<*, *> }.getOrElse { _ -> usage("$jsonFile is not valid JSON") } }
-        fun map(key: String): Map<*, *>? = json?.get(key)?.let { v ->
+        fun map(key: String): Map<*, *>? = if (json == null || !json.containsKey(key)) null else json[key].let { v ->
             if (v !is Map<*, *> || v.values.any { it !is Map<*, *> }) usage("$jsonFile: \"$key\" must be an object of objects")
             v
         }
