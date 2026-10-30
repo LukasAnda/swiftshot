@@ -32,6 +32,12 @@ final class Runner {
     }
     var shots: [ShotRecord] = []
     var errors: [String] = []
+    /// Errors of single screenshots (their ids known).
+    var shotErrors: [RunError] = []
+    /// Preview names found (after --previews), for the report's scope.
+    var foundPreviews = Set<String>()
+    /// Points-to-pixels of each device a job rendered, for screenshots whose agent didn't say.
+    var deviceScales: [String: Double] = [:]
     var skipped: [String] = []
     var warned = Set<String>()
     var timings: [(String, Double)] = []
@@ -153,6 +159,7 @@ final class Runner {
     func makeJob(mode: JobMode, language: String, runtime: SimRuntime, devices: [DeviceProfile], controlDir: String? = nil,
                  target: Target? = nil) -> Job {
         let statusBar = Simctl.statusBarLocales(runtime)
+        lock.lock(); for d in devices { deviceScales[d.name] = d.scale }; lock.unlock()
         return Job(mode: mode, outputDir: outputDir, language: language, runtime: runtime.version, devices: devices,
             appearances: options.appearances, previewFilter: options.previews, format: options.format,
             settleFrames: options.settleFrames, settleDelay: options.delay, controlDir: controlDir,
@@ -216,7 +223,33 @@ final class Runner {
     }
 
     func collect(_ result: JobResult) {
-        lock.lock(); shots += result.shots; errors += result.errors; lock.unlock()
+        lock.lock()
+        shots += result.shots.map { s in var s = s; if s.scale == nil { s.scale = deviceScales[s.device] }; return s }
+        errors += result.errors
+        shotErrors += (result.shotErrors ?? []).map { RunError(id: $0.id, message: $0.message) }
+        for p in result.previews where options.previews.isEmpty || options.previews.contains(where: { globMatch($0, p) }) { foundPreviews.insert(p) }
+        lock.unlock()
+    }
+
+    /// The run's scope: what it selected (resolved devices and runtimes, languages, appearances and text sizes,
+    /// also those of `screens` rules) and what it rendered.
+    func scope(devices: [String], runtimes: [String]) -> RunScope {
+        var scope = RunScope(previewFilter: options.previews)
+        scope.devices = Set(devices)
+        scope.runtimes = Set(runtimes)
+        scope.languages = Set(options.languages)
+        scope.appearances = Set(options.appearances + options.screens.flatMap { $0.appearances ?? [] })
+        scope.textSizes = Set((options.textSizes + options.screens.flatMap { $0.textSizes ?? [] }).map { contentSizeCategory($0) == nil ? "default" : $0 })
+        scope.previews = foundPreviews
+        for s in shots { scope.add(s) }
+        return scope
+    }
+
+    /// The run's fingerprint: Xcode's build, the runtimes' builds and the mode (`device` for booted framebuffer
+    /// captures, else `no-boot`: virtual rendering gives the same pixels with or without a simulator).
+    func fingerprint(runtimes: [SimRuntime]) async -> [String: JSON] {
+        let xcode = (try? await sh(["xcodebuild", "-version"], allowFailure: true, stdoutOnly: true)).flatMap(Fingerprints.xcodeBuild)
+        return ["ios": Fingerprints.ios(mode: options.mode == .device ? "device" : "no-boot", xcode: xcode, runtimes: runtimes.compactMap(\.buildversion))]
     }
 
     // MARK: Commands
@@ -358,10 +391,14 @@ final class Runner {
             errors.append("Frames: \(error)")
         }
 
-        try Report.write(shots: shots, errors: errors, to: outputDir, html: options.html, timings: timings,
+        let allErrors = shotErrors + errors.map { RunError(id: nil, message: $0) }
+        let runtimes = targets.flatMap(\.runtimes)
+        try Report.write(shots: shots, errors: allErrors, scope: scope(devices: allTypes.map(\.name), runtimes: runtimes.map(\.version)),
+                         fingerprint: targets.isEmpty ? [:] : await fingerprint(runtimes: runtimes), to: outputDir, html: options.html, timings: timings,
                          total: Date().timeIntervalSince(total))
         for s in skipped { Log.warn("Skipped: " + s) }
-        for e in errors { Log.warn(e) }
+        for e in allErrors { Log.warn(e.line) }
+        let errors = allErrors
         if shots.isEmpty && errors.isEmpty { Log.warn("No screenshots: no preview matched the filters (previews, screens, devices)") }
         let cwd = FileManager.default.currentDirectoryPath + "/"
         let shown = outputDir.hasPrefix(cwd) ? String(outputDir.dropFirst(cwd.count)) : outputDir
@@ -655,7 +692,7 @@ final class Runner {
             var checked = result
             checked.shots = result.shots.filter { FileManager.default.fileExists(atPath: (outputDir as NSString).appendingPathComponent($0.file)) }
             for missing in result.shots where !checked.shots.contains(where: { $0.file == missing.file }) {
-                checked.errors.append("\(runtime.name) · \(language) · \(type.name): no framebuffer grab for \(missing.file)")
+                checked.shotErrors = (checked.shotErrors ?? []) + [ShotError(id: Report.id(missing.file), message: "\(runtime.name) · \(language) · \(type.name): no framebuffer grab")]
             }
             if grabber?.gaveUp == true {
                 checked.errors.append("\(runtime.name) · \(language) · \(type.name): SpringBoard never hid the home grabber, even after a reboot")

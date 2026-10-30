@@ -112,6 +112,7 @@ final class AgentRunner {
         writeGroup.wait()
         result.shots += writes.shots
         result.errors += writes.errors
+        result.shotErrors = (result.shotErrors ?? []) + writes.shotErrors
         result.totalMs = (now() - started) * 1000
         job.writeResult(result)
         exit(0)
@@ -217,7 +218,7 @@ final class AgentRunner {
                 try data?.write(to: url)
                 sink.add(shot: record)
             } catch {
-                sink.add(error: "\(record.file): \(error)")
+                sink.add(error: ShotError(id: (record.file as NSString).deletingPathExtension, message: "\(record.file): \(error)"))
             }
         }
     }
@@ -246,7 +247,9 @@ final class AgentRunner {
                     defer { DeviceIdiom.current = nil }
                     ServerCapture.composeMark?()
                     guard let vc = controller(fromBody: preview.body()) else {
-                        result.errors.append("\(preview.name): could not build preview body"); return
+                        let file = fileName(preview: preview.name, device: device.name, appearance: appearance, textSize: textSize)
+                        result.shotErrors = (result.shotErrors ?? []) + [ShotError(id: job.shotId(file), message: "\(preview.name): could not build preview body")]
+                        return
                     }
                     var geo = geometry(for: preview, on: device)
                     let window = makeWindow()
@@ -319,7 +322,8 @@ final class AgentRunner {
                             image = GPUCapture.shared.image(of: window, size: geo.size, scale: device.scale, opaque: format.opaque)
                         }
                         if image == nil {
-                            result.errors.append("\(preview.name) (\(device.name), \(appearance)): no image from the render server (\(ServerCapture.enabled ? ServerCapture.failure ?? "no image" : "CARenderer drew nothing"))")
+                            let file = fileName(preview: preview.name, device: device.name, appearance: appearance, textSize: textSize)
+                            result.shotErrors = (result.shotErrors ?? []) + [ShotError(id: job.shotId(file), message: "\(preview.name) (\(device.name), \(appearance)): no image from the render server (\(ServerCapture.enabled ? ServerCapture.failure ?? "no image" : "CARenderer drew nothing"))")]
                         }
                     } else {
                         image = UIGraphicsImageRenderer(size: geo.size, format: format).image { ctx in
@@ -361,7 +365,9 @@ final class AgentRunner {
                         textSize: contentSizeCategory(textSize) == nil ? nil : textSize, language: job.language,
                         runtime: job.runtime, file: "\(job.language)/\(file)",
                         width: Int(output.size.width * output.scale), height: Int(output.size.height * output.scale),
-                        renderMs: (now() - t0) * 1000))
+                        renderMs: (now() - t0) * 1000,
+                        // Pixels per point: the device's scale, or less for a panel downsampled from @3x.
+                        scale: geo.size.width > 0 ? Double(output.size.width * output.scale) / Double(geo.size.width) : Double(device.scale)))
                   } }
                 }
             }
@@ -554,7 +560,9 @@ final class AgentRunner {
         let t0 = now()
 
         guard show(preview: preview, appearance: appearance) != nil else {
-            result.errors.append("\(preview.name): could not build preview body"); return
+            let file = fileName(preview: preview.name, device: device.name, appearance: appearance)
+            result.shotErrors = (result.shotErrors ?? []) + [ShotError(id: job.shotId(file), message: "\(preview.name): could not build preview body")]
+            return
         }
 
         let file = fileName(preview: preview.name, device: device.name, appearance: appearance)
@@ -582,7 +590,7 @@ final class AgentRunner {
             preview: preview.name, device: device.name, appearance: appearance, language: job.language,
             runtime: job.runtime, file: "\(job.language)/\(file)",
             width: Int(min(px.width, px.height)), height: Int(max(px.width, px.height)),
-            renderMs: (now() - t0) * 1000))
+            renderMs: (now() - t0) * 1000, scale: Double(scene.screen.nativeScale)))
     }
 }
 

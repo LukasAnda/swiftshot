@@ -59,6 +59,25 @@ struct Options: Codable {
     var acceptBezelLicense = false
     var force = false     // init: overwrite an existing swiftshot.json
     var verbose = false
+    // verify, record: where the baseline lives and where verify writes its report (default <output>-report).
+    var baselineDirectory = "screenshots-baseline"
+    var reportDirectory: String?
+    /// verify: the global tolerance (nil: exact, or channel delta 1 for booted-simulator captures).
+    var tolerance: Tolerance?
+    /// verify: each config `screens` rule's tolerance and ignore regions, by the rule's position.
+    var screenComparisons: [ScreenComparison] = []
+    // accept: report directories, zips or URLs; the ids to restrict to; commit and push; the commit author.
+    var from: [String] = []
+    var only: Set<String>?
+    var push = false
+    var author: String?
+
+    /// The comparison settings of one `screens` rule.
+    struct ScreenComparison { var tolerance: Tolerance?; var ignoreRegions: [[Double]]? }
+
+    var reportPath: String {
+        URL(fileURLWithPath: reportDirectory ?? (URL(fileURLWithPath: output).standardizedFileURL.path + "-report")).standardizedFileURL.path
+    }
 
     enum CodingKeys: String, CodingKey {
         case project, workspace, scheme, configuration, appPath = "app", derivedData = "derived_data",
@@ -120,11 +139,16 @@ struct Options: Codable {
     `swiftshot --platform android --help` lists those options.
 
     USAGE
-      swiftshot [run|list|devices|calibrate|emit-table|init] [options]
+      swiftshot [run|verify|record|accept|list|devices|calibrate|emit-table|init] [options]
       swiftshot frame [<dir>] [frame options]
 
     COMMANDS
       run         Build, render every preview for every device × iOS × language × appearance (default)
+      verify      Render as run does (PNG, no frames), then compare with the baseline: exit 0 same,
+                  1 differences, 2 errors, 64 usage error; the report goes to <output>-report
+      record      Render as run does and write the screenshots into the baseline
+      accept      Apply a verify report to the baseline without rendering: exit 0 applied (or nothing
+                  to do), 1 refused (report not from HEAD, push failed), 64 usage or invalid report
       list        Build and print the previews that were discovered
       devices     Show installed iOS runtimes and the geometry used for each device
       calibrate   Boot the given devices once and measure their real safe areas (cached)
@@ -202,6 +226,20 @@ struct Options: Codable {
                                               e.g. --screen "Welcome: appearances=light,dark languages=en-US"
                                               (or a "screens" array in the JSON config; first match wins)
 
+    BASELINE (verify, record; PNG only, no frames)
+      --baseline-directory <dir>              Default: screenshots-baseline
+      --report-directory <dir>                Default: <output>-report
+      (swiftshot.json: "tolerance": {"pixels": n, "max_channel_delta": d}, default exact, or 1 channel
+       step with --mode device; per screen also "tolerance" and "ignore_regions": [[x, y, w, h]] in points)
+
+    ACCEPT
+      --from <dir|zip|url>                    A verify report directory, a zip of one, or an http(s) URL of
+                                              the zip (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a
+                                              Bearer token to that host only)
+      --only "<id>,<id>"                      Only these screenshot ids (repeatable)
+      --push                                  Commit the baseline ("Update screenshot baseline (…)") and git push
+      --author "Name <email>"                 Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+
     CI
       --device-set <dir>                      Use an isolated CoreSimulator device set (simctl --set); created
                                               from scratch, never touches the machine's own simulators
@@ -218,6 +256,49 @@ struct Options: Codable {
       --verbose
     """
 
+    /// The command a command line names (`run` when none), as parse reads it.
+    static func command(_ argv: [String]) -> String {
+        var args = argv
+        if let i = args.firstIndex(of: "--config"), i + 1 < args.count { args.removeSubrange(i...(i + 1)) }
+        guard let first = args.first, !first.hasPrefix("-") else { return "run" }
+        return first == "auto-setup" ? "init" : first
+    }
+
+    /// `{"pixels": n, "max_channel_delta": d}`: whole numbers ≥ 0, nothing else.
+    static func tolerance(_ v: JSON, _ where_: String) throws -> Tolerance {
+        guard let o = v.object else { throw UsageError("\(where_): an object like {\"pixels\": 5, \"max_channel_delta\": 1}") }
+        for k in o.keys where k != "pixels" && k != "max_channel_delta" { throw UsageError("\(where_): unknown key \"\(k)\" (pixels, max_channel_delta)") }
+        func count(_ k: String) throws -> Int {
+            guard let n = o[k] else { return 0 }
+            guard let d = n.number, d >= 0, d == d.rounded(.down), d <= Double(Int32.max) else { throw UsageError("\(where_).\(k): a whole number ≥ 0, not \(n.text)") }
+            return Int(d)
+        }
+        return Tolerance(pixels: try count("pixels"), maxChannelDelta: try count("max_channel_delta"))
+    }
+
+    static func regions(_ v: JSON, _ where_: String) throws -> [[Double]] {
+        guard let list = v.array else { throw UsageError("\(where_): a list of [x, y, w, h]") }
+        return try list.map { r in
+            guard let a = r.array, a.count == 4, a.allSatisfy({ $0.number != nil }) else { throw UsageError("\(where_): each region is [x, y, w, h] in points, not \(r.text)") }
+            let d = a.map { $0.number! }
+            guard d[2] >= 0, d[3] >= 0 else { throw UsageError("\(where_): width and height must be ≥ 0") }
+            return d
+        }
+    }
+
+    /// The baseline keys of a config file: baseline_directory, report_directory, tolerance and the screens rules' comparison settings.
+    mutating func applyBaselineConfig(_ data: Data) throws {
+        guard let c = (try? JSON.parse(data))?.object else { return }
+        if let v = c["baseline_directory"]?.string { baselineDirectory = v }
+        if let v = c["report_directory"]?.string { reportDirectory = v }
+        if let v = c["tolerance"] { tolerance = try Options.tolerance(v, "tolerance") }
+        screenComparisons = try (c["screens"]?.array ?? []).map { rule in
+            let name = rule["preview"]?.text ?? "?"
+            return ScreenComparison(tolerance: try rule["tolerance"].map { try Options.tolerance($0, "screens[\(name)].tolerance") },
+                                    ignoreRegions: try rule["ignore_regions"].map { try Options.regions($0, "screens[\(name)].ignore_regions") })
+        }
+    }
+
     static func parse(_ argv: [String]) throws -> Options {
         var args = argv
         var options = Options()
@@ -233,16 +314,18 @@ struct Options: Codable {
         if let configPath, !setup {
             let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
             options = try JSONDecoder().decode(Options.self, from: data)
+            try options.applyBaselineConfig(data)
         }
 
         if let first = args.first, !first.hasPrefix("-") {
-            guard ["run", "list", "devices", "calibrate", "emit-table", "init", "auto-setup", "frame"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
+            guard ["run", "verify", "record", "accept", "list", "devices", "calibrate", "emit-table", "init", "auto-setup", "frame"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
             options.command = setup ? "init" : first
             args.removeFirst()
         }
 
         func list(_ s: String) -> [String] { s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
         var i = 0
+        var frameFlag = false
         func value() throws -> String {
             i += 1
             guard i < args.count else { throw CLIError("Missing value for \(args[i - 1])") }
@@ -290,7 +373,14 @@ struct Options: Codable {
             case "--download-missing-runtimes": options.downloadRuntimes = true
             case "--no-html": options.html = false
             case "--no-status-bar": options.statusBar = false
+            case "--baseline-directory": options.baselineDirectory = try value()
+            case "--report-directory": options.reportDirectory = try value()
+            case "--from": options.from.append(try value())
+            case "--only": options.only = (options.only ?? []).union(list(try value()))
+            case "--push": options.push = true
+            case "--author": options.author = try value()
             case "--frame":
+                frameFlag = true
                 // The mode is optional: `--frame` alone means plain.
                 if i + 1 < args.count, FrameMode(rawValue: args[i + 1].lowercased()) != nil { options.frame = try frameMode(try value()) } else { options.frame = .plain }
             case "--frame-color", "--frame-colour": options.frameColors = list(try value())
@@ -322,6 +412,19 @@ struct Options: Codable {
             if options.frame == nil { throw CLIError("frame: --frame none frames nothing") }
         }
         if !["png", "jpeg"].contains(options.format) { throw CLIError("--format must be png or jpeg") }
+        let command = options.command
+        if command == "accept" {
+            if options.from.isEmpty { throw UsageError("accept needs --from <report directory, .zip or URL>") }
+        } else if !options.from.isEmpty || options.only != nil || options.push || options.author != nil {
+            throw UsageError("--from, --only, --push and --author are for accept")
+        }
+        if command == "verify" || command == "record" {
+            if options.format != "png" { throw UsageError("\(command) compares plain PNG screenshots; --format \(options.format) can't be used with it (drop --format, or use run).") }
+            if frameFlag && options.frame != nil { throw UsageError("\(command) compares plain screenshots; device frames aren't written (drop --frame, or use run).") }
+            // A config's frames are for `run`: verify and record skip framing.
+            options.frame = nil
+            for k in options.screens.indices { options.screens[k].frame = nil }
+        }
         return options
     }
 }

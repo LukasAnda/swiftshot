@@ -40,8 +40,10 @@ final class WriteSink: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var shots: [ShotRecord] = []
     private(set) var errors: [String] = []
+    private(set) var shotErrors: [ShotError] = []
     func add(shot: ShotRecord) { lock.lock(); shots.append(shot); lock.unlock() }
     func add(error: String) { lock.lock(); errors.append(error); lock.unlock() }
+    func add(error: ShotError) { lock.lock(); shotErrors.append(error); lock.unlock() }
 }
 
 extension Job {
@@ -57,6 +59,9 @@ extension Job {
         if includeRuntimeInName && !fileNamePattern.contains("{runtime}") { name += "-\(platform == "watchos" ? "watchOS" : "iOS")\(runtime)" }
         return name + (format == "jpeg" ? ".jpg" : ".png")
     }
+
+    /// The report id of a screenshot file this job writes (`file` without the language folder).
+    func shotId(_ file: String) -> String { "\(language)/" + (file as NSString).deletingPathExtension }
 
     func writeResult(_ result: JobResult) {
         let url = resultPath.map { URL(fileURLWithPath: $0) }

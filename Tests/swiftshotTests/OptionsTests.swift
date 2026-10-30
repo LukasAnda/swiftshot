@@ -94,6 +94,68 @@ final class OptionsTests: XCTestCase {
         XCTAssertEqual(localeIdentifier(for: "en"), "en")
     }
 
+    // MARK: verify, record, accept
+
+    private func config(_ json: String) -> String {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("swiftshot-\(UUID()).json")
+        try? json.write(to: url, atomically: true, encoding: .utf8)
+        return url.path
+    }
+
+    func testBaselineCommandsAndKeys() throws {
+        let path = config(#"{"output_directory": "shots", "baseline_directory": "base", "report_directory": "rep", "tolerance": {"pixels": 5, "max_channel_delta": 1}, "screens": [{"preview": "Clock*", "tolerance": {"max_channel_delta": 2}}, {"preview": "Feed", "ignore_regions": [[0, 0, 16, 4]]}, {"preview": "Other", "appearances": ["dark"]}]}"#)
+        let o = try Options.parse(["--config", path, "verify"])
+        XCTAssertEqual(o.command, "verify")
+        XCTAssertEqual(o.baselineDirectory, "base")
+        XCTAssertEqual(o.reportDirectory, "rep")
+        XCTAssertEqual(o.tolerance, Tolerance(pixels: 5, maxChannelDelta: 1))
+        let c = CompareConfig.from(o)
+        XCTAssertEqual(c.rules.map(\.preview), ["Clock*", "Feed", "Other"])
+        XCTAssertEqual(c.rules[0].tolerance, Tolerance(pixels: 0, maxChannelDelta: 2))
+        XCTAssertEqual(c.rules[1].ignoreRegions, [[0, 0, 16, 4]])
+        XCTAssertNil(c.rules[2].tolerance)
+        XCTAssertEqual(try Options.parse(["--config", path, "record", "--baseline-directory", "b2", "--report-directory", "r2"]).baselineDirectory, "b2")
+        // Defaults.
+        let d = try Options.parse(["--config", config("{}"), "verify", "--output", "out"])
+        XCTAssertEqual(d.baselineDirectory, "screenshots-baseline")
+        XCTAssertTrue(d.reportPath.hasSuffix("/out-report"), d.reportPath)
+        XCTAssertNil(d.tolerance)
+    }
+
+    func testBaselineCommandsComparePlainPngsOnly() throws {
+        for command in ["verify", "record"] {
+            XCTAssertThrowsError(try Options.parse(["--config", emptyConfig(), command, "--format", "jpeg"])) { XCTAssertTrue($0 is UsageError, "\($0)") }
+            XCTAssertThrowsError(try Options.parse(["--config", emptyConfig(), command, "--frame"])) { XCTAssertTrue($0 is UsageError, "\($0)") }
+            XCTAssertThrowsError(try Options.parse(["--config", config(#"{"format": "jpeg"}"#), command])) { XCTAssertTrue($0 is UsageError, "\($0)") }
+            // A config's frames are for run: verify and record skip them.
+            let o = try Options.parse(["--config", config(#"{"frame": "appstore", "screens": [{"preview": "A", "frame": "plain"}]}"#), command])
+            XCTAssertNil(o.frame)
+            XCTAssertNil(o.screens[0].frame)
+            XCTAssertTrue(FrameRun.modes(o).isEmpty)
+        }
+        XCTAssertNoThrow(try Options.parse(["--config", emptyConfig(), "run", "--format", "jpeg"]))
+    }
+
+    func testInvalidToleranceIsAUsageError() {
+        for bad in [#"{"tolerance": {"pixels": -1}}"#, #"{"tolerance": {"pixels": 1.5}}"#, #"{"tolerance": {"colour": 1}}"#, #"{"tolerance": 3}"#,
+                    #"{"screens": [{"preview": "A", "ignore_regions": [[0, 0, 1]]}]}"#, #"{"screens": [{"preview": "A", "ignore_regions": [[0, 0, -1, 1]]}]}"#] {
+            XCTAssertThrowsError(try Options.parse(["--config", config(bad), "verify"]), bad) { XCTAssertTrue($0 is UsageError, "\(bad): \($0)") }
+        }
+    }
+
+    func testAcceptFlagsAreForAcceptOnly() {
+        XCTAssertThrowsError(try Options.parse(["--config", emptyConfig(), "verify", "--from", "x"]))
+        XCTAssertThrowsError(try Options.parse(["--config", emptyConfig(), "run", "--only", "x"]))
+    }
+
+    func testUsageErrorsExit64() async {
+        let empty = emptyConfig()
+        do { let code = await Command.run(["--config", empty, "verify", "--format", "jpeg"]); XCTAssertEqual(code, 64) }
+        do { let code = await Command.run(["--config", empty, "record", "--frame"]); XCTAssertEqual(code, 64) }
+        do { let code = await Command.run(["--config", empty, "accept"]); XCTAssertEqual(code, 64) }
+        do { let code = await Command.run(["--config", empty, "verify", "--no-such-flag"]); XCTAssertEqual(code, 64) }
+    }
+
     private func emptyConfig() -> String {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("swiftshot-empty.json")
         try? "{}".write(to: url, atomically: true, encoding: .utf8)
