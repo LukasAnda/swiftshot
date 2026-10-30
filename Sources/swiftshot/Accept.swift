@@ -27,7 +27,8 @@ enum Accept {
         }
     }
 
-    struct Report { let label: String; let commit: String; let changes: [Change] }
+    /// `errors`: the verify had errors (its result.json status is `error`).
+    struct Report { let label: String; let commit: String; let changes: [Change]; let errors: Bool }
 
     static func message(changed: Int, added: Int, removed: Int) -> String {
         let parts = [(changed, "changed"), (added, "added"), (removed, "removed")].filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }
@@ -78,6 +79,7 @@ enum Accept {
         var seenCommits: [String] = []
         for r in reports where !seenCommits.contains(r.commit) { seenCommits.append(r.commit) }
         for commit in seenCommits { try checkFresh(git, commit: commit, head: head) }
+        for r in reports where r.errors { log.warn("\(r.label): verify had errors; only its changed, added and removed screenshots are accepted (those with errors keep their baseline)") }
 
         if selected.isEmpty {
             log.ok("Nothing to accept: the report has no changed, added or removed screenshots\(only != nil ? " among --only" : "")")
@@ -268,8 +270,9 @@ enum Accept {
         guard let ci = manifest["ci"]?.bool else { throw UsageError("\(label): manifest.json has no ci") }
         guard let fingerprint = manifest["fingerprint"]?.object else { throw UsageError("\(label): manifest.json has no fingerprint") }
         guard let ids = manifest["ids"]?.object else { throw UsageError("\(label): manifest.json has no ids") }
+        let result = try json("result.json")
         var shots: [String: [String: JSON]] = [:]
-        for s in try json("result.json")["screenshots"]?.array ?? [] { if let o = s.object, let id = o["id"]?.string { shots[id] = o } }
+        for s in result["screenshots"]?.array ?? [] { if let o = s.object, let id = o["id"]?.string { shots[id] = o } }
         var changes: [Change] = []
         var seen = Set<String>()
         for kind in ["changed", "added", "removed"] {
@@ -292,7 +295,7 @@ enum Accept {
                 changes.append(Change(id: id, kind: kind, report: label, png: png, entry: entry, fingerprint: fp))
             }
         }
-        return Report(label: label, commit: commit, changes: changes)
+        return Report(label: label, commit: commit, changes: changes, errors: result["status"] == .string("error"))
     }
 
     /// A screenshot id is a relative `/`-separated path; nothing that could leave the baseline directory.

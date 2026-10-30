@@ -446,6 +446,18 @@ final class AcceptTests: XCTestCase {
         XCTAssertFalse(errors.contains("secret"))
     }
 
+    func testReportWithErrorsWarnsAndStillApplies() throws {
+        try repoWith("changed-pixels")
+        let r = try report("changed-pixels")
+        let f = r.appendingPathComponent("result.json")
+        var result = try readJSON(f).object!
+        result["status"] = .string("error")
+        try JSON.object(result).pretty().write(to: f, atomically: true, encoding: .utf8)
+        XCTAssertEqual(accept(r), 0, errors)
+        XCTAssertTrue(errors.contains("verify had errors"), errors)
+        XCTAssertEqual(bytes(baseline.appendingPathComponent("en-US/Pixel 9-Home.png")), bytes(fixtures.appendingPathComponent("changed-pixels/output/en-US/Pixel 9-Home.png")))
+    }
+
     func testDownloadsAZipWithTheArtifactToken() throws {
         try repoWith("changed-pixels")
         let data = bytes(try zip(try report("changed-pixels"), tmp.appendingPathComponent("report.zip")))

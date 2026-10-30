@@ -37,7 +37,8 @@ object Accept {
             (png == null || png.readBytes().contentEquals(o.png!!.readBytes()))
     }
 
-    private class Report(val label: String, val commit: String, val changes: List<Change>)
+    /** [errors]: the verify had errors (its result.json status is `error`). */
+    private class Report(val label: String, val commit: String, val changes: List<Change>, val errors: Boolean)
 
     fun message(changed: Int, added: Int, removed: Int): String {
         val parts = listOf(changed to "changed", added to "added", removed to "removed").filter { it.first > 0 }.map { "${it.first} ${it.second}" }
@@ -90,6 +91,7 @@ object Accept {
             list[0]
         }
         for (commit in reports.map { it.commit }.distinct()) checkFresh(git, commit, head)
+        for (r in reports.filter { it.errors }) log.warn("${r.label}: verify had errors; only its changed, added and removed screenshots are accepted (those with errors keep their baseline)")
 
         if (selected.isEmpty()) {
             log.ok("Nothing to accept: the report has no changed, added or removed screenshots${if (only != null) " among --only" else ""}")
@@ -239,7 +241,8 @@ object Accept {
         val ci = manifest["ci"] as? Boolean ?: usage("$label: manifest.json has no ci")
         val fingerprint = manifest["fingerprint"] as? Map<*, *> ?: usage("$label: manifest.json has no fingerprint")
         val ids = manifest["ids"] as? Map<*, *> ?: usage("$label: manifest.json has no ids")
-        val shots = ((json("result.json")["screenshots"] as? List<*>).orEmpty()).mapNotNull { it as? Map<*, *> }.associateBy { it["id"] }
+        val result = json("result.json")
+        val shots = ((result["screenshots"] as? List<*>).orEmpty()).mapNotNull { it as? Map<*, *> }.associateBy { it["id"] }
         val changes = mutableListOf<Change>()
         val seen = HashSet<String>()
         for (kind in listOf("changed", "added", "removed")) {
@@ -259,7 +262,7 @@ object Accept {
                 changes += Change(id, kind, label, png, entry, fp)
             }
         }
-        return Report(label, commit, changes)
+        return Report(label, commit, changes, result["status"] == "error")
     }
 
     /** A screenshot id is a relative `/`-separated path; nothing that could leave the baseline directory. */

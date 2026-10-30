@@ -326,6 +326,16 @@ class AcceptTest {
         assertFalse("secret" in errors.toString())
     }
 
+    @Test fun reportWithErrorsWarnsAndStillApplies() {
+        repoWith("changed-pixels")
+        val r = report("changed-pixels")
+        val f = File(r, "result.json")
+        f.writeText(CanonicalJson.pretty(json(f).entries.associate { (k, v) -> k as String to if (k == "status") "error" else v }))
+        assertEquals(0, accept(r))
+        assertContains(errors.toString(), "verify had errors")
+        assertTrue(bytes(File(root, "changed-pixels/output/en-US/Pixel 9-Home.png")).contentEquals(bytes(File(baseline, "en-US/Pixel 9-Home.png"))))
+    }
+
     @Test fun downloadsAZipWithTheArtifactToken() {
         repoWith("changed-pixels")
         val data = zip(report("changed-pixels"), File(tmp, "report.zip")).readBytes()

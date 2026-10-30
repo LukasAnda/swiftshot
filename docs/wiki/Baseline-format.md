@@ -348,6 +348,8 @@ directory or be a symbolic link, at most 2 GB extracted.
   `local` = `!ci`. Each `removed` id: its PNG and entry are deleted. Nothing else changes;
   unreferenced fingerprints are dropped and baseline.json is rewritten canonically.
 - `--only` (comma-separated, repeatable) restricts to those ids.
+- A report whose `result.json` `status` is `error`: a warning, then its listed ids are applied as
+  usual (ids with errors are in none of the lists, so they keep their baseline).
 - Stale: each report's `commit` must be HEAD, or every commit after it up to HEAD must carry the
   trailer `Swiftshot-Accept: <commit>` (any value), which `accept --push` writes.
 - baseline.json is written last (temp file, then rename).
