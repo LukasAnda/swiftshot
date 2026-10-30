@@ -104,7 +104,7 @@ final class ReportTests: XCTestCase {
         // The next run differs by at most 1 per channel (the device's glass noise).
         try FileManager.default.removeItem(at: out.appendingPathComponent("en-US/iPhone 17 Pro-Glass.png"))
         try FileManager.default.copyItem(at: changed, to: out.appendingPathComponent("en-US/iPhone 17 Pro-Glass.png"))
-        let env = BaselineEnv(git: GitInfo(commit: nil, branch: nil), version: "1.0.0-test", ci: false)
+        let env = BaselineEnv(git: GitInfo(commit: nil, branch: nil), version: "1.0.0-test", ci: nil)
         let v = try Baseline.evaluate(output: out, baseline: base, report: tmp.appendingPathComponent("report"), config: CompareConfig(tolerance: nil, rules: []), env: env)
         XCTAssertEqual(v.exitCode, 0)
         XCTAssertEqual(v.entries.first?["status"], .string("unchanged"))

@@ -9,4 +9,10 @@ byte for byte, and the exit code must follow `status` (passed 0, failed 1, error
 regenerates everything except `expected/images/`, which the JVM engine writes
 (`SWIFTSHOT_WRITE_FIXTURE_IMAGES=1` on `CompareTest`) and `make.py` checks pixel and byte for byte.
 The case `empty-run` (a report with no screenshots and no errors) expects `status: "error"` with the
-unattributed error `The run rendered no screenshots` and no removals; both implementations count 24 cases.
+unattributed error `The run rendered no screenshots` and no removals; both implementations count 25 cases.
+A case may have `env.json`, merged over the standard environment above (an object of strings; `null`
+removes a variable), and files it refers to. A path in `env.json` is relative to the case directory.
+The case `ci-github` removes `SWIFTSHOT_COMMIT`, `SWIFTSHOT_BRANCH` and `SWIFTSHOT_CI` and sets a GitHub
+pull request run with `GITHUB_EVENT_PATH=event.json`: its report records the pull request's head commit
+from `event.json` and `"ci": {"buildUrl", "provider": "github", "pullRequest": "7"}`. The detection
+cases are in [../ci](../ci).

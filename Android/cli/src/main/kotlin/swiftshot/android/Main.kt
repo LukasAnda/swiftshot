@@ -74,10 +74,10 @@ private fun baselineCommand(o: Options, log: Log, render: (Options, Boolean) -> 
     }
     if (!File(output, "swiftshot-report.json").isFile) RunReport.writeFailure(output, if (flutter) "flutter" else "android", "the run wrote no report", log.seconds)
     val baseline = o.baselineDir(flutter)
-    if (o.command == "record") return Baseline.record(output, baseline, BaselineEnv.ci(), log)
+    if (o.command == "record") return Baseline.record(output, baseline, Ci.detect(System.getenv()).isCi, log)
     val report = o.reportDir(flutter)
     return try {
-        Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir)), log)
+        Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir), System.getenv()), log)
     } catch (e: Exception) {
         // No result: nothing of an earlier verify may stay behind to be read as this one's.
         BaselineReport.clear(report)

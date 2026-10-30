@@ -36,32 +36,31 @@ data class CompareConfig(val tolerance: Tolerance?, val rules: List<CompareRule>
     }
 }
 
-/** Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else git; null when unknown. */
+/** Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else the CI's, else git; null when unknown. */
 data class GitInfo(val commit: String?, val branch: String?) {
     companion object {
-        fun detect(dir: File): GitInfo {
+        fun detect(dir: File, env: Map<String, String>, ci: Ci?): GitInfo {
             fun git(vararg args: String): String? = runCatching {
                 val p = ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(false).start()
                 p.errorStream.close()
                 val out = p.inputStream.bufferedReader().readText().trim()
                 if (p.waitFor() == 0) out.takeIf { it.isNotEmpty() } else null
             }.getOrNull()
-            val commit = System.getenv("SWIFTSHOT_COMMIT") ?: git("rev-parse", "HEAD")
-            val branch = System.getenv("SWIFTSHOT_BRANCH") ?: git("rev-parse", "--abbrev-ref", "HEAD")?.takeIf { it != "HEAD" }
+            fun set(k: String) = env[k]?.takeIf { it.isNotEmpty() }
+            val commit = set("SWIFTSHOT_COMMIT") ?: ci?.commit ?: git("rev-parse", "HEAD")
+            val branch = set("SWIFTSHOT_BRANCH") ?: ci?.branch ?: git("rev-parse", "--abbrev-ref", "HEAD")?.takeIf { it != "HEAD" }
             return GitInfo(commit, branch)
         }
     }
 }
 
-/** What a verify run records about where it ran. */
-data class BaselineEnv(val git: GitInfo, val version: String, val ci: Boolean) {
+/** What a verify run records about where it ran; [ci] is null when it wasn't on a CI. */
+data class BaselineEnv(val git: GitInfo, val version: String, val ci: Ci?) {
     companion object {
-        fun detect(dir: File) = BaselineEnv(GitInfo.detect(dir), Fingerprints.version(), ci())
-
-        /** `SWIFTSHOT_CI` (`true`/`false`), else `CI` set to true (full CI detection comes later). */
-        fun ci(): Boolean {
-            System.getenv("SWIFTSHOT_CI")?.let { return it.equals("true", true) || it == "1" }
-            return System.getenv("CI").let { it.equals("true", true) || it == "1" }
+        /** [env] is the process environment, read once by the caller. */
+        fun detect(dir: File, env: Map<String, String>, readFile: (String) -> String? = ::defaultRead, version: String = Fingerprints.version()): BaselineEnv {
+            val ci = Ci.detect(env, readFile).takeIf { it.isCi }
+            return BaselineEnv(GitInfo.detect(dir, env, ci), version, ci)
         }
     }
 }
@@ -185,6 +184,7 @@ object Baseline {
     fun verify(output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log): Int {
         val start = System.nanoTime()
         val v = evaluate(output, baseline, report, config, env)
+        env.ci?.warnings?.forEach(log::warn)
         BaselineReport.writeTimings((System.nanoTime() - start) / 1e9, report)
         for ((kind, line) in BaselineReport.summary(v, report)) when (kind) {
             "warn" -> log.warn(line)

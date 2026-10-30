@@ -106,9 +106,22 @@ final class AcceptTests: XCTestCase {
     func testCiReportWritesNonLocalImages() throws {
         try repoWith("changed-pixels")
         let r = try report("changed-pixels")
-        try setManifest(r) { $0["ci"] = .bool(true) }
+        try setManifest(r) { $0["ci"] = .object(["buildUrl": .null, "provider": .string("github"), "pullRequest": .string("7")]) }
         XCTAssertEqual(accept(r), 0, errors)
         XCTAssertEqual(try images()["en-US/Pixel 9-Home"]!["local"], .bool(false))
+    }
+
+    func testCiMustBeNullOrAnObject() throws {
+        try repoWith("changed-pixels")
+        let r = try report("changed-pixels")
+        let changes: [(String, (inout [String: JSON]) -> Void)] = [
+            ("a boolean", { $0["ci"] = .bool(true) }), ("a string", { $0["ci"] = .string("github") }), ("missing", { $0["ci"] = nil }),
+        ]
+        for (label, change) in changes {
+            try setManifest(r, change)
+            XCTAssertEqual(accept(r), 64, label)
+            XCTAssertTrue(errors.contains("manifest.json has no ci"), "\(label): \(errors)")
+        }
     }
 
     func testAddsNewImages() throws {

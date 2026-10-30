@@ -58,10 +58,10 @@ enum Command {
         let baseline = URL(fileURLWithPath: options.baselineDirectory).standardizedFileURL
         let reportDir = URL(fileURLWithPath: options.reportPath)
         do {
-            if options.command == "record" { return try Baseline.record(output: output, baseline: baseline, ci: BaselineEnv.ci(), log: Console()) }
+            if options.command == "record" { return try Baseline.record(output: output, baseline: baseline, ci: Ci.detect(ProcessInfo.processInfo.environment).isCi, log: Console()) }
             let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             return try Baseline.verify(output: output, baseline: baseline, report: reportDir, config: CompareConfig.from(options),
-                                       env: BaselineEnv.detect(cwd), log: Console())
+                                       env: BaselineEnv.detect(cwd, env: ProcessInfo.processInfo.environment), log: Console())
         } catch {
             // No result: nothing of an earlier verify may stay behind to be read as this one's.
             if options.command == "verify" { try? BaselineReport.clear(reportDir) }

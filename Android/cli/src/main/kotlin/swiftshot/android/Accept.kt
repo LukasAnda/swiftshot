@@ -239,7 +239,9 @@ object Accept {
         if (manifest["schema"] != 1 && (manifest["schema"] as? Number)?.toDouble() != 1.0) usage("$label: manifest.json schema ${manifest["schema"]} is not supported")
         val commit = manifest["commit"] as? String ?: usage("$label: manifest.json has no commit (verify ran outside a git checkout)")
         if (!Regex("[0-9a-f]{7,64}").matches(commit)) usage("$label: manifest.json commit \"$commit\" is not a commit hash")
-        val ci = manifest["ci"] as? Boolean ?: usage("$label: manifest.json has no ci")
+        // null (not a CI) or an object (which CI); a manifest of the earlier boolean form, or none, is refused.
+        if (!manifest.containsKey("ci") || manifest["ci"].let { it != null && it !is Map<*, *> }) usage("$label: manifest.json has no ci")
+        val local = manifest["ci"] == null
         val fingerprint = manifest["fingerprint"] as? Map<*, *> ?: usage("$label: manifest.json has no fingerprint")
         val ids = manifest["ids"] as? Map<*, *> ?: usage("$label: manifest.json has no ids")
         val result = json("result.json")
@@ -259,7 +261,7 @@ object Accept {
                 if (!png.isFile) usage("$label: images/new/$id.png is missing")
                 val platform = shot["platform"] as? String ?: usage("$label: $id has no platform in result.json")
                 val fp = (fingerprint[platform] as? Map<*, *>)?.let { Fingerprints.forImage(it, shot) } ?: usage("$label: manifest.json has no $platform fingerprint for $id")
-                val entry: Map<String, Any?> = Baseline.describe(shot) + ("local" to !ci) + ("fingerprint" to Fingerprints.id(fp))
+                val entry: Map<String, Any?> = Baseline.describe(shot) + ("local" to local) + ("fingerprint" to Fingerprints.id(fp))
                 changes += Change(id, kind, label, png, entry, fp)
             }
         }

@@ -1,0 +1,14 @@
+{
+  "env": {},
+  "expected": {
+    "branch": null,
+    "buildUrl": null,
+    "commit": null,
+    "fork": null,
+    "isCi": false,
+    "provider": null,
+    "pullRequest": null,
+    "repository": null,
+    "warnings": []
+  }
+}

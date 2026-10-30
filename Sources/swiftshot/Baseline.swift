@@ -39,37 +39,35 @@ struct CompareConfig {
     }
 }
 
-/// Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else git; nil when unknown.
+/// Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else the CI's, else git; nil when unknown.
 struct GitInfo {
     var commit: String?
     var branch: String?
 
-    static func detect(_ dir: URL) -> GitInfo {
+    static func detect(_ dir: URL, env: [String: String], ci: Ci?) -> GitInfo {
         func git(_ args: String...) -> String? {
             let r = Proc.run(["git"] + args, cwd: dir)
             let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
             return r.code == 0 && !out.isEmpty ? out : nil
         }
-        let env = ProcessInfo.processInfo.environment
-        let commit = env["SWIFTSHOT_COMMIT"] ?? git("rev-parse", "HEAD")
-        let branch = env["SWIFTSHOT_BRANCH"] ?? git("rev-parse", "--abbrev-ref", "HEAD").flatMap { $0 == "HEAD" ? nil : $0 }
+        func set(_ k: String) -> String? { env[k].flatMap { $0.isEmpty ? nil : $0 } }
+        let commit = set("SWIFTSHOT_COMMIT") ?? ci?.commit ?? git("rev-parse", "HEAD")
+        let branch = set("SWIFTSHOT_BRANCH") ?? ci?.branch ?? git("rev-parse", "--abbrev-ref", "HEAD").flatMap { $0 == "HEAD" ? nil : $0 }
         return GitInfo(commit: commit, branch: branch)
     }
 }
 
-/// What a verify run records about where it ran.
+/// What a verify run records about where it ran; `ci` is nil when it wasn't on a CI.
 struct BaselineEnv {
     var git: GitInfo
     var version: String
-    var ci: Bool
+    var ci: Ci?
 
-    static func detect(_ dir: URL) -> BaselineEnv { BaselineEnv(git: GitInfo.detect(dir), version: Fingerprints.version(), ci: ci()) }
-
-    /// `SWIFTSHOT_CI` (true/false), else `CI` set to true.
-    static func ci() -> Bool {
-        let env = ProcessInfo.processInfo.environment
-        if let v = env["SWIFTSHOT_CI"] { return v.lowercased() == "true" || v == "1" }
-        return env["CI"].map { $0.lowercased() == "true" || $0 == "1" } ?? false
+    /// `env` is the process environment, read once by the caller.
+    static func detect(_ dir: URL, env: [String: String], readFile: (String) -> String? = defaultRead, version: String = Fingerprints.version()) -> BaselineEnv {
+        let ci = Ci.detect(env, readFile: readFile)
+        let found = ci.isCi ? ci : nil
+        return BaselineEnv(git: GitInfo.detect(dir, env: env, ci: found), version: version, ci: found)
     }
 }
 
@@ -251,6 +249,7 @@ enum Baseline {
     static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console) throws -> Int32 {
         let start = Date()
         let v = try evaluate(output: output, baseline: baseline, report: report, config: config, env: env)
+        for w in env.ci?.warnings ?? [] { log.warn(w) }
         try BaselineReport.writeTimings(compareSeconds: Date().timeIntervalSince(start), report: report)
         for (kind, line) in BaselineReport.summary(v, report: report) {
             switch kind {

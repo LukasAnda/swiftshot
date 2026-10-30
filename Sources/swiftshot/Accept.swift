@@ -268,7 +268,9 @@ enum Accept {
         guard manifest["schema"]?.number == 1 else { throw UsageError("\(label): manifest.json schema \(manifest["schema"]?.text ?? "null") is not supported") }
         guard let commit = manifest["commit"]?.string else { throw UsageError("\(label): manifest.json has no commit (verify ran outside a git checkout)") }
         guard commit.range(of: "^[0-9a-f]{7,64}$", options: .regularExpression) != nil else { throw UsageError("\(label): manifest.json commit \"\(commit)\" is not a commit hash") }
-        guard let ci = manifest["ci"]?.bool else { throw UsageError("\(label): manifest.json has no ci") }
+        // null (not a CI) or an object (which CI); a manifest of the earlier boolean form, or none, is refused.
+        guard let ci = manifest["ci"], ci == .null || ci.object != nil else { throw UsageError("\(label): manifest.json has no ci") }
+        let local = ci == .null
         guard let fingerprint = manifest["fingerprint"]?.object else { throw UsageError("\(label): manifest.json has no fingerprint") }
         guard let ids = manifest["ids"]?.object else { throw UsageError("\(label): manifest.json has no ids") }
         let result = try json("result.json")
@@ -291,7 +293,7 @@ enum Accept {
                 guard let runFp = fingerprint[platform], runFp.object != nil else { throw UsageError("\(label): manifest.json has no \(platform) fingerprint for \(id)") }
                 let fp = Fingerprints.forImage(runFp, shot)
                 var entry = Baseline.describe(shot)
-                entry["local"] = .bool(!ci)
+                entry["local"] = .bool(local)
                 entry["fingerprint"] = .string(Fingerprints.id(fp))
                 changes.append(Change(id: id, kind: kind, report: label, png: png, entry: entry, fingerprint: fp))
             }

@@ -27,10 +27,16 @@ enum BaselineReport {
 
     static func optional(_ s: String?) -> JSON { s.map { .string($0) } ?? .null }
 
+    /// `null` outside a CI, else what the report says about it.
+    static func ci(_ v: Verification) -> JSON {
+        guard let ci = v.env.ci else { return .null }
+        return .object(["buildUrl": optional(ci.buildUrl), "provider": optional(ci.provider), "pullRequest": optional(ci.pullRequest)])
+    }
+
     static func result(_ v: Verification) -> JSON {
         .object([
             "schema": .int(1), "status": .string(v.status), "counts": .object(v.counts.mapValues { .int(Int64($0)) }),
-            "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "version": .string(v.env.version), "ci": .bool(v.env.ci),
+            "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "version": .string(v.env.version), "ci": ci(v),
             "host": optional(v.host), "fingerprint": .object(v.fingerprint), "fingerprintMismatch": .array(v.mismatches.map { .string($0) }),
             "localBaseline": .bool(v.localBaseline), "screenshots": .array(v.entries.map { .object($0) }), "errors": .array(v.errors),
             "strayBaselineFiles": .int(Int64(v.strays)),
@@ -40,7 +46,7 @@ enum BaselineReport {
     static func manifest(_ v: Verification) -> JSON {
         func ids(_ s: String) -> JSON { .array(v.ids(s).map { .string($0) }) }
         return .object([
-            "schema": .int(1), "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "ci": .bool(v.env.ci),
+            "schema": .int(1), "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "ci": ci(v),
             "configHash": .string(v.configHash), "fingerprint": .object(v.fingerprint),
             "ids": .object(["changed": ids("changed"), "added": ids("added"), "removed": ids("removed")]),
         ])

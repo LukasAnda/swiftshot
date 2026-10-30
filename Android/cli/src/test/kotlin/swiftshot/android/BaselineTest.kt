@@ -16,7 +16,16 @@ import kotlin.test.assertTrue
 class BaselineTest {
     private val root = File(System.getProperty("swiftshot.testdata") ?: error("swiftshot.testdata not set"), "baseline")
     private val tmp: File = Files.createTempDirectory("swiftshot-baseline").toFile()
-    private val env = BaselineEnv(GitInfo("0123456789abcdef0123456789abcdef01234567", "feature/x"), "1.0.0-test", ci = false)
+    private val env = BaselineEnv(GitInfo("0123456789abcdef0123456789abcdef01234567", "feature/x"), "1.0.0-test", ci = null)
+
+    /** The environment of a case: the standard one, then the case's env.json (null removes a variable; paths are relative to the case). */
+    private fun envFor(case: File): BaselineEnv {
+        val vars = mutableMapOf("SWIFTSHOT_COMMIT" to "0123456789abcdef0123456789abcdef01234567", "SWIFTSHOT_BRANCH" to "feature/x", "SWIFTSHOT_CI" to "false")
+        File(case, "env.json").takeIf { it.isFile }?.let { f ->
+            for ((k, v) in Json.parse(f.readText()) as Map<*, *>) if (v == null) vars.remove(k as String) else vars[k as String] = v as String
+        }
+        return BaselineEnv.detect(tmp, vars, { p -> File(p).let { if (it.isAbsolute) it else File(case, p) }.takeIf { it.isFile }?.readText() }, "1.0.0-test")
+    }
 
     @AfterTest fun cleanUp() { tmp.deleteRecursively() }
 
@@ -26,7 +35,7 @@ class BaselineTest {
     private fun config(case: File) = CompareConfig.from(Options.parse(listOf("--project-dir", tmp.path, "--config", File(case, "config.json").path)))
 
     private fun verify(case: File, report: File = File(tmp, case.name)): Verification =
-        Baseline.evaluate(File(case, "output"), File(case, "baseline"), report, config(case), env)
+        Baseline.evaluate(File(case, "output"), File(case, "baseline"), report, config(case), envFor(case))
 
     private fun files(dir: File): Map<String, File> =
         if (!dir.isDirectory) emptyMap() else dir.walkTopDown().filter { it.isFile }.associateBy { it.relativeTo(dir).invariantSeparatorsPath }
@@ -36,7 +45,7 @@ class BaselineTest {
 
     @Test fun everyFixtureCaseMatchesByteForByte() {
         val all = cases()
-        assertEquals(24, all.size, "fixture cases")
+        assertEquals(25, all.size, "fixture cases")
         val problems = mutableListOf<String>()
         for (case in all) {
             val report = File(tmp, case.name)

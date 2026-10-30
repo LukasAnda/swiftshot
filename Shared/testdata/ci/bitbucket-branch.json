@@ -1,0 +1,21 @@
+{
+  "env": {
+    "BITBUCKET_BRANCH": "main",
+    "BITBUCKET_BUILD_NUMBER": "215",
+    "BITBUCKET_COMMIT": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "BITBUCKET_GIT_HTTP_ORIGIN": "http://bitbucket.org/acme/app",
+    "BITBUCKET_REPO_FULL_NAME": "acme/app",
+    "BITBUCKET_WORKSPACE": "acme"
+  },
+  "expected": {
+    "branch": "main",
+    "buildUrl": "http://bitbucket.org/acme/app/pipelines/results/215",
+    "commit": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "fork": null,
+    "isCi": true,
+    "provider": "bitbucket",
+    "pullRequest": null,
+    "repository": "http://bitbucket.org/acme/app",
+    "warnings": []
+  }
+}

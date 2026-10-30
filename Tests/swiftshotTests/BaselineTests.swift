@@ -5,7 +5,20 @@ import XCTest
 /// every case gives exactly the expected result.json, junit.xml, manifest.json, images and exit code.
 final class BaselineTests: XCTestCase {
     var tmp: URL!
-    let env = BaselineEnv(git: GitInfo(commit: "0123456789abcdef0123456789abcdef01234567", branch: "feature/x"), version: "1.0.0-test", ci: false)
+    let env = BaselineEnv(git: GitInfo(commit: "0123456789abcdef0123456789abcdef01234567", branch: "feature/x"), version: "1.0.0-test", ci: nil)
+
+    /// The environment of a case: the standard one, then the case's env.json (null removes a variable; paths are relative to the case).
+    func envFor(_ c: URL) throws -> BaselineEnv {
+        var vars = ["SWIFTSHOT_COMMIT": "0123456789abcdef0123456789abcdef01234567", "SWIFTSHOT_BRANCH": "feature/x", "SWIFTSHOT_CI": "false"]
+        let f = c.appendingPathComponent("env.json")
+        if FileManager.default.fileExists(atPath: f.path) {
+            for (k, v) in try readJSON(f).object! { vars[k] = v.string }
+        }
+        return BaselineEnv.detect(tmp, env: vars, readFile: { p in
+            let u = p.hasPrefix("/") ? URL(fileURLWithPath: p) : c.appendingPathComponent(p)
+            return try? String(contentsOf: u, encoding: .utf8)
+        }, version: "1.0.0-test")
+    }
     override func setUp() { tmp = temporaryDirectory("swiftshot-baseline") }
     override func tearDown() { try? FileManager.default.removeItem(at: tmp) }
 
@@ -18,7 +31,7 @@ final class BaselineTests: XCTestCase {
     @discardableResult
     func verify(_ c: URL, report: URL? = nil) throws -> Verification {
         try Baseline.evaluate(output: c.appendingPathComponent("output"), baseline: c.appendingPathComponent("baseline"),
-                              report: report ?? tmp.appendingPathComponent(c.lastPathComponent), config: try config(c), env: env)
+                              report: report ?? tmp.appendingPathComponent(c.lastPathComponent), config: try config(c), env: try envFor(c))
     }
 
     func ids(_ dir: URL) throws -> [String] {
@@ -27,7 +40,7 @@ final class BaselineTests: XCTestCase {
 
     func testEveryFixtureCaseMatchesByteForByte() throws {
         let all = fixtureCases()
-        XCTAssertEqual(all.count, 24, "fixture cases")
+        XCTAssertEqual(all.count, 25, "fixture cases")
         var problems: [String] = []
         var passed: [String] = []
         for c in all {

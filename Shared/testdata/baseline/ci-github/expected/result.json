@@ -1,0 +1,48 @@
+{
+  "branch": "feature/x",
+  "ci": {
+    "buildUrl": "https://github.com/acme/app/actions/runs/9876543210",
+    "provider": "github",
+    "pullRequest": "7"
+  },
+  "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "linux-x64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Home",
+      "status": "unchanged"
+    }
+  ],
+  "status": "passed",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

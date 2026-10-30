@@ -1,0 +1,29 @@
+{
+  "env": {
+    "BUILD_BUILDID": "1088",
+    "BUILD_REASON": "PullRequest",
+    "BUILD_REPOSITORY_URI": "https://dev.azure.com/fabrikamfiber/FabrikamFiber/_git/app",
+    "BUILD_SOURCEBRANCH": "refs/pull/17/merge",
+    "BUILD_SOURCEBRANCHNAME": "merge",
+    "BUILD_SOURCEVERSION": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081",
+    "SYSTEM_COLLECTIONURI": "https://dev.azure.com/fabrikamfiber/",
+    "SYSTEM_PULLREQUEST_ISFORK": "False",
+    "SYSTEM_PULLREQUEST_PULLREQUESTID": "17",
+    "SYSTEM_PULLREQUEST_SOURCEBRANCH": "refs/heads/users/raisa/new-feature",
+    "SYSTEM_PULLREQUEST_SOURCECOMMITID": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "SYSTEM_PULLREQUEST_TARGETBRANCH": "refs/heads/main",
+    "SYSTEM_TEAMPROJECT": "FabrikamFiber",
+    "TF_BUILD": "True"
+  },
+  "expected": {
+    "branch": "users/raisa/new-feature",
+    "buildUrl": "https://dev.azure.com/fabrikamfiber/FabrikamFiber/_build/results?buildId=1088",
+    "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "fork": false,
+    "isCi": true,
+    "provider": "azure",
+    "pullRequest": "17",
+    "repository": "https://dev.azure.com/fabrikamfiber/FabrikamFiber/_git/app",
+    "warnings": []
+  }
+}

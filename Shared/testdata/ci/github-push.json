@@ -1,0 +1,33 @@
+{
+  "env": {
+    "GITHUB_ACTIONS": "true",
+    "GITHUB_EVENT_NAME": "push",
+    "GITHUB_EVENT_PATH": "/home/runner/work/_temp/_github_workflow/event.json",
+    "GITHUB_REF": "refs/heads/main",
+    "GITHUB_REF_NAME": "main",
+    "GITHUB_REPOSITORY": "acme/app",
+    "GITHUB_RUN_ID": "9876543210",
+    "GITHUB_SERVER_URL": "https://github.com",
+    "GITHUB_SHA": "9fceb02d0ae598e95dc970b74767f19372d61724"
+  },
+  "expected": {
+    "branch": "main",
+    "buildUrl": "https://github.com/acme/app/actions/runs/9876543210",
+    "commit": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "fork": null,
+    "isCi": true,
+    "provider": "github",
+    "pullRequest": null,
+    "repository": "https://github.com/acme/app",
+    "warnings": []
+  },
+  "files": {
+    "/home/runner/work/_temp/_github_workflow/event.json": {
+      "after": "9fceb02d0ae598e95dc970b74767f19372d61724",
+      "ref": "refs/heads/main",
+      "repository": {
+        "full_name": "acme/app"
+      }
+    }
+  }
+}

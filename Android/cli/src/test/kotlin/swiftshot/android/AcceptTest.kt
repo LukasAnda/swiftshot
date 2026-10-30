@@ -110,9 +110,21 @@ class AcceptTest {
     @Test fun ciReportWritesNonLocalImages() {
         repoWith("changed-pixels")
         val r = report("changed-pixels")
-        setManifest(r) { it["ci"] = true }
+        setManifest(r) { it["ci"] = mapOf("buildUrl" to null, "provider" to "github", "pullRequest" to "7") }
         assertEquals(0, accept(r))
         assertEquals(false, (images()["en-US/Pixel 9-Home"] as Map<*, *>)["local"])
+    }
+
+    @Test fun ciMustBeNullOrAnObject() {
+        repoWith("changed-pixels")
+        val r = report("changed-pixels")
+        for ((label, change) in listOf<Pair<String, (MutableMap<String, Any?>) -> Unit>>("a boolean" to { it["ci"] = true }, "a string" to { it["ci"] = "github" }, "missing" to { it.remove("ci") })) {
+            setManifest(r, change)
+            errors.reset()
+            assertEquals(64, accept(r), label)
+            assertContains(errors.toString(), "manifest.json has no ci", false, label)
+            assertEquals("", clean(), label)
+        }
     }
 
     @Test fun addsNewImages() {

@@ -90,7 +90,7 @@ malformed. Any other or malformed PNG is the error `unsupported PNG` for that id
 **Determinism**: `commit`, `branch`, `version` and `ci` come from `SWIFTSHOT_COMMIT`,
 `SWIFTSHOT_BRANCH`, `SWIFTSHOT_VERSION_OVERRIDE` and `SWIFTSHOT_CI` (`true`/`false`) when set (tests
 set them: `0123456789abcdef0123456789abcdef01234567`, `feature/x`, `1.0.0-test`, `false`).
-Otherwise from git/CI detection and the binary; an unknown commit or branch is `null`. The host is
+Otherwise from CI detection (see CI detection), git and the binary; an unknown commit or branch is `null`. The host is
 detected once per run (`SWIFTSHOT_HOST` overrides it) and written into every fingerprint of
 that run.
 
@@ -189,7 +189,7 @@ is a difference (the other shown as `none`).
 - iOS images have `textSize` (`"default"` when none) and `runtime`; Android and desktop `module`
   and `fontScale`; Flutter `fontScale` and `renderer`.
 - `local`: `true` when the image was rendered outside CI (`record` on a developer machine;
-  `accept` writes `local = !ci` from the manifest).
+  `accept` writes `local = (ci == null)` from the manifest).
 
 The baseline set is `images`. A PNG under the baseline directory with no `images` entry is
 **stray**: it can't be scope-checked, so it is an error only when its id is in this run's output
@@ -290,6 +290,74 @@ first; they never change the status.
 **localBaseline**: `true` when the `images` entry of a listed id (any status, `error` included) has
 `local: true`. A warning, never a failure.
 
+## CI detection
+
+The environment is read once at start-up and passed down; nothing below reads it again. An empty
+value counts as unset.
+
+1. `SWIFTSHOT_CI` set to anything but `true` or `1` (case-insensitive), `false` included: not a CI.
+   Every `ci` field is `null`, whatever else is set.
+2. The first row of the table below whose condition holds names the provider.
+3. No row holds but `SWIFTSHOT_CI` or `CI` is `true` or `1`: a CI of unknown provider
+   (`provider: null`, every other field `null`).
+4. Otherwise not a CI.
+
+| provider | detected when | commit (first non-empty) | branch | pullRequest | fork | buildUrl | repository |
+|---|---|---|---|---|---|---|---|
+| `github` | `GITHUB_ACTIONS=true` | `pull_request.head.sha` of the JSON file at `GITHUB_EVENT_PATH`, else `GITHUB_SHA` | `GITHUB_HEAD_REF`, else `GITHUB_REF_NAME` | `pull_request.number` of that file | `pull_request.head.repo.full_name` differs from `pull_request.base.repo.full_name` (both present) | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID` | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY` |
+| `gitlab` | `GITLAB_CI=true` | `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`, else `CI_COMMIT_SHA` | `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, else `CI_COMMIT_BRANCH` | `CI_MERGE_REQUEST_IID` | `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` differs from `CI_MERGE_REQUEST_PROJECT_ID` (both set) | `CI_JOB_URL` | `CI_PROJECT_URL` |
+| `bitbucket` | `BITBUCKET_BUILD_NUMBER` set | `BITBUCKET_COMMIT` | `BITBUCKET_BRANCH` | `BITBUCKET_PR_ID` | `false` on a pull request (fork pull requests run no pipeline), else `null` | `$BITBUCKET_GIT_HTTP_ORIGIN/pipelines/results/$BITBUCKET_BUILD_NUMBER` | `BITBUCKET_GIT_HTTP_ORIGIN` |
+| `bitrise` | `BITRISE_IO=true` | `BITRISE_GIT_COMMIT`, else `GIT_CLONE_COMMIT_HASH` | `BITRISE_GIT_BRANCH` | `BITRISE_PULL_REQUEST` | `BITRISEIO_PULL_REQUEST_REPOSITORY_URL` differs from `GIT_REPOSITORY_URL` (both set) | `BITRISE_BUILD_URL` | `GIT_REPOSITORY_URL` |
+| `codemagic` | `CM_BUILD_ID` set | `CM_COMMIT` | `CM_PULL_REQUEST_SOURCE` if `CM_PULL_REQUEST=true` (falling back to `CM_BRANCH`), else `CM_BRANCH` | `CM_PULL_REQUEST_NUMBER` | `null` | `null` | `null` |
+| `circleci` | `CIRCLECI=true` | `CIRCLE_SHA1` | `CIRCLE_BRANCH` | last path segment of `CIRCLE_PULL_REQUEST` | `true` if `CIRCLE_PR_NUMBER` is set (only forks set it), else `false` if `CIRCLE_PULL_REQUEST` is set, else `null` | `CIRCLE_BUILD_URL` | `CIRCLE_REPOSITORY_URL` |
+| `azure` | `TF_BUILD=true` (case-insensitive) | `SYSTEM_PULLREQUEST_SOURCECOMMITID`, else `BUILD_SOURCEVERSION` | `SYSTEM_PULLREQUEST_SOURCEBRANCH` without `refs/heads/`, else `BUILD_SOURCEBRANCH` without `refs/heads/`, else `BUILD_SOURCEBRANCHNAME` | `SYSTEM_PULLREQUEST_PULLREQUESTNUMBER`, else `SYSTEM_PULLREQUEST_PULLREQUESTID` | `SYSTEM_PULLREQUEST_ISFORK` (`True`/`False`, case-insensitive), else `null` | `$SYSTEM_COLLECTIONURI$SYSTEM_TEAMPROJECT/_build/results?buildId=$BUILD_BUILDID` (one `/` after the collection URI) | `BUILD_REPOSITORY_URI` |
+| `jenkins` | `JENKINS_URL` set | `GIT_COMMIT` | `CHANGE_BRANCH`, else `BRANCH_NAME`, else `GIT_BRANCH` without `origin/` | `CHANGE_ID` | `true` if `CHANGE_FORK` is set, else `false` if `CHANGE_ID` is set, else `null` | `BUILD_URL` | `GIT_URL` |
+
+A field whose variables are not all set is `null`. `pullRequest` is a string (`"7"`). `repository` is
+the clone URL or slug the CI gives; it is not written to a report, `Host` uses it only when the git
+remote is unusable. The azure collection URI ends in `/` in practice.
+
+Then `commit = SWIFTSHOT_COMMIT`, else the CI's commit, else `git rev-parse HEAD`; `branch =
+SWIFTSHOT_BRANCH`, else the CI's branch, else the current git branch (none when detached).
+
+**GitHub event file.** Read through the process's working directory (a relative path) or as given.
+A missing, unreadable or malformed file (not a JSON object) is not an error: `commit` falls back to
+`GITHUB_SHA`, `pullRequest` and `fork` are `null`, and the warning `GITHUB_EVENT_PATH unreadable;
+recording GITHUB_SHA, which is a merge commit on pull requests` is printed. A file without a
+`pull_request` object (a `push`) is fine and gives no warning; so does an unset `GITHUB_EVENT_PATH`.
+
+**Recorded but not derived.** Some CIs check out a merge commit and say nothing reliable about the
+source commit, so a recipe sets `SWIFTSHOT_COMMIT` itself:
+- GitHub `pull_request` checkouts are `refs/pull/N/merge`, and `GITHUB_SHA` is that merge commit;
+  the head commit is only in the event payload
+  ([events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows),
+  [variables](https://docs.github.com/en/actions/reference/workflows-and-actions/variables)).
+- Jenkins multibranch with the "merge" discovery strategy builds a synthetic merge commit, and `GIT_COMMIT`
+  may be it (JENKINS-62783, https://issues.jenkins.io/browse/JENKINS-62783; strategies:
+  https://docs.cloudbees.com/docs/cloudbees-ci/latest/multibranch-pipeline-template-syntax-guide/github).
+- Bitbucket pull request pipelines merge the destination branch before the run, and the docs do not say
+  whether `BITBUCKET_COMMIT` is the source tip
+  (https://support.atlassian.com/bitbucket-cloud/docs/pipeline-start-conditions/).
+- Bitrise (`merge_pr` default) and Codemagic may check out a merge; neither documents which commit
+  `BITRISE_GIT_COMMIT` / `CM_COMMIT` is on that checkout.
+- Azure Repos and GitHub pull request builds use the merge commit as `BUILD_SOURCEVERSION`; the source
+  commit is `SYSTEM_PULLREQUEST_SOURCECOMMITID`, which is why it comes first.
+- Azure `BUILD_SOURCEBRANCHNAME` is only the last path segment (`feature/tools` gives `tools`), so the
+  full `BUILD_SOURCEBRANCH` is used first.
+
+Sources of the variables: GitHub https://docs.github.com/en/actions/reference/workflows-and-actions/variables ·
+GitLab https://docs.gitlab.com/ci/variables/predefined_variables/ ·
+Bitbucket https://support.atlassian.com/bitbucket-cloud/docs/variables-and-secrets/ ·
+Bitrise https://docs.bitrise.io/en/bitrise-ci/references/available-environment-variables.html ·
+Codemagic https://docs.codemagic.io/yaml-basic-configuration/environment-variables/ ·
+CircleCI https://circleci.com/docs/reference/variables/ ·
+Azure https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables ·
+Jenkins https://www.jenkins.io/doc/book/pipeline/jenkinsfile/ and https://www.jenkins.io/doc/book/pipeline/multibranch/.
+`CM_PULL_REQUEST_SOURCE` is not in the Codemagic documentation (there `CM_BRANCH` is the pull
+request's source branch), so in practice it is `CM_BRANCH`.
+
+Fixtures: `Shared/testdata/ci/` (one file per case) and the baseline case `ci-github`.
+
 ## result.json
 
 ```json
@@ -300,7 +368,7 @@ first; they never change the status.
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "branch": "feature/x",
   "version": "1.0.0-test",
-  "ci": false,
+  "ci": null,
   "host": "linux-x64",
   "fingerprint": {"android": {…}},
   "fingerprintMismatch": [],
@@ -322,9 +390,11 @@ first; they never change the status.
 - `status`: `error` if `errors` is not empty, else `failed` if any changed/added/removed, else
   `passed`. Exit code 2, 1, 0.
 - `counts.errors` = length of `errors` (`error` entries plus errors without id).
-- `ci`: whether this run was on CI (`SWIFTSHOT_CI` overrides detection). `host`: this run's host,
-  the same value as `host` in each of its fingerprints; `null` when the run fingerprint is empty. The detected CI
-  vendor and git host are added later as new keys; readers must ignore unknown keys.
+- `ci`: `null` when this run was not on a CI (see CI detection), else `{"buildUrl", "provider",
+  "pullRequest"}` with sorted keys, each a string or `null` (`provider` is `null` for a CI of unknown
+  provider). `fork` and `repository` are not written. `host`: this run's host, the same value as
+  `host` in each of its fingerprints; `null` when the run fingerprint is empty. Readers must ignore
+  unknown keys.
 - `fingerprint`: the run's, as in the report.
 - `strayBaselineFiles`: stray baseline PNGs whose id is not listed in `screenshots`.
 - `screenshots`: every listed id, sorted by id (UTF-8 bytes). Each has `platform`, `device`,
@@ -338,12 +408,14 @@ first; they never change the status.
 
 ## manifest.json
 
-In the report directory; `accept` checks it against the branch. `ci`: whether the verify run was
-on CI; `accept` writes `local = !ci` into the images it applies. `accept` only touches the ids
+In the report directory; `accept` checks it against the branch. `ci`: `null` when the verify run was
+not on a CI, else the same object as in result.json; `accept` writes `local = (ci == null)` into the
+images it applies. A manifest whose `ci` is neither `null` nor an object is a usage error
+(`manifest.json has no ci`). `accept` only touches the ids
 listed here, so a baseline image of an `error` id is never deleted.
 
 ```json
-{"schema": 1, "commit": "…", "branch": "feature/x", "ci": true, "configHash": "8f36…",
+{"schema": 1, "commit": "…", "branch": "feature/x", "ci": {"buildUrl": "…", "provider": "github", "pullRequest": "7"}, "configHash": "8f36…",
  "fingerprint": {"android": {…}}, "ids": {"added": [], "changed": ["en-US/Pixel 9-Home"], "removed": []}}
 ```
 
@@ -359,7 +431,7 @@ directory or be a symbolic link, at most 2 GB extracted.
 - For each `changed` and `added` id of `manifest.json`: `images/new/<id>.png` is copied into the
   baseline; its `images` entry is the report's `result.json` screenshot entry (the fields of the
   baseline.json example), `fingerprint` the id of the manifest's fingerprint for its platform,
-  `local` = `!ci`. Each `removed` id: its PNG and entry are deleted. Nothing else changes;
+  `local` = `(ci == null)`. Each `removed` id: its PNG and entry are deleted. Nothing else changes;
   unreferenced fingerprints are dropped and baseline.json is rewritten canonically.
 - `--only` (comma-separated, repeatable) restricts to those ids.
 - When every selected change is `removed` (and there is at least one), a warning:
