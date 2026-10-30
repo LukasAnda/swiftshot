@@ -13,7 +13,11 @@ import java.util.Locale
  */
 class Flutter(private val o: Options, private val log: Log) {
     private val root = File(o.projectDir).absoluteFile.normalize()
-    private val output = File(o.output).let { if (it.isAbsolute) it else File(root, o.output) }.normalize()
+    val output: File = o.outputDir(flutter = true)
+    /** The font files the tester processes were given (the fingerprint's `fonts`). */
+    private val fontFiles = LinkedHashSet<String>()
+    /** The headless renderer the last pass used: impeller, else skia. */
+    private var headlessRenderer = "impeller"
 
     fun run(): Int {
         val pubspec = File(root, "pubspec.yaml").readText()
@@ -64,9 +68,11 @@ class Flutter(private val o: Options, private val log: Log) {
         /** One headless pass over the generated jobs: Impeller, else Skia; its results. */
         fun headless(): Pair<Int, List<Map<*, *>>> {
             var (status, out) = test(impeller = true)
+            headlessRenderer = "impeller"
             if (results().isEmpty() && status != 0) {
                 log.warn("flutter test could not render with Impeller here; rendering with Skia")
                 test(impeller = false).let { status = it.first; out = it.second }
+                headlessRenderer = "skia"
             }
             val results = results()
             for (r in results.filter { it["ok"] == true && it["warning"] != null }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["warning"]} (${r["script"]}:${r["line"]})")
@@ -119,7 +125,9 @@ class Flutter(private val o: Options, private val log: Log) {
             }
         }
         if (o.frame == "plain") frame(shots, devices, manifest)
-        report(shots, results.filter { it["ok"] != true })
+        // One fingerprint for the run: the exact iOS engine only when it rendered every device.
+        val renderer = if (iosExact && devices.all { it["platform"] == "ios" }) "exact-ios" else headlessRenderer
+        report(shots, results.filter { it["ok"] != true }, devices, manifest, Fingerprints.flutter(sdk, renderer, fontFiles))
         log.ok("${shots.size} screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
         return if (shots.isNotEmpty() && ok.size == results.size) 0 else 1
     }
@@ -244,7 +252,8 @@ class Flutter(private val o: Options, private val log: Log) {
                 "results" to File(dir, "${file(lang)}.results.jsonl").path, "manifest" to File(dir, "previews.json").path,
                 // iPhones and iPads render on the iOS engine: here only the components it needs measured.
                 "iosMeasureOnly" to iosExact,
-                "fonts" to fonts.forLanguage(lang, ios = devices.any { it["platform"] == "ios" }, android = devices.any { it["platform"] == "android" }),
+                "fonts" to fonts.forLanguage(lang, ios = devices.any { it["platform"] == "ios" }, android = devices.any { it["platform"] == "android" })
+                    .also { m -> m.values.forEach { fontFiles += it } },
             )
             File(dir, "${file(lang)}.json").writeText(Json.write(job, "  "))
             File(dir, "${file(lang)}_test.dart").writeText(
@@ -262,17 +271,39 @@ class Flutter(private val o: Options, private val log: Log) {
         }
     }
 
-    private fun report(ok: List<Map<*, *>>, failed: List<Map<*, *>>) {
-        val shots = ok.sortedWith(compareBy({ it["language"] as String }, { it["device"] as String }, { it["preview"] as String }, { it["appearance"] as String })).map { r ->
+    private fun report(ok: List<Map<*, *>>, failed: List<Map<*, *>>, devices: List<Map<String, Any?>>, manifest: List<Map<*, *>>, fingerprint: Map<String, Any?>) {
+        val ratios = devices.associate { (it["name"] as String) to (it["ratio"] as Number?)?.toDouble() }
+        val shots = ok.map { r ->
             val (w, h) = (r["size"] as String).split('x').map { it.toInt() }
-            linkedMapOf<String, Any?>("file" to File(r["file"] as String).relativeTo(output).path, "preview" to r["preview"], "device" to r["device"],
+            val file = File(r["file"] as String)
+            linkedMapOf<String, Any?>("file" to file.relativeTo(output).invariantSeparatorsPath, "id" to RunReport.id(output, file), "preview" to r["preview"], "device" to r["device"],
                 "language" to r["language"], "appearance" to r["appearance"], "fontScale" to r["fontScale"], "width" to w, "height" to h,
-                "millis" to r["millis"], "platform" to "flutter", "source" to "${r["script"]}:${r["line"]}")
+                "millis" to r["millis"], "platform" to "flutter", "source" to "${r["script"]}:${r["line"]}").apply { ratios[r["device"]]?.let { put("scale", it) } }
+        }.sortedWith(compareBy(CanonicalJson.utf8) { it["id"] as String })
+        val errors = failed.sortedWith(compareBy({ it["language"].toString() }, { it["device"].toString() }, { it["preview"].toString() })).map { r ->
+            val id = (r["file"] as String?)?.let { RunReport.idOrNull(output, File(it)) }
+            val message = r["error"]?.toString() ?: "failed"
+            if (id != null) linkedMapOf<String, Any?>("id" to id, "message" to message)
+            else linkedMapOf<String, Any?>("message" to "${r["preview"]} · ${r["device"]} · ${r["language"]}: $message")
         }
-        val errors = failed.map { "${it["preview"]} · ${it["device"]} · ${it["language"]}: ${it["error"]}" }
-        output.mkdirs()
-        File(output, "swiftshot-report.json").writeText(Json.write(linkedMapOf("platform" to "flutter", "totalSeconds" to log.seconds, "screenshots" to shots, "errors" to errors), "  ") + "\n")
+        RunReport.write(output, "flutter", log.seconds, shots, errors, scope(devices, manifest, shots), mapOf("flutter" to fingerprint))
         if (o.html) Gallery.write(output, shots, log.seconds)
+    }
+
+    /** The run's scope: the devices, languages, appearances and font scales asked for (flags, config, `screens` rules) ∪ rendered. */
+    internal fun scope(devices: List<Map<String, Any?>>, manifest: List<Map<*, *>>, shots: List<Map<String, Any?>>): Map<String, Any?> {
+        val b = ScopeBuilder(o.previews)
+        b.platforms += "flutter"
+        b.devices += devices.map { it["name"] as String }
+        for (r in o.screens) r.devices?.forEach { name ->
+            b.devices += AppleDevices.matching(name).map { it.name }.ifEmpty { runCatching { Devices.resolve(listOf(name)).map { it.name } }.getOrDefault(emptyList()) }
+        }
+        b.languages += o.languages.map { it.replace('_', '-') } + o.screens.flatMap { it.languages.orEmpty() }
+        b.appearances += o.appearances + o.screens.flatMap { it.appearances.orEmpty() }
+        b.fontScales += o.fontScales + o.screens.flatMap { it.fontScales.orEmpty() }
+        b.previews += manifest.mapNotNull { it["name"] as String? }.filter { n -> o.previews.isEmpty() || o.previews.any { glob(it).matches(n) } }
+        shots.forEach(b::shot)
+        return b.toJson()
     }
 
     companion object {

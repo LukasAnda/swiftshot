@@ -462,6 +462,39 @@ class RunnerPlanTest {
         for (tag in listOf("ar", "ar-EG", "he", "he-IL", "iw", "fa-IR", "ur", "ps", "sd", "ug", "yi", "dv", "ckb", "ar_SA")) assertTrue(r.rtl(tag), tag)
         for (tag in listOf("en-US", "de", "ja", "zh-Hans-CN", "sk", "arn", "hea")) assertFalse(r.rtl(tag), tag)
     }
+
+    @Test fun scopeIsRequestedMatrixAndRenderedValues() {
+        val m = module()
+        val previews = listOf(preview("Welcome"), preview("Stats"), preview("Stats Detail"), preview("Tablet Only", composable = "com.example.UiKt.TabletOnly"))
+        val r = runner("--previews", "Stats*,Tablet*", "--languages", "en-US,de-DE", "--screen", "Tablet*: devices=pixel_9 font_scales=1.3")
+        val shots = r.plan(m, previews).take(1).map { s ->
+            mapOf("platform" to "android", "module" to ":app", "device" to s.device.name, "language" to "fr-FR", "appearance" to "dark",
+                "preview" to s.preview.name, "fontScale" to 1.0)
+        }
+        val scope = r.scope(listOf(m, module(":feature")), mapOf(m to previews), shots, null)
+        assertEquals(listOf("android"), scope["platforms"])
+        assertEquals(listOf(":app", ":feature"), scope["modules"])
+        assertEquals(emptyList<String>(), scope["runtimes"])
+        assertEquals(listOf("Pixel 10 Pro", "Pixel 9", "Pixel Tablet"), scope["devices"])
+        assertEquals(listOf("de-DE", "en-US", "fr-FR"), scope["languages"])
+        assertEquals(listOf("dark", "light"), scope["appearances"])
+        assertEquals(listOf(1.0, 1.3), scope["fontScales"])
+        assertEquals(listOf("Stats", "Stats Detail", "Tablet Only"), scope["previews"])
+        assertEquals(listOf("Stats*", "Tablet*"), scope["previewFilter"])
+        assertNull(scope["textSizes"])
+    }
+
+    @Test fun scopeMergesTheIosRenderersScope() {
+        val r = runner("--previews", "Stats*")
+        val ios = mapOf("devices" to listOf("iPhone 17 Pro"), "runtimes" to listOf("26.0"), "textSizes" to listOf("default"),
+            "languages" to listOf("en-US"), "appearances" to listOf("light"), "previews" to listOf("Stats"))
+        val scope = r.scope(emptyList(), emptyMap(), emptyList(), ios)
+        assertEquals(listOf("ios"), scope["platforms"])
+        assertEquals(listOf("26.0"), scope["runtimes"])
+        assertEquals(listOf("default"), scope["textSizes"])
+        assertEquals(listOf("iPhone 17 Pro"), scope["devices"])
+        assertNull(scope["fontScales"])
+    }
 }
 
 class ModuleThemeTest {
@@ -485,4 +518,5 @@ class ModuleThemeTest {
         assertNull(module("""<manifest><application android:label="x"/></manifest>""").theme)
         assertNull(module(null).theme)
     }
+
 }
