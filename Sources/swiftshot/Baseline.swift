@@ -247,7 +247,8 @@ enum Baseline {
 
     /// Compares the run in `output` with `baseline`, writes the report directory and says what it found; the exit code.
     static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console,
-                       processEnv: [String: String] = [:], out: (String) -> Void = { print($0) }) throws -> Int32 {
+                       processEnv: [String: String] = [:], out: (String) -> Void = { print($0) },
+                       projectDir: URL? = nil, http: Http = URLSessionHttp()) throws -> Int32 {
         let start = Date()
         let v = try evaluate(output: output, baseline: baseline, report: report, config: config, env: env)
         for w in env.ci?.warnings ?? [] { log.warn(w) }
@@ -261,6 +262,7 @@ enum Baseline {
             }
         }
         NativeOutput.write(v, ci: env.ci, reportDir: report, env: processEnv, out: out, log: log)
+        PullRequestComment.post(Summary.markdown(v, ci: env.ci), ci: env.ci, env: processEnv, projectDir: projectDir, log: log, http: http)
         return v.exitCode
     }
 

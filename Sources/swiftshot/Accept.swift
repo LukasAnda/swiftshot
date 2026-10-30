@@ -341,6 +341,9 @@ enum Accept {
 /// `accept --from <url>`: a report zip over HTTP(S). The artifact token goes only to the host it was given for, never
 /// along a redirect to storage elsewhere; redirects are followed here (at most 10), not by URLSession.
 enum Download {
+    /// Hosts that are this machine: a token may go there over plain http.
+    static let loopback = ["localhost", "127.0.0.1", "[::1]", "::1"]
+
     private final class Receiver: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         let out: FileHandle
         let maxBytes: Int64
@@ -377,7 +380,7 @@ enum Download {
     static func fetch(_ url: String, to dest: URL, token: String?, maxBytes: Int64) throws {
         guard let origin = URL(string: url), let host = origin.host else { throw UsageError("--from \(url): not a valid URL") }
         // A bearer token in plain text is anyone's on the way; this machine's own server (tests, a local proxy) is no way.
-        if token != nil, origin.scheme?.lowercased() != "https", !["localhost", "127.0.0.1", "[::1]", "::1"].contains(host.lowercased()) {
+        if token != nil, origin.scheme?.lowercased() != "https", !loopback.contains(host.lowercased()) {
             throw UsageError("--from \(url): SWIFTSHOT_ARTIFACT_TOKEN is sent only over https; use an https URL or unset the token")
         }
         var current = origin

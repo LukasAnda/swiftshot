@@ -184,7 +184,7 @@ object Baseline {
     /** Compares the run in [output] with [baseline], writes the report directory and says what it found; the exit code. */
     fun verify(
         output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log,
-        processEnv: Map<String, String> = emptyMap(), out: PrintStream = System.out,
+        processEnv: Map<String, String> = emptyMap(), out: PrintStream = System.out, projectDir: File? = null, http: Http = JavaHttp,
     ): Int {
         val start = System.nanoTime()
         val v = evaluate(output, baseline, report, config, env)
@@ -197,6 +197,7 @@ object Baseline {
             else -> log.plain(line)
         }
         NativeOutput.write(v, env.ci, report, processEnv, out, log)
+        PullRequestComment.post(Summary.markdown(v, env.ci), env.ci, processEnv, projectDir, log, http)
         return v.exitCode
     }
 

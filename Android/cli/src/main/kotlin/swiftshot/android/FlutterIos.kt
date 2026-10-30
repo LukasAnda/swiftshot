@@ -19,7 +19,7 @@ class FlutterIos(private val o: Options, private val log: Log, private val root:
 
     /** Why the exact iOS renderer can't run here, or null when it can. */
     fun unavailable(): String? = when {
-        !Host.mac -> "not a Mac"
+        !Machine.mac -> "not a Mac"
         !ios.available -> "the iOS renderer (swiftshot) or Xcode is missing"
         !File(root, "ios/Runner.xcodeproj").isDirectory -> "the project has no ios/ folder (flutter create --platforms ios .)"
         else -> null

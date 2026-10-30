@@ -544,3 +544,44 @@ its variable; a write that fails is one warning and never changes the exit code.
   every timestamp 1980-01-01 00:00.
 - `gitlab`, `codemagic`, `circleci`, `jenkins`: nothing; their recipes point at `junit.xml` and the
   report directory.
+
+## Git host
+
+After the native CI output, `verify` comments its `summary.md` on the pull request. It needs
+`SWIFTSHOT_HOST_TOKEN`, a CI run for a pull request (`ci.pullRequest`) and a known host; without the
+token or the pull request it does nothing. The host comes from `git remote get-url origin` in the
+repository containing the project directory (`https://[user@]host[:port]/a/b[.git]`,
+`ssh://git@host[:port]/a/b[.git]`, `git@host:a/b[.git]`):
+
+| host | when | API | token header |
+|---|---|---|---|
+| `github` | `github.com`; or the host of `GITHUB_SERVER_URL` in GitHub Actions (GitHub Enterprise) | `https://api.github.com`; `GITHUB_API_URL` in Actions; else `https://<host>/api/v3` | `Authorization: Bearer <t>` |
+| `gitlab` | `gitlab.com`; or the host of `CI_API_V4_URL` | `CI_API_V4_URL` (when it is the same host), else `https://<host>/api/v4` | `PRIVATE-TOKEN: <t>` |
+| `bitbucket` | `bitbucket.org` | `https://api.bitbucket.org/2.0` | `Authorization: Bearer <t>`, or `Basic base64(<t>)` when `<t>` contains `:` (`email:api-token`) |
+
+`SWIFTSHOT_GIT_HOST` (`github`, `gitlab`, `bitbucket`) names the host kind, and `SWIFTSHOT_HOST_API` the
+API base, when the remote doesn't say (`SWIFTSHOT_HOST` is the renderer host of the fingerprint and is
+not used here). A GitLab project path keeps its subgroups and is URL-encoded in API paths. An unknown
+host sends nothing and prints one line (never the token). A GitLab job token can't write notes: use a
+project or personal access token with the `api` scope.
+
+The comment body is exactly `summary.md`, whose first line is `<!-- swiftshot -->`. The first comment
+whose text starts with that line is updated (GitHub `PATCH`, GitLab and Bitbucket `PUT`); else one is
+created. At most 10 pages of 100 comments are read.
+
+| host | list and create | update | text |
+|---|---|---|---|
+| `github` | `{api}/repos/{project}/issues/{pr}/comments?per_page=100&page=N` | `…/issues/comments/{id}` | `body` |
+| `gitlab` | `{api}/projects/{project, / as %2F}/merge_requests/{pr}/notes?per_page=100&page=N&sort=asc` | `…/notes/{id}` | `body` |
+| `bitbucket` | `{api}/repositories/{project}/pullrequests/{pr}/comments?pagelen=100&page=N` | `…/comments/{id}` | `content.raw` |
+
+The token is sent only over `https` (or to this machine) and never along a redirect: a 3xx is a
+failure, not followed. Any failure (a status other than 2xx, no reply, a reply that isn't the expected
+JSON, a non-https API) is one warning, `couldn't comment on the pull request (<host> <status>)`
+where status is the code, `no response` or `https only`; no reply body is printed and the exit code
+stays as it was.
+
+For `git push` (`accept --push`) the same token goes in `http.extraHeader`, never in a URL:
+`Authorization: Basic base64(<user>:<t>)` with user `x-access-token` (`github`), `oauth2` (`gitlab`;
+`gitlab-ci-token` when `<t>` is `CI_JOB_TOKEN`), `x-token-auth` (`bitbucket`; a token with `:` is used
+as it is).

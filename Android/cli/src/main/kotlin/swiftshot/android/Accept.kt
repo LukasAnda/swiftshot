@@ -26,7 +26,7 @@ object Accept {
     /** Download and extracted-zip size limit. */
     private const val MAX_BYTES = 2L * 1024 * 1024 * 1024
     private const val MAX_ENTRIES = 200_000
-    private val LOOPBACK = setOf("localhost", "127.0.0.1", "[::1]", "::1")
+    internal val LOOPBACK = setOf("localhost", "127.0.0.1", "[::1]", "::1")
 
     /** A refusal (exit 1): the report doesn't fit the branch, or git couldn't finish. */
     private class Refused(message: String) : Exception(message)
