@@ -16,10 +16,15 @@ and the JVM CLI) follow this page exactly and are tested against the fixtures in
   junit.xml
   index.html
   manifest.json
+  timings.json                        {"compareSeconds": 0.25}: how long the comparison took
   images/baseline/<id>.png            changed and removed
   images/new/<id>.png                 changed and added
   images/diff/<id>.png                changed
 ```
+
+`timings.json`: the seconds `verify` spent comparing and writing the report, to the millisecond. It
+differs between runs, so it is kept out of `result.json` (which stays byte-identical). With
+`totalSeconds` of `swiftshot-report.json` (the run) it gives the comparison's overhead.
 
 Relative `baseline_directory` and `report_directory` resolve against the current directory on the
 Mac (iOS; flags and swiftshot.json alike, as `output_directory`). On the JVM side a flag resolves

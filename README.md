@@ -169,6 +169,13 @@ Needs Flutter 3.35+ (widget previews) and a JDK 21+. See the
 
 `swiftshot list` prints the previews it found, `swiftshot devices` the devices.
 
+### Screenshot testing
+
+`swiftshot record` saves the screenshots as a baseline to commit, `swiftshot verify` renders and
+compares with it (exit 1 when something changed), and `swiftshot accept --from screenshots-report`
+takes intended changes into the baseline. See the
+[Screenshot testing](https://github.com/LukasAnda/swiftshot/wiki/Screenshot-testing) wiki page.
+
 ## CI
 
 iOS needs a Mac with Xcode and the runtimes you render; it runs on the free `macos-26` and

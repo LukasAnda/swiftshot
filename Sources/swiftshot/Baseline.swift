@@ -227,7 +227,9 @@ enum Baseline {
 
     /// Compares the run in `output` with `baseline`, writes the report directory and says what it found; the exit code.
     static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console) throws -> Int32 {
+        let start = Date()
         let v = try evaluate(output: output, baseline: baseline, report: report, config: config, env: env)
+        try BaselineReport.writeTimings(compareSeconds: Date().timeIntervalSince(start), report: report)
         for (kind, line) in BaselineReport.summary(v, report: report) {
             switch kind {
             case "warn": log.warn(line)

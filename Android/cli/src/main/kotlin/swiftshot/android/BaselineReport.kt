@@ -2,15 +2,20 @@ package swiftshot.android
 
 import java.io.File
 
-/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, and the console summary. */
+/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, timings.json, and the console summary. */
 object BaselineReport {
-    private val files = listOf("result.json", "manifest.json", "junit.xml")
+    private val files = listOf("result.json", "manifest.json", "junit.xml", "timings.json")
 
     /** Removes what an earlier verify wrote there (only its own files: the directory may be the user's). */
     fun clear(report: File) {
         File(report, "images").deleteRecursively()
         for (f in files) File(report, f).delete()
         report.mkdirs()
+    }
+
+    /** timings.json: how long the comparison took (not deterministic, so not part of result.json). */
+    fun writeTimings(compareSeconds: Double, report: File) {
+        File(report, "timings.json").writeText(CanonicalJson.pretty(mapOf("compareSeconds" to Math.round(compareSeconds * 1000) / 1000.0)))
     }
 
     fun write(v: Verification, report: File) {

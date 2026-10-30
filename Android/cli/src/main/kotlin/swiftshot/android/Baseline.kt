@@ -163,7 +163,9 @@ object Baseline {
 
     /** Compares the run in [output] with [baseline], writes the report directory and says what it found; the exit code. */
     fun verify(output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log): Int {
+        val start = System.nanoTime()
         val v = evaluate(output, baseline, report, config, env)
+        BaselineReport.writeTimings((System.nanoTime() - start) / 1e9, report)
         for ((kind, line) in BaselineReport.summary(v, report)) when (kind) {
             "warn" -> log.warn(line)
             "error" -> log.error(line)

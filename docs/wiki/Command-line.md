@@ -142,7 +142,7 @@ CI
 ```
 
 Exit code: 0 when every screenshot was rendered, non-zero otherwise. Errors are listed at the end of the run and in `swiftshot-report.json`.
-`verify` exits 0 (same), 1 (differences), 2 (errors) or 64 (usage error); `accept` 0, 1 (refused) or 64. See [[Baseline format]].
+`verify` exits 0 (same), 1 (differences), 2 (errors) or 64 (usage error); `accept` 0, 1 (refused) or 64. How to use them: [[Screenshot testing]]; the files: [[Baseline format]].
 
 ## Android
 
@@ -215,7 +215,7 @@ ACCEPT
   -v, --verbose
 ```
 
-The same exit codes as on iOS; `verify`, `record` and `accept` as above, see [[Baseline format]]. `swiftshot devices` lists every device with its size in px and dp
+The same exit codes as on iOS; `verify`, `record` and `accept` as above, see [[Screenshot testing]]. `swiftshot devices` lists every device with its size in px and dp
 and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs. Compose Multiplatform
 flags: [[Compose Multiplatform]]. In a Flutter project `--devices` also takes iPhones and iPads,
 see [[Flutter]].

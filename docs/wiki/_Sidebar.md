@@ -6,6 +6,7 @@
 - [[Flutter]]
 - [[Configuration]]
 - [[Command line]]
+- [[Screenshot testing]]
 - [[CI]]
 - [[Baseline format]]
 - [[Device frames]]
