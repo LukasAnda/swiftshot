@@ -10,6 +10,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.util.zip.ZipFile
 
@@ -56,6 +57,9 @@ object Accept {
             log.error(e.message ?: "refused"); 1
         } catch (e: IOException) {
             log.error(e.message ?: e.toString()); 1
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            log.error("accept was interrupted; the baseline may be partly updated (git status shows what changed)"); 1
         } finally {
             temps.forEach { it.deleteRecursively() }
         }
@@ -88,21 +92,28 @@ object Accept {
             log.ok("Nothing to accept: the report has no changed, added or removed screenshots${if (only != null) " among --only" else ""}")
             return 0
         }
-        write(baseline, selected)
+        val written = write(baseline, selected)
         val counts = listOf("changed", "added", "removed").map { k -> selected.count { it.kind == k } }
         val summary = message(counts[0], counts[1], counts[2])
         log.ok("${summary.removePrefix("Update screenshot baseline (").removeSuffix(")")} → $baseline")
         if (!push) return 0
 
-        val path = ":(literal)" + baseline.canonicalFile.relativeTo(File(top).canonicalFile).invariantSeparatorsPath.ifEmpty { "." }
-        git.must("add", "-A", "--", path)
-        if (git.run("diff", "--cached", "--quiet", "--", path).code == 0) {
+        // Only the files accept wrote or deleted: other edits in the baseline directory stay out of the commit.
+        val prefix = baseline.canonicalFile.relativeTo(File(top).canonicalFile).invariantSeparatorsPath.let { if (it.isEmpty()) "" else "$it/" }
+        val all = written.map { ":(literal)$prefix$it" }
+        // A deleted file git never knew can't be staged; leave it out.
+        val tracked = git.run("ls-files", "-z", "--", ":(literal)${prefix.ifEmpty { "." }}").out.split('\u0000').filter { it.isNotEmpty() }.toSet()
+        val specs = all.filter { File(top, it.removePrefix(":(literal)")).exists() || it.removePrefix(":(literal)") in tracked }.joinToString("\u0000")
+        git.must("add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul", input = specs)
+        val ours = all.map { it.removePrefix(":(literal)") }.toSet()
+        val staged = git.must("-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--no-renames", "-z").split('\u0000').filter { it in ours }
+        if (staged.isEmpty()) {
             log.ok("The baseline already matches the report; nothing to commit")
             return 0
         }
         val trailers = reports.map { it.commit }.distinct().joinToString("\n") { "$TRAILER: $it" }
         git.must("-c", "user.name=${identity.first}", "-c", "user.email=${identity.second}", "commit", "-q",
-            "--author", "${identity.first} <${identity.second}>", "-m", summary, "-m", trailers, "--", path)
+            "--author", "${identity.first} <${identity.second}>", "-m", summary, "-m", trailers, "--pathspec-from-file=-", "--pathspec-file-nul", input = staged.joinToString("\u0000") { ":(literal)$it" })
         val commit = git.out("rev-parse", "HEAD")
         val branch = git.out("symbolic-ref", "--short", "-q", "HEAD")
         val remote = branch?.let { git.out("config", "branch.$it.remote") }
@@ -115,13 +126,18 @@ object Accept {
     }
 
     /** The baseline files and baseline.json for [selected]; nothing else. */
-    private fun write(baseline: File, selected: List<Change>) {
+    /** Writes the images, then baseline.json (temp file + rename); the paths it wrote or deleted, relative to [baseline]. */
+    private fun write(baseline: File, selected: List<Change>): List<String> {
         val jsonFile = File(baseline, "baseline.json")
         val json = jsonFile.takeIf { it.isFile }?.let { runCatching { Json.parse(it.readText()) as Map<*, *> }.getOrElse { _ -> usage("$jsonFile is not valid JSON") } }
+        fun map(key: String): Map<*, *>? = json?.get(key)?.let { v ->
+            if (v !is Map<*, *> || v.values.any { it !is Map<*, *> }) usage("$jsonFile: \"$key\" must be an object of objects")
+            v
+        }
         val fingerprints = LinkedHashMap<String, Any?>()
-        (json?.get("fingerprints") as Map<*, *>?)?.forEach { (k, v) -> fingerprints[k.toString()] = v }
+        map("fingerprints")?.forEach { (k, v) -> fingerprints[k.toString()] = v }
         val images = LinkedHashMap<String, Any?>()
-        (json?.get("images") as Map<*, *>?)?.forEach { (k, v) -> images[k.toString()] = v }
+        map("images")?.forEach { (k, v) -> images[k.toString()] = v }
         val root = baseline.canonicalFile
         for (c in selected) if (!File(root, "${c.id}.png").canonicalFile.startsWith(root)) usage("${c.id}: outside the baseline directory")
         for (c in selected) {
@@ -141,7 +157,10 @@ object Accept {
         }
         val referenced = images.values.mapNotNull { (it as? Map<*, *>)?.get("fingerprint") as String? }.toSet()
         root.mkdirs()
-        jsonFile.writeText(CanonicalJson.pretty(mapOf("schema" to 1, "fingerprints" to fingerprints.filterKeys { it in referenced }, "images" to images)))
+        val tmp = File(root, ".baseline.json.tmp")
+        tmp.writeText(CanonicalJson.pretty(mapOf("schema" to 1, "fingerprints" to fingerprints.filterKeys { it in referenced }, "images" to images)))
+        Files.move(tmp.toPath(), File(root, "baseline.json").toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        return selected.map { "${it.id}.png" } + "baseline.json"
     }
 
     /** The report must be from HEAD, or from a commit that only accept commits follow. */
@@ -158,7 +177,7 @@ object Accept {
         }
         if (others.isNotEmpty()) throw Refused(
             "The report is from commit $commit, but HEAD is $head and ${others.size} commit${if (others.size == 1) "" else "s"} since then " +
-                "${if (others.size == 1) "is" else "are"} not baseline commits made by accept (${others.take(3).joinToString(", ") { it.take(12) }}${if (others.size > 3) ", …" else ""}). " +
+                "${if (others.size == 1) "is not a baseline commit" else "are not baseline commits"} made by accept (${others.take(3).joinToString(", ") { it.take(12) }}${if (others.size > 3) ", …" else ""}). " +
                 "Run verify on $head and accept that report.",
         )
     }
@@ -188,7 +207,16 @@ object Accept {
 
     /** Unzips [zip] into [dest]; the report is its root or its only top-level directory. */
     private fun extracted(zip: File, dest: File, label: String): File {
-        unzip(zip, dest, label)
+        try {
+            unzip(zip, dest, label)
+        } catch (e: UsageError) {
+            throw e
+        } catch (e: IOException) {
+            usage("$label: damaged zip file (${e.message ?: e})")
+        } catch (e: IllegalArgumentException) {
+            // ZipFile's "MALFORMED" entry names that aren't UTF-8.
+            usage("$label: damaged zip file or an entry name that isn't UTF-8 (${e.message ?: e})")
+        }
         if (File(dest, "manifest.json").isFile) return dest
         val dirs = dest.listFiles().orEmpty().filter { it.isDirectory }
         dirs.singleOrNull()?.takeIf { File(it, "manifest.json").isFile }?.let { return it }
@@ -349,7 +377,7 @@ object Accept {
     private class Result(val code: Int, val out: String, val err: String)
 
     private class Git(val dir: File, val env: Map<String, String>) {
-        fun run(vararg args: String): Result {
+        fun run(vararg args: String, input: String? = null): Result {
             val p = ProcessBuilder(listOf("git") + args).directory(dir)
             p.environment().putAll(env)
             p.environment()["GIT_TERMINAL_PROMPT"] = "0"
@@ -357,7 +385,7 @@ object Accept {
             try {
                 p.redirectError(err)
                 val proc = p.start()
-                proc.outputStream.close()
+                proc.outputStream.use { if (input != null) it.write(input.toByteArray()) }
                 val out = proc.inputStream.bufferedReader().readText()
                 return Result(proc.waitFor(), out, err.readText())
             } finally {
@@ -368,9 +396,9 @@ object Accept {
         /** Trimmed output, null on failure or no output. */
         fun out(vararg args: String): String? = run(*args).takeIf { it.code == 0 }?.out?.trim()?.takeIf { it.isNotEmpty() }
 
-        fun must(vararg args: String): String {
-            val r = run(*args)
-            if (r.code != 0) throw Refused("git ${args.first { !it.startsWith("-") && "=" !in it }} failed:\n${r.err.trim()}")
+        fun must(vararg args: String, input: String? = null): String {
+            val r = run(*args, input = input)
+            if (r.code != 0) throw Refused("git ${args.first { !it.startsWith("-") && "=" !in it }} failed:\n${(r.err + r.out).trim()}")
             return r.out
         }
     }

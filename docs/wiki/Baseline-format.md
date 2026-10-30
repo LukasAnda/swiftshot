@@ -39,7 +39,8 @@ Examples below are abbreviated and not in the sorted key order the files use.
 `accept`: 0 applied (or nothing to apply), 1 refused (the report's commit isn't HEAD and a commit
 other than an `accept` commit followed it, or `git push` failed), 64 usage error or invalid report
 (also: an `--only` id the reports don't list, the same id with different content in two reports, a
-zip entry leaving the report or a symbolic link, a `--from` that can't be read).
+zip entry leaving the report or a symbolic link, a damaged zip, a `--from` that can't be read, a
+malformed manifest.json, result.json or baseline.json). Interrupted: 1.
 
 ## Serialization
 
@@ -320,11 +321,13 @@ directory or be a symbolic link, at most 2 GB extracted.
 - `--only` (comma-separated, repeatable) restricts to those ids.
 - Stale: each report's `commit` must be HEAD, or every commit after it up to HEAD must carry the
   trailer `Swiftshot-Accept: <commit>` (any value), which `accept --push` writes.
-- `--push`: one commit of the baseline directory only, subject `Update screenshot baseline (3
+- baseline.json is written last (temp file, then rename).
+- `--push`: one commit of only the files accept wrote or deleted (other edits in the baseline
+  directory stay uncommitted), subject `Update screenshot baseline (3
   changed, 1 added)` (non-zero parts of changed, added, removed), a `Swiftshot-Accept: <commit>`
   trailer per report commit, author and committer `swiftshot <swiftshot@users.noreply.github.com>`
   unless `--author`; then `git push` to the branch's upstream, else `origin HEAD`, never forced.
-  Nothing to apply or nothing changed: no commit.
+  Nothing to apply, or none of those files changed: no commit.
 
 ## junit.xml
 

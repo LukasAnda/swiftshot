@@ -359,4 +359,81 @@ class AcceptTest {
         assertEquals(64, cli(listOf("accept", "--project-dir", dir.path), Log(false)))
         assertFailsWith<IllegalArgumentException> { Options.parse(listOf("run", "--project-dir", dir.path, "--push")) }
     }
+
+    private fun remote() {
+        val remote = File(tmp, "remote.git")
+        git(tmp, "init", "-q", "--bare", "-b", "main", remote.path)
+        git(repo, "remote", "add", "origin", remote.path)
+        git(repo, "push", "-q", "-u", "origin", "main")
+    }
+
+    @Test fun pushCommitsOnlyWhatAcceptWrote() {
+        repoWith("changed-pixels")
+        remote()
+        val verified = head()
+        File(baseline, "en-US/Pixel 9-Settings.png").appendBytes(byteArrayOf(1))
+        File(baseline, "en-US/Pixel 9-Stray.png").writeBytes(byteArrayOf(2))
+        assertEquals(0, accept(report("changed-pixels"), push = true))
+        assertEquals(1, git(repo, "rev-list", "--count", "$verified..HEAD").toInt())
+        assertEquals(setOf("screenshots-baseline/baseline.json", "screenshots-baseline/en-US/Pixel 9-Home.png"),
+            git(repo, "-c", "core.quotePath=false", "show", "--name-only", "--format=", "HEAD").lines().toSet())
+        assertEquals(setOf("M \"screenshots-baseline/en-US/Pixel 9-Settings.png\"", "?? \"screenshots-baseline/en-US/Pixel 9-Stray.png\""),
+            clean().lines().map { it.trim() }.toSet())
+        // Accepting it again with the baseline still dirty: nothing of accept's changed, so no commit.
+        assertEquals(0, accept(report("changed-pixels", commit = verified, name = "again"), push = true))
+        assertEquals(1, git(repo, "rev-list", "--count", "$verified..HEAD").toInt())
+    }
+
+    @Test fun pushWithARemovedImageGitNeverTracked() {
+        repoWith("removed")
+        remote()
+        git(repo, "rm", "-q", "--cached", "screenshots-baseline/en-US/Pixel 9-Legacy.png")
+        git(repo, "commit", "-qm", "untrack")
+        git(repo, "push", "-q")
+        assertEquals(0, accept(report("removed"), push = true))
+        assertEquals("screenshots-baseline/baseline.json", git(repo, "show", "--name-only", "--format=", "HEAD"))
+    }
+
+    @Test fun baselineJsonIsWrittenWithoutLeftovers() {
+        repoWith("changed-pixels")
+        assertEquals(0, accept(report("changed-pixels")))
+        assertEquals(listOf("baseline.json", "en-US"), baseline.list()!!.sorted())
+    }
+
+    @Test fun malformedBaselineJsonIsAUsageErrorNamingIt() {
+        repoWith("changed-pixels")
+        File(baseline, "baseline.json").writeText("""{"fingerprints": {}, "images": [], "schema": 1}""")
+        git(repo, "commit", "-qam", "broken")
+        assertEquals(64, accept(report("changed-pixels")))
+        assertContains(errors.toString(), "baseline.json")
+        assertEquals("", clean())
+    }
+
+    @Test fun malformedResultJsonIsAUsageErrorNamingIt() {
+        repoWith("changed-pixels")
+        val r = report("changed-pixels")
+        File(r, "result.json").writeText("[1]")
+        assertEquals(64, accept(r))
+        assertContains(errors.toString(), "result.json")
+    }
+
+    @Test fun damagedZipsAreUsageErrors() {
+        repoWith("changed-pixels")
+        val good = zip(report("changed-pixels"), File(tmp, "good.zip")).readBytes()
+        // Truncated: no central directory.
+        assertEquals(64, accept(File(tmp, "cut.zip").apply { writeBytes(good.copyOf(good.size / 2)) }))
+        // Garbage.
+        assertEquals(64, accept(File(tmp, "junk.zip").apply { writeBytes("PK not really".toByteArray()) }))
+        // Damaged compressed data: the first entry's bytes after its local header.
+        val bad = good.copyOf()
+        for (k in 60 until 120) bad[k] = (bad[k].toInt() xor 0x5a).toByte()
+        assertEquals(64, accept(File(tmp, "bad.zip").apply { writeBytes(bad) }))
+        // An entry name that isn't UTF-8.
+        val named = zip(report("changed-pixels", name = "n"), File(tmp, "named.zip"), extra = listOf("aXb" to byteArrayOf(1))).readBytes()
+        val marker = "aXb".toByteArray()
+        for (k in 0..named.size - 3) if (named[k] == marker[0] && named[k + 1] == marker[1] && named[k + 2] == marker[2]) named[k + 1] = 0xff.toByte()
+        assertEquals(64, accept(File(tmp, "named.zip").apply { writeBytes(named) }))
+        assertFalse(errors.toString().contains("\tat "), "no stack traces")
+        assertEquals("", clean())
+    }
 }
