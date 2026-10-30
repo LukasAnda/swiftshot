@@ -1,0 +1,71 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "iPhone 17 Pro"
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [],
+    "platforms": [
+      "ios"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Rgb Changed",
+      "Rgb Filters"
+    ],
+    "runtimes": [
+      "26.0"
+    ],
+    "textSizes": [
+      "default"
+    ]
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Rgb Changed.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Rgb Changed",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Rgb Changed",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Rgb Filters.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Rgb Filters",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Rgb Filters",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    }
+  ],
+  "timings": {},
+  "totalSeconds": 1.5
+}

@@ -1,0 +1,67 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 1,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "macos-arm64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/iPhone 17 Pro-Rgb Changed.png",
+      "boxes": [
+        [
+          4,
+          4,
+          3,
+          3
+        ]
+      ],
+      "device": "iPhone 17 Pro",
+      "diff": "images/diff/en-US/iPhone 17 Pro-Rgb Changed.png",
+      "id": "en-US/iPhone 17 Pro-Rgb Changed",
+      "language": "en-US",
+      "new": "images/new/en-US/iPhone 17 Pro-Rgb Changed.png",
+      "pixels": 9,
+      "platform": "ios",
+      "preview": "Rgb Changed",
+      "reason": "pixels",
+      "runtime": "26.0",
+      "status": "changed",
+      "textSize": "default"
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "id": "en-US/iPhone 17 Pro-Rgb Filters",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Rgb Filters",
+      "runtime": "26.0",
+      "status": "unchanged",
+      "textSize": "default"
+    }
+  ],
+  "status": "failed",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

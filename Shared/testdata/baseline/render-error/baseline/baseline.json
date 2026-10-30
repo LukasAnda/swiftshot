@@ -17,7 +17,7 @@
       "fingerprint": "241d8bd3b005",
       "fontScale": 1,
       "language": "en-US",
-      "local": false,
+      "local": true,
       "module": ":app",
       "platform": "android",
       "preview": "Broken"

@@ -29,9 +29,10 @@ W, H = 40, 80
 def num(v):
     if isinstance(v, bool):
         return "true" if v else "false"
+    assert abs(v) < 1e15, v
     if isinstance(v, int):
         return str(v)
-    if v == math.floor(v) and abs(v) < 1e15:
+    if v == math.floor(v):
         return str(int(v))
     r = repr(v)
     assert "e" not in r and "E" not in r, r
@@ -118,6 +119,106 @@ def encode(img, level=6, text=None):
     if text:
         out += chunk(b"tEXt", text)
     return out + chunk(b"IDAT", zlib.compress(raw, level)) + chunk(b"IEND", b"")
+
+
+def filtered(f, row, prev, bpp):
+    out = bytearray(len(row))
+    for i in range(len(row)):
+        a = row[i - bpp] if i >= bpp else 0
+        b = prev[i]
+        c = prev[i - bpp] if i >= bpp else 0
+        if f == 0:
+            pred = 0
+        elif f == 1:
+            pred = a
+        elif f == 2:
+            pred = b
+        elif f == 3:
+            pred = (a + b) // 2
+        else:
+            pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+            pred = a if pa <= pb and pa <= pc else b if pb <= pc else c
+        out[i] = (row[i] - pred) & 255
+    return bytes(out)
+
+
+def encode_with(img, color_type=6, bit_depth=8, filters=(0,), idats=1):
+    """Non-canonical encodings for decoder tests: RGB/RGBA, 8/16-bit, per-row filters, split IDAT."""
+    w, h, px = img
+    channels = 4 if color_type == 6 else 3
+    bpp = channels * bit_depth // 8
+    raw, prev = bytearray(), bytes(w * bpp)
+    for y in range(h):
+        row = bytearray()
+        for x in range(w):
+            for k in range(channels):
+                v = px[(y * w + x) * 4 + k]
+                row += bytes([v]) if bit_depth == 8 else struct.pack(">H", v * 257)
+        f = filters[y % len(filters)]
+        raw.append(f)
+        raw += filtered(f, row, prev, bpp)
+        prev = bytes(row)
+    z = zlib.compress(bytes(raw), 6)
+    cut = [len(z) * i // idats for i in range(idats + 1)]
+    out = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, bit_depth, color_type, 0, 0, 0))
+    for i in range(idats):
+        out += chunk(b"IDAT", z[cut[i]:cut[i + 1]])
+    return out + chunk(b"IEND", b"")
+
+
+def encode_palette(w, h, rgb):
+    """A one-colour palette PNG (colour type 3): unsupported by the comparison."""
+    raw = b"".join(b"\x00" + bytes(w) for _ in range(h))
+    out = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 3, 0, 0, 0))
+    return out + chunk(b"PLTE", bytes(rgb)) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
+
+
+class Unsupported(Exception):
+    pass
+
+
+def png_size(data):
+    return list(struct.unpack(">II", data[16:24]))
+
+
+def decode(data):
+    """The comparison's decoder: 8-bit RGB or RGBA, no interlace, any filter; samples as stored."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise Unsupported()
+    i, idat, ihdr = 8, b"", None
+    while i < len(data):
+        n, = struct.unpack(">I", data[i:i + 4])
+        kind, body = data[i + 4:i + 8], data[i + 8:i + 8 + n]
+        i += 12 + n
+        if kind == b"IHDR":
+            ihdr = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat += body
+    w, h, depth, ctype, _, _, interlace = ihdr
+    if depth != 8 or ctype not in (2, 6) or interlace != 0:
+        raise Unsupported()
+    bpp = 4 if ctype == 6 else 3
+    raw, prev, px, o = zlib.decompress(idat), bytearray(w * bpp), bytearray(), 0
+    for y in range(h):
+        f, row = raw[o], bytearray(raw[o + 1:o + 1 + w * bpp])
+        o += 1 + w * bpp
+        for x in range(len(row)):
+            a = row[x - bpp] if x >= bpp else 0
+            b = prev[x]
+            c = prev[x - bpp] if x >= bpp else 0
+            if f == 1:
+                row[x] = (row[x] + a) & 255
+            elif f == 2:
+                row[x] = (row[x] + b) & 255
+            elif f == 3:
+                row[x] = (row[x] + (a + b) // 2) & 255
+            elif f == 4:
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                row[x] = (row[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        for x in range(w):
+            px += row[x * bpp:x * bpp + 3] + (row[x * bpp + 3:x * bpp + 4] if bpp == 4 else b"\xff")
+        prev = row
+    return [w, h, px]
 
 
 def base(seed, w=W, h=H):
@@ -230,9 +331,13 @@ def boxes(mask):
     return sorted(out, key=lambda r: (r[1], r[0], r[2], r[3]))
 
 
+def ascii_lower(s):
+    return "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in s)
+
+
 def glob(pattern, name):
-    parts = pattern.lower().split("*")
-    s = name.lower()
+    parts = ascii_lower(pattern).split("*")
+    s = ascii_lower(name)
     if len(parts) == 1:
         return s == parts[0]
     if not s.startswith(parts[0]) or not s.endswith(parts[-1]) or len(s) < len(parts[0]) + len(parts[-1]):
@@ -331,39 +436,49 @@ def xml_attr(s):
 def verify(case):
     """The reference implementation of the format: returns (result, junit, manifest)."""
     report, baseline, config = case["report"], case["baseline_json"], case["config"]
+    bfiles, ofiles = case["baseline_files"], case["output_files"]
+    listed = baseline["images"]
     run_fps = report["fingerprint"]
     scope = report["scope"]
     out_imgs = {s["id"]: s for s in report["screenshots"]}
     failed = {e["id"]: e["message"] for e in report["errors"] if "id" in e}
     unattributed = [e for e in report["errors"] if "id" not in e]
+    stray = {sid for sid in bfiles if sid not in listed}
     entries, compared_fps, local = [], set(), False
-    for sid in sorted(set(out_imgs) | set(baseline["images"]) | set(failed), key=key_order):
-        b = baseline["images"].get(sid)
+    for sid in sorted(set(out_imgs) | set(listed) | set(failed) | (stray & set(out_imgs)), key=key_order):
+        b = listed.get(sid)
         o = out_imgs.get(sid)
-        if sid in failed:
-            e = dict(describe(b) if b else {}, id=sid, status="error", message=failed[sid])
-            entries.append(e)
+        if o is None and sid not in failed and (not in_scope(b, scope) or unattributed):
             continue
         if b is not None:
-            if o is None and (not in_scope(b, scope) or unattributed):
-                continue
             compared_fps.add(b["fingerprint"])
             local = local or b["local"]
-        if o is None:
-            e = dict(describe(b), id=sid, status="removed", baseline="images/baseline/%s.png" % sid)
+        e = dict(describe(o) if o else describe(b) if b else {}, id=sid)
+        err = (failed.get(sid)
+               or (o is not None and sid not in ofiles and "output image missing")
+               or (b is not None and sid not in bfiles and "baseline image missing")
+               or (b is None and sid in bfiles and "baseline image not in baseline.json"))
+        if not err and o is not None and b is not None and bfiles[sid] != ofiles[sid]:
+            try:
+                bi, ni = decode(bfiles[sid]), decode(ofiles[sid])
+            except Unsupported:
+                err = "unsupported PNG"
+        if err:
+            e.update(status="error", message=err)
             entries.append(e)
             continue
-        e = dict(describe(o), id=sid)
+        if o is None:
+            e.update(status="removed", baseline="images/baseline/%s.png" % sid)
+            entries.append(e)
+            continue
         if b is None:
             e.update(status="added", new="images/new/%s.png" % sid)
             entries.append(e)
             continue
-        bb, nb = case["baseline_png"][sid], case["output_png"][sid]
-        if bb == nb:
+        if bfiles[sid] == ofiles[sid]:
             e["status"] = "unchanged"
             entries.append(e)
             continue
-        bi, ni = case["baseline_img"][sid], case["output_img"][sid]
         pixels_tol, delta, regions = tolerance_for(config, o["preview"], run_fps[o["platform"]]["mode"])
         mask = diff_mask(bi, ni, delta, regions, o["scale"])
         sized = bi[:2] != ni[:2]
@@ -390,8 +505,9 @@ def verify(case):
     status = "error" if errors else "failed" if counts["changed"] + counts["added"] + counts["removed"] else "passed"
     result = {
         "schema": 1, "status": status, "counts": counts, "commit": COMMIT, "branch": BRANCH, "version": VERSION,
+        "ci": CI, "host": run_fps[min(run_fps)]["host"] if run_fps else None,
         "fingerprint": run_fps, "fingerprintMismatch": sorted(mism, key=key_order), "localBaseline": local,
-        "screenshots": entries, "errors": errors,
+        "screenshots": entries, "errors": errors, "strayBaselineFiles": len(stray - set(out_imgs)),
     }
     manifest = {
         "schema": 1, "commit": COMMIT, "branch": BRANCH, "ci": CI, "configHash": sha(compact(normalized(config))),
@@ -436,10 +552,11 @@ FP = {
 }
 
 
-def ios(preview, appearance="light", device="iPhone 17 Pro", language="en-US", text_size=None, suffix=False):
+def ios(preview, appearance="light", device="iPhone 17 Pro", language="en-US", text_size=None, suffix=False, runtime="26.0", runtime_suffix=False):
     name = "%s-%s" % (device, preview) + ("-" + appearance if suffix else "") + ("-" + text_size if text_size else "")
+    name += "-iOS" + runtime if runtime_suffix else ""
     m = {"platform": "ios", "device": device, "language": language, "appearance": appearance,
-         "preview": preview, "runtime": "26.0", "id": "%s/%s" % (language, name), "scale": 3}
+         "preview": preview, "runtime": runtime, "id": "%s/%s" % (language, name), "scale": 3}
     if text_size:
         m["textSize"] = text_size
     return m
@@ -459,9 +576,10 @@ def flutter(preview, **kw):
     return m
 
 
-def report_entry(m, img):
+def report_entry(m, png):
     """A swiftshot-report.json screenshot, in the shape its platform's run writes."""
-    e = {"file": m["id"] + ".png", "id": m["id"], "width": img[0], "height": img[1], "scale": m["scale"]}
+    w, h = png_size(png)
+    e = {"file": m["id"] + ".png", "id": m["id"], "width": w, "height": h, "scale": m["scale"]}
     for k in DESCRIPTIVE:
         if k in m:
             e[k] = m[k]
@@ -476,7 +594,8 @@ def report_entry(m, img):
     return e
 
 
-def scope_of(metas, platforms=None, preview_filter=None, **extra):
+def scope_of(metas, platforms=None, preview_filter=None, requested=None, **extra):
+    """The rendered values, plus `requested` (the asked-for matrix, rendered or not)."""
     s = {
         "platforms": platforms or sorted({m["platform"] for m in metas}),
         "devices": sorted({m["device"] for m in metas}),
@@ -491,6 +610,8 @@ def scope_of(metas, platforms=None, preview_filter=None, **extra):
         s["textSizes"] = sorted({m.get("textSize", "default") for m in metas})
     if any("fontScale" in m for m in metas):
         s["fontScales"] = sorted({m["fontScale"] for m in metas if "fontScale" in m})
+    for k, values in (requested or {}).items():
+        s[k] = sorted(set(s.get(k, [])) | set(values))
     s.update(extra)
     return s
 
@@ -504,8 +625,14 @@ def baseline_entry(m, fp, is_local=False):
     return e
 
 
-def case(name, baseline, output, config=None, scope=None, errors=None, run_fp=None, base_fps=None, local=(), raw_output=None):
-    """baseline/output: lists of (meta, image). run_fp/base_fps: platform -> fingerprint."""
+def png(item):
+    return item if isinstance(item, bytes) else encode(item)
+
+
+def case(name, baseline, output, config=None, scope=None, requested=None, errors=None, run_fp=None, base_fps=None,
+         local=(), missing_baseline=(), missing_output=(), stray=()):
+    """baseline/output: lists of (meta, image or PNG bytes). run_fp/base_fps: platform -> fingerprint.
+    missing_*: ids listed without a PNG on disk; stray: (id, image) PNGs not in baseline.json."""
     run_fp = run_fp or {p: FP[p] for p in sorted({m["platform"] for m, _ in output})}
     base_fps = base_fps or FP
     metas = [m for m, _ in output]
@@ -513,8 +640,8 @@ def case(name, baseline, output, config=None, scope=None, errors=None, run_fp=No
     report = {
         "errors": errors or [],
         "fingerprint": run_fp,
-        "scope": scope or scope_of(metas, platforms=plats),
-        "screenshots": sorted((report_entry(m, img) for m, img in output), key=lambda e: key_order(e["id"])),
+        "scope": scope or scope_of(metas, platforms=plats, requested=requested),
+        "screenshots": sorted((report_entry(m, png(img)) for m, img in output), key=lambda e: key_order(e["id"])),
         "totalSeconds": 1.5,
     }
     if plats == ["ios"]:
@@ -524,14 +651,11 @@ def case(name, baseline, output, config=None, scope=None, errors=None, run_fp=No
     fps = {fingerprint_id(base_fps[m["platform"]]): base_fps[m["platform"]] for m, _ in baseline}
     bjson = {"schema": 1, "fingerprints": fps,
              "images": {m["id"]: baseline_entry(m, base_fps[m["platform"]], m["id"] in local) for m, _ in baseline}}
-    c = {
-        "name": name, "report": report, "baseline_json": bjson, "config": config or {},
-        "baseline_img": {m["id"]: img for m, img in baseline}, "output_img": {m["id"]: img for m, img in output},
-    }
-    c["baseline_png"] = {k: encode(v) for k, v in c["baseline_img"].items()}
-    c["output_png"] = {k: encode(v) for k, v in c["output_img"].items()}
-    c["output_png"].update(raw_output or {})
-    return c
+    bfiles = {m["id"]: png(img) for m, img in baseline if m["id"] not in missing_baseline}
+    bfiles.update({sid: png(img) for sid, img in stray})
+    ofiles = {m["id"]: png(img) for m, img in output if m["id"] not in missing_output}
+    return {"name": name, "report": report, "baseline_json": bjson, "config": config or {},
+            "baseline_files": bfiles, "output_files": ofiles}
 
 
 def cases():
@@ -572,8 +696,14 @@ def cases():
     # Same pixels, PNG written with zlib level 1 and a tEXt chunk.
     b = base(3)
     m = ios("Home")
-    out.append(case("same-pixels-different-bytes", [(m, b)], [(m, b)],
-                    raw_output={m["id"]: encode(b, level=1, text=b"Software\x00other encoder")}))
+    out.append(case("same-pixels-different-bytes", [(m, b)], [(m, encode(b, level=1, text=b"Software\x00other encoder"))]))
+
+    # The decoder: RGB (colour type 2) with filters 1-4 by row and two IDAT chunks, against the
+    # canonical RGBA baseline. Same pixels -> unchanged; a 3x3 edit -> 9 pixels.
+    mixed = dict(color_type=2, filters=(1, 2, 3, 4), idats=2)
+    out.append(case("png-decoding", [(ios("Rgb Filters"), base(1)), (ios("Rgb Changed"), base(2))],
+                    [(ios("Rgb Filters"), encode_with(base(1), **mixed)),
+                     (ios("Rgb Changed"), encode_with(fill(copy(base(2)), [4, 4, 3, 3]), **mixed))]))
 
     # Global {pixels 5, max_channel_delta 1}; previews matching "clock*" replace it with
     # {max_channel_delta 2} (pixels 0). Glob is case-insensitive.
@@ -614,7 +744,8 @@ def cases():
     # Render errors with ids: status error (exit 2), never removed, also for a shot with no
     # baseline image (JUnit classname "swiftshot" then).
     imgs = [(android("Home"), base(1))]
-    out.append(case("render-error", imgs + [(android("Broken"), base(2))], imgs,
+    # Broken's baseline image is local: error entries count for localBaseline.
+    out.append(case("render-error", imgs + [(android("Broken"), base(2))], imgs, local={"en-US/Pixel 9-Broken"},
                     errors=[{"id": "en-US/Pixel 9-Broken", "message": "IllegalStateException: boom"},
                             {"id": "en-US/Pixel 9-New", "message": "Timed out after 60 s"}]))
 
@@ -624,6 +755,37 @@ def cases():
 
     # A --modules :app run: :feature's images are out of scope; :app's missing one is removed.
     out.append(case("module-filter", imgs + [(android("Legacy"), base(2)), (android("Detail", module=":feature"), base(3))], imgs))
+
+    # One problem per id, plus precedence: render error > output image missing > baseline image
+    # missing > not in baseline.json > unsupported PNG. A stray baseline PNG whose id the run
+    # didn't produce is only counted (strayBaselineFiles). Byte-equal files never get decoded.
+    a = lambda p: android(p)
+    sixteen = encode_with(base(6), bit_depth=16)
+    palette = encode_palette(W, H, (10, 20, 30))
+    out.append(case("comparison-errors",
+                    [(a("Missing Baseline"), base(1)), (a("Missing Output"), base(2)), (a("Both Missing"), base(3)),
+                     (a("Sixteen Bit"), base(6)), (a("Palette Same"), palette), (a("Gone"), base(7)),
+                     (a("Render And Missing"), base(8))],
+                    [(a("Missing Baseline"), base(1)), (a("Missing Output"), base(2)), (a("Both Missing"), base(3)),
+                     (a("Stray"), base(4)), (a("Sixteen Bit"), sixteen), (a("Palette Same"), palette)],
+                    missing_baseline={a("Missing Baseline")["id"], a("Both Missing")["id"], a("Gone")["id"], a("Render And Missing")["id"]},
+                    missing_output={a("Missing Output")["id"], a("Both Missing")["id"]},
+                    stray=[(a("Stray")["id"], base(4)), (a("Stray Old")["id"], base(5))],
+                    errors=[{"id": a("Render And Missing")["id"], "message": "IllegalStateException: boom"}]))
+
+    # Scope = requested matrix + rendered values: "Tablet Home" (the last preview on Pixel Tablet,
+    # through a per-preview `devices` rule) was deleted; Pixel Tablet is still requested, so its
+    # baseline image is removed.
+    imgs = [(android("Home"), base(1))]
+    out.append(case("deleted-preview", imgs + [(android("Tablet Home", device="Pixel Tablet"), base(2))], imgs,
+                    requested={"devices": ["Pixel 9", "Pixel Tablet"]}))
+
+    # Font scale alone and runtime alone exclude: an Android image at 1.3x (run: [1]) and an iOS
+    # image on runtime 18.0 (run: ["26.0"]) are not reported.
+    imgs = [(android("Home"), base(1)), (ios("Home"), base(2))]
+    out.append(case("scope-scale-runtime",
+                    imgs + [(android("Home", font_scale=1.3), base(3)), (ios("Home", runtime="18.0", runtime_suffix=True), base(4))],
+                    imgs))
 
     # --mode device without a configured tolerance: max_channel_delta 1.
     dev = {"ios": dict(FP["ios"], mode="device")}
@@ -642,6 +804,8 @@ KNOWN = {
                   "en-US/Pixel 9-Clock": ("unchanged", None, None), "en-US/Pixel 9-Clock Large": ("changed", 2, [[20, 70, 2, 1]])},
     "ignore-region": {"en-US/Pixel 9-Feed-light": ("changed", 32, [[10, 50, 8, 6]]), "en-US/Pixel 9-Feed-dark": ("unchanged", None, None)},
     "split-run-android": {"en-US/Pixel 9-Settings": ("changed", 1, [[0, 0, 1, 1]])},
+    "png-decoding": {"en-US/iPhone 17 Pro-Rgb Filters": ("unchanged", None, None),
+                     "en-US/iPhone 17 Pro-Rgb Changed": ("changed", 9, [[4, 4, 3, 3]])},
     "device-mode": {"en-US/iPhone 17 Pro-Glass": ("unchanged", None, None), "en-US/iPhone 17 Pro-Blur": ("changed", 3, [[0, 0, 3, 1]])},
 }
 
@@ -669,10 +833,10 @@ def main():
         d = os.path.join(ROOT, c["name"])
         for sub in ("baseline", "output"):
             shutil.rmtree(os.path.join(d, sub), ignore_errors=True)
-        for sid, png in c["baseline_png"].items():
-            write(os.path.join(d, "baseline", sid + ".png"), png)
-        for sid, png in c["output_png"].items():
-            write(os.path.join(d, "output", sid + ".png"), png)
+        for sid, data in c["baseline_files"].items():
+            write(os.path.join(d, "baseline", sid + ".png"), data)
+        for sid, data in c["output_files"].items():
+            write(os.path.join(d, "output", sid + ".png"), data)
         write(os.path.join(d, "baseline", "baseline.json"), pretty(c["baseline_json"]))
         write(os.path.join(d, "output", "swiftshot-report.json"), pretty(c["report"]))
         write(os.path.join(d, "config.json"), pretty(c["config"]))

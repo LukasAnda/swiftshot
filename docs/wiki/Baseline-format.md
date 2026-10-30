@@ -47,7 +47,8 @@ Examples below are abbreviated and not in the sorted key order the files use.
 - Strings: escape `"` `\` as `\"` `\\`, LF CR TAB as `\n` `\r` `\t`, other characters below
   U+0020 as `\u00xx` (lowercase hex). Nothing else is escaped (not `/`, not non-ASCII).
 - Numbers: an integral value is written as an integer (`1.0` → `1`); others in the shortest
-  decimal form that round-trips, never with an exponent (`2.625`, `1.3`).
+  decimal form that round-trips, never with an exponent (`2.625`, `1.3`). Magnitudes of 1e15 and
+  above don't occur in these files (implementations may reject them).
 - Arrays of ids or messages are sorted by UTF-8 bytes unless stated otherwise.
 
 **Hash**: lowercase hex SHA-256 of the compact JSON's UTF-8 bytes.
@@ -79,11 +80,16 @@ The run report keeps its current keys and gains:
    "textSizes": ["default"], "fontScales": [1, 1.3], "previews": ["Home", "Settings"],
    "previewFilter": ["Home*"]}
   ```
-  `modules`: the Gradle paths rendered (Android, desktop), `runtimes`: the iOS runtime versions
-  rendered; both always present, `[]` when they don't apply. `textSizes` when iOS was rendered
-  (`"default"` = the device's own), `fontScales` when Android, desktop or Flutter was. `previews`:
-  the preview names the run found after filters (informational).
-  `previewFilter`: the `--previews` globs, `[]` when none. All lists sorted (`fontScales` by value).
+  Each list is the **requested matrix ∪ the values actually rendered**. Requested: the platforms,
+  Gradle modules (Android, desktop), devices, languages, appearances, font scales / text sizes and
+  iOS runtime versions the run selected, from flags, the config's global lists and every value
+  named in a `screens` rule (resolved: `"ios_versions": ["26"]` → the installed `26.x` versions).
+  A selected value counts even when it rendered nothing (a module with no previews, a device only
+  a deleted preview used). `modules` and `runtimes` are always present, `[]` when they don't
+  apply. `textSizes` when iOS was in the run (`"default"` = the device's own), `fontScales` when
+  Android, desktop or Flutter was. `previews`: the preview names the run found after filters
+  (informational). `previewFilter`: the `--previews` globs, `[]` when none. All lists sorted
+  (`fontScales` by value).
 - Per screenshot: `id`, `platform` (`ios`, `android`, `desktop`, `flutter`) and `scale` (pixels per
   point/dp, e.g. `3`, `2.625`). Existing per-screenshot keys used here: `preview`, `device`,
   `language`, `appearance`, `module` (Android, desktop), `fontScale` (Android, desktop, Flutter),
@@ -104,15 +110,17 @@ directory is not listed.
 | `swiftshot` | all | version |
 | `mode` | all | `no-boot`, `device` (iOS); `headless` (Android, desktop, Flutter); `exact-ios` (Flutter) |
 | `xcode`, `runtime` | ios | build numbers (`17A400`, `23A343`) |
-| `layoutlib`, `compose`, `jdk` | android, desktop | versions from the resolved classpath |
+| `layoutlib`, `compose`, `jdk` | android | versions from the resolved classpath |
+| `skiko`, `compose`, `jdk` | desktop | versions from the resolved classpath |
 | `flutter`, `renderer`, `fonts` | flutter | version; `impeller`, `skia` or `exact-ios`; sorted font file names |
 
 Values are strings, `fonts` an array of strings. **Fingerprint id**: the first 12 hex digits of the
 fingerprint's hash.
 
 **Pixel-relevant**: every field, except `swiftshot` compares only its first two `.`-separated parts
-(`1.0.3` = `1.0.0-test`), and `host` is ignored when `platform` is `ios` or `renderer` is
-`exact-ios`. A field present on one side only is a difference (the other shown as `none`).
+(`1.0.3` = `1.0.0-test`), and `host` is ignored when this run's renderer is the exact iOS one: the
+run's fingerprint has `platform` `ios` or `renderer` `exact-ios`. A field present on one side only
+is a difference (the other shown as `none`).
 
 ## baseline.json
 
@@ -136,10 +144,10 @@ fingerprint's hash.
 - `local`: `true` when the image was rendered outside CI (`record` on a developer machine;
   `accept` writes `local = !ci` from the manifest).
 
-The baseline set is `images`. Comparison errors, each for one id: `baseline image missing` (an
-image that would be compared or removed has no PNG), `baseline image not in baseline.json` (a PNG
-under the baseline directory), `output image missing` (a report screenshot without its PNG),
-`unsupported PNG`.
+The baseline set is `images`. A PNG under the baseline directory with no `images` entry is
+**stray**: it can't be scope-checked, so it is an error only when its id is in this run's output
+(below); otherwise it is ignored and counted in `strayBaselineFiles`. The stray scan runs whether
+or not the run has errors.
 
 ## Comparison config
 
@@ -171,25 +179,30 @@ with other keys only appear as `{"preview": …}`. The `mode` default above is n
 
 ## Status
 
-For every id in the output (report `screenshots`), the baseline (`images`) or an error:
+**Ids**: the report's `screenshots`, the report's `errors` with an `id`, baseline.json `images`, and
+stray PNGs whose id is in `screenshots`. For each id, in this order:
 
-| | condition |
-|---|---|
-| `error` | the id has a render error (report `errors`) or a comparison error; never `removed` |
-| `added` | in the output, not in the baseline |
-| `removed` | in the baseline and in scope, not in the output |
-| `unchanged` | both, and the PNG bytes are equal, or the comparison passes |
-| `changed` | both, and the comparison fails |
+1. **Leave out** (not listed, not counted, no fingerprint or `local` check): not in `screenshots`,
+   no render error, and the baseline image is out of scope or the run has an error without `id`
+   (such a run can't tell which shots it lost, so it reports no removals).
+2. **`error`**, the first that applies:
+   1. render error (report `errors`) → its message
+   2. in `screenshots`, no output PNG → `output image missing`
+   3. in `images`, no baseline PNG → `baseline image missing`
+   4. stray baseline PNG → `baseline image not in baseline.json`
+   5. both PNGs present, bytes differ, either not decodable as below → `unsupported PNG`
+3. **`removed`**: not in `screenshots`. **`added`**: not in `images`.
+4. **`unchanged`**: the PNG bytes are equal (checked before decoding, so equal files are never
+   decoded and never `unsupported`).
+5. Otherwise compare (below): `unchanged` or `changed`.
 
-Baseline images not in the output and either out of scope or in a run with an error without
-`id` are left out entirely (not listed, not counted, no fingerprint check): such a run can't tell
-which shots it lost, so it reports no removals.
+`error` is never `removed`, and `accept` never deletes the baseline image of an `error` id.
 
 **In scope**: `platform` ∈ `platforms`, `device` ∈ `devices`, `language` ∈ `languages`,
 `appearance` ∈ `appearances`; `module` ∈ `modules`, `runtime` ∈ `runtimes`, `textSize` ∈
-`textSizes`, `fontScale` ∈ `fontScales` (compared as numbers), each if the image has that key; and
-`previewFilter` is empty or one of its globs matches `preview`. A list missing from the scope
-matches nothing.
+`textSizes`, `fontScale` ∈ `fontScales`, each if the image has that key; and `previewFilter` is
+empty or one of its globs matches `preview`. A list missing from the scope matches nothing.
+Strings compare exactly; `fontScale` compares as a decimal value (`1` = `1.0`, `1.3` = `1.30`).
 
 **Comparison** (bytes differ): decode both. Canvas = max width × max height. A canvas pixel
 differs when it lies outside either image, or the channel rule says so; then ignore regions are
@@ -211,17 +224,17 @@ pixel inside the baseline is the baseline at 30 % over white; the rest is white.
 sample c and alpha a (0–255), in integers:
 `c1 = (c·a + 255·(255−a) + 127) / 255`, `out = (3·c1 + 7·255 + 5) / 10` (`/` truncates), alpha 255.
 
-**Errors**: an id with a render error and a comparison error keeps the render error. `errors`
-holds `{"id", "message"}` for every `error` entry (sorted by id), then the report's errors without
-`id` as `{"message"}`, in report order.
+**Errors**: `errors` holds `{"id", "message"}` for every `error` entry (sorted by id), then the
+report's errors without `id` as `{"message"}`, in report order.
 
-**Fingerprint mismatch**: for every distinct baseline fingerprint referenced by a listed baseline
-image (unchanged, changed or removed), compare it with the run's fingerprint for its platform (none: skipped).
+**Fingerprint mismatch**: for every distinct baseline fingerprint referenced by the `images` entry
+of a listed id (any status, `error` included), compare it with the run's fingerprint for its platform (none: skipped).
 Each pixel-relevant difference is a message `<platform> <field>: baseline <value>, this run <value>`
 (arrays joined with `, `, absent = `none`); duplicates dropped, sorted. `verify` prints these
 first; they never change the status.
 
-**localBaseline**: `true` when a listed baseline image has `local: true`. A warning, never a failure.
+**localBaseline**: `true` when the `images` entry of a listed id (any status, `error` included) has
+`local: true`. A warning, never a failure.
 
 ## result.json
 
@@ -233,6 +246,8 @@ first; they never change the status.
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "branch": "feature/x",
   "version": "1.0.0-test",
+  "ci": false,
+  "host": "linux-x64",
   "fingerprint": {"android": {…}},
   "fingerprintMismatch": [],
   "localBaseline": false,
@@ -245,19 +260,25 @@ first; they never change the status.
      "appearance": "light", "preview": "Home", "fontScale": 1},
     {"id": "en-US/Pixel 9-Broken", "status": "error", "message": "IllegalStateException: boom", …}
   ],
-  "errors": [{"id": "en-US/Pixel 9-Broken", "message": "IllegalStateException: boom"}]
+  "errors": [{"id": "en-US/Pixel 9-Broken", "message": "IllegalStateException: boom"}],
+  "strayBaselineFiles": 0
 }
 ```
 
 - `status`: `error` if `errors` is not empty, else `failed` if any changed/added/removed, else
   `passed`. Exit code 2, 1, 0.
 - `counts.errors` = length of `errors` (`error` entries plus errors without id).
+- `ci`: whether this run was on CI (`SWIFTSHOT_CI` overrides detection). `host`: this run's host,
+  the same value as `host` in its fingerprints (`null` when nothing rendered). The detected CI
+  vendor and git host are added later as new keys; readers must ignore unknown keys.
 - `fingerprint`: the run's, as in the report.
-- `screenshots`: every listed id, sorted by id. Each has `platform`, `device`, `language`,
-  `appearance`, `preview`, `fontScale` or `textSize` (`"default"` when none), `module` (Android,
-  desktop) and `runtime` (iOS), from the report (from `baseline.json` for removed and error; an
-  `error` id with no baseline image has only `id`, `status`, `message`). Present only when they
-  apply: `message` (error), `reason`,
+- `strayBaselineFiles`: stray baseline PNGs ignored because the run didn't produce their id.
+- `screenshots`: every listed id, sorted by id (UTF-8 bytes). Each has `platform`, `device`,
+  `language`, `appearance`, `preview`, `fontScale` or `textSize` (`"default"` when none), `module`
+  (Android, desktop) and `runtime` (iOS): every one the report's screenshot entry provides,
+  otherwise from the `images` entry (removed, and `error` ids not in `screenshots`); an `error` id
+  in neither has only `id`, `status`, `message`. Present only when they apply: `message` (error),
+  `reason`,
   `pixels`, `boxes`, `baselineSize`, `newSize`, and the image paths (relative to the report
   directory, not URL-encoded): `baseline` (changed, removed), `new` (changed, added), `diff` (changed).
 

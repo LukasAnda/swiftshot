@@ -1,0 +1,157 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 7,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [
+    {
+      "id": "en-US/Pixel 9-Both Missing",
+      "message": "output image missing"
+    },
+    {
+      "id": "en-US/Pixel 9-Gone",
+      "message": "baseline image missing"
+    },
+    {
+      "id": "en-US/Pixel 9-Missing Baseline",
+      "message": "baseline image missing"
+    },
+    {
+      "id": "en-US/Pixel 9-Missing Output",
+      "message": "output image missing"
+    },
+    {
+      "id": "en-US/Pixel 9-Render And Missing",
+      "message": "IllegalStateException: boom"
+    },
+    {
+      "id": "en-US/Pixel 9-Sixteen Bit",
+      "message": "unsupported PNG"
+    },
+    {
+      "id": "en-US/Pixel 9-Stray",
+      "message": "baseline image not in baseline.json"
+    }
+  ],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "linux-x64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Both Missing",
+      "language": "en-US",
+      "message": "output image missing",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Both Missing",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Gone",
+      "language": "en-US",
+      "message": "baseline image missing",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Gone",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Missing Baseline",
+      "language": "en-US",
+      "message": "baseline image missing",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Missing Baseline",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Missing Output",
+      "language": "en-US",
+      "message": "output image missing",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Missing Output",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Palette Same",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Palette Same",
+      "status": "unchanged"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Render And Missing",
+      "language": "en-US",
+      "message": "IllegalStateException: boom",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Render And Missing",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Sixteen Bit",
+      "language": "en-US",
+      "message": "unsupported PNG",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Sixteen Bit",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Stray",
+      "language": "en-US",
+      "message": "baseline image not in baseline.json",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Stray",
+      "status": "error"
+    }
+  ],
+  "status": "error",
+  "strayBaselineFiles": 1,
+  "version": "1.0.0-test"
+}

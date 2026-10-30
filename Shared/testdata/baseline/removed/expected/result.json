@@ -1,5 +1,6 @@
 {
   "branch": "feature/x",
+  "ci": false,
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "counts": {
     "added": 0,
@@ -21,6 +22,7 @@
     }
   },
   "fingerprintMismatch": [],
+  "host": "linux-x64",
   "localBaseline": false,
   "schema": 1,
   "screenshots": [
@@ -49,5 +51,6 @@
     }
   ],
   "status": "failed",
+  "strayBaselineFiles": 0,
   "version": "1.0.0-test"
 }

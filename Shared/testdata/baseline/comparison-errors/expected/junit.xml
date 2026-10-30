@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="8" failures="0" errors="7">
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Both Missing">
+    <error message="output image missing"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Gone">
+    <error message="baseline image missing"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Missing Baseline">
+    <error message="baseline image missing"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Missing Output">
+    <error message="output image missing"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Palette Same"/>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Render And Missing">
+    <error message="IllegalStateException: boom"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Sixteen Bit">
+    <error message="unsupported PNG"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Stray">
+    <error message="baseline image not in baseline.json"/>
+  </testcase>
+</testsuite>

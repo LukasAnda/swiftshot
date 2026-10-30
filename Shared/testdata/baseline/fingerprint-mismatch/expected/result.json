@@ -1,5 +1,6 @@
 {
   "branch": "feature/x",
+  "ci": false,
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "counts": {
     "added": 0,
@@ -34,6 +35,7 @@
     "ios runtime: baseline 23A300, this run 23A343",
     "ios xcode: baseline 17A324, this run 17A400"
   ],
+  "host": "linux-x64",
   "localBaseline": false,
   "schema": 1,
   "screenshots": [
@@ -61,5 +63,6 @@
     }
   ],
   "status": "passed",
+  "strayBaselineFiles": 0,
   "version": "1.0.0-test"
 }
