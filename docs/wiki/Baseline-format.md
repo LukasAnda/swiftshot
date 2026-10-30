@@ -46,6 +46,12 @@ Examples below are abbreviated and not in the sorted key order the files use.
 | 2 | errors, with or without differences |
 | 64 | usage error |
 
+`verify` and `record`: a baseline.json that isn't valid (not JSON, `fingerprints` or `images` not an
+object of objects, an `images` id that isn't a relative `/`-separated path without `.` or `..`
+parts) is a usage error. `record`: 2 when the run had errors (images with errors keep their
+baseline entry), or when it rendered nothing but would remove baseline images (then nothing
+changes); else 0. baseline.json is written last (temp file, then rename).
+
 `accept`: 0 applied (or nothing to apply), 1 refused (the report's commit isn't HEAD and a commit
 other than an `accept` commit followed it, or `git push` failed), 64 usage error or invalid report
 (also: an `--only` id the reports don't list, the same id with different content in two reports, a

@@ -97,10 +97,12 @@ object Baseline {
     /** Run inputs, as the report lists them. */
     private class Run(output: File) {
         val report = File(output, "swiftshot-report.json").let { f ->
-            if (!f.isFile) throw CliError("No swiftshot-report.json in $output") else Json.parse(f.readText()) as Map<*, *>
+            if (!f.isFile) throw CliError("No swiftshot-report.json in $output")
+            runCatching { Json.parse(f.readText()) }.getOrNull() as? Map<*, *> ?: throw CliError("$f is not a report (malformed JSON)")
         }
         val shots: Map<String, Map<*, *>> = (report["screenshots"] as List<*>?).orEmpty().map { it as Map<*, *> }
             .filter { it["id"] is String }.associateBy { it["id"] as String }
+            .onEach { (id, _) -> if (!validId(id)) throw CliError("swiftshot-report.json in $output: \"$id\" is not a valid screenshot id") }
         private val errorList = (report["errors"] as List<*>?).orEmpty().map { e -> if (e is Map<*, *>) e else mapOf("message" to e.toString()) }
         /** The first message per id. */
         val failed = LinkedHashMap<String, String>().also { m -> for (e in errorList) (e["id"] as String?)?.let { m.putIfAbsent(it, e["message"].toString()) } }
@@ -111,14 +113,27 @@ object Baseline {
         fun mode(platform: Any?) = ((fingerprint[platform as String?] as Map<*, *>?)?.get("mode")) as String?
     }
 
-    /** The baseline: baseline.json and every PNG under the directory (by id). */
+    /** The baseline: baseline.json and every PNG under the directory (by id). A baseline.json that isn't one is a usage error. */
     private class Stored(val dir: File) {
-        val json = File(dir, "baseline.json").takeIf { it.isFile }?.let { Json.parse(it.readText()) as Map<*, *> }
-        val fingerprints: Map<*, *> = json?.get("fingerprints") as Map<*, *>? ?: emptyMap<String, Any?>()
-        val images: Map<String, Map<*, *>> = (json?.get("images") as Map<*, *>?).orEmpty().entries.associate { (k, v) -> k as String to v as Map<*, *> }
+        private val file = File(dir, "baseline.json")
+        val json = file.takeIf { it.isFile }?.let { runCatching { Json.parse(it.readText()) }.getOrNull() as? Map<*, *> ?: throw UsageError("$it is not valid JSON") }
+        private fun section(key: String): Map<*, *> = json?.get(key)?.let { v ->
+            if (v !is Map<*, *> || v.values.any { it !is Map<*, *> }) throw UsageError("$file: \"$key\" must be an object of objects")
+            v
+        } ?: emptyMap<String, Any?>()
+        val fingerprints: Map<*, *> = section("fingerprints")
+        val images: Map<String, Map<*, *>> = section("images").entries.associate { (k, v) ->
+            val id = k as String
+            if (!validId(id)) throw UsageError("$file: \"$id\" is not a valid screenshot id")
+            id to v as Map<*, *>
+        }
         val files: Set<String> = if (!dir.isDirectory) emptySet() else dir.walkTopDown().filter { it.isFile && it.name.endsWith(".png") }
             .map { it.relativeTo(dir).invariantSeparatorsPath.removeSuffix(".png") }.toSet()
     }
+
+    /** A screenshot id is a relative `/`-separated path; nothing that could leave the baseline directory. */
+    fun validId(id: String): Boolean = !(id.isEmpty() || id.startsWith("/") || '\\' in id || '\u0000' in id || Regex("^[A-Za-z]:").containsMatchIn(id) ||
+        id.split('/').any { it.isEmpty() || it == "." || it == ".." })
 
     private val DESCRIPTIVE = listOf("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime")
 
@@ -288,13 +303,17 @@ object Baseline {
             images[id] = b as Map<String, Any?>
             (b["fingerprint"] as String?)?.let { f -> (stored.fingerprints[f] as Map<*, *>?)?.let { fingerprints[f] = it } }
         }
-        var removed = 0
-        if (run.unattributed.isEmpty()) for ((id, b) in stored.images) {
-            if (id in run.shots || id in run.failed || !inScope(b, run.scope)) continue
+        val gone = if (run.unattributed.isNotEmpty()) emptyList() else stored.images.filter { (id, b) -> id !in run.shots && id !in run.failed && inScope(b, run.scope) }.keys
+        // A run that rendered nothing can't tell a deleted preview from a broken one: it wipes nothing.
+        if (run.shots.isEmpty() && gone.isNotEmpty()) {
+            log.error("Nothing rendered; the baseline is unchanged (record would have removed ${gone.size} screenshots)")
+            return 2
+        }
+        for (id in gone) {
             images.remove(id)
             File(baseline, "$id.png").delete()
-            removed++
         }
+        val removed = gone.size
         var written = 0
         val missing = mutableListOf<String>()
         for ((id, o) in run.shots) {
@@ -311,7 +330,9 @@ object Baseline {
         val referenced = images.values.mapNotNull { it["fingerprint"] as String? }.toSet()
         val json = mapOf("schema" to 1, "fingerprints" to fingerprints.filterKeys { it in referenced }, "images" to images)
         baseline.mkdirs()
-        File(baseline, "baseline.json").writeText(CanonicalJson.pretty(json))
+        val tmp = File(baseline, ".baseline.json.tmp")
+        tmp.writeText(CanonicalJson.pretty(json))
+        java.nio.file.Files.move(tmp.toPath(), File(baseline, "baseline.json").toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
         for (id in missing) log.error("$id: output image missing")
         for ((id, message) in run.failed) log.error("$id: $message")
         for (e in run.unattributed) log.error(e["message"].toString())

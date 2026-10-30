@@ -159,6 +159,47 @@ final class BaselineTests: XCTestCase {
         XCTAssertEqual(files(base).mapValues(bytes), before)
     }
 
+    func testRecordWithNothingRenderedAndNoErrorsRemovesNothing() throws {
+        let base = tmp.appendingPathComponent("base-empty-run")
+        try copyTree(fixture("removed").appendingPathComponent("baseline"), base)
+        let out = try output("removed")
+        let reportFile = out.appendingPathComponent("swiftshot-report.json")
+        var r = try readJSON(reportFile).object!
+        r["screenshots"] = .array([])
+        try Data(JSON.object(r).pretty().utf8).write(to: reportFile)
+        let before = files(base).mapValues(bytes)
+        let console = Console(capture: true)
+        XCTAssertEqual(try Baseline.record(output: out, baseline: base, ci: true, log: console), 2)
+        XCTAssertEqual(files(base).mapValues(bytes), before)
+        XCTAssertTrue(console.text.contains("Nothing rendered"), console.text)
+    }
+
+    func testInvalidBaselineJsonIsAUsageError() throws {
+        let base = tmp.appendingPathComponent("base-bad-id")
+        try copyTree(fixture("removed").appendingPathComponent("baseline"), base)
+        let out = try output("removed")
+        let outside = tmp.appendingPathComponent("outside.png")
+        try Data([1]).write(to: outside)
+        let original = try baselineJson(base).object!
+        for bad in ["../outside", outside.path] {
+            var json = original
+            var images = json["images"]!.object!
+            images[bad] = images["en-US/Pixel 9-Legacy"]
+            json["images"] = .object(images)
+            try Data(JSON.object(json).pretty().utf8).write(to: base.appendingPathComponent("baseline.json"))
+            XCTAssertThrowsError(try Baseline.evaluate(output: out, baseline: base, report: tmp.appendingPathComponent("bad-report"), config: CompareConfig(tolerance: nil, rules: []), env: env)) {
+                XCTAssertTrue($0 is UsageError && "\($0)".contains("baseline.json"), "\($0)")
+            }
+            XCTAssertThrowsError(try Baseline.record(output: out, baseline: base, ci: true, log: Console(capture: true))) { XCTAssertTrue($0 is UsageError, "\($0)") }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: outside.path), bad)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: base.appendingPathComponent("en-US/Pixel 9-Legacy.png").path), bad)
+        }
+        for bad in ["[", "[]", #"{"images": {"a": 1}}"#] {
+            try Data(bad.utf8).write(to: base.appendingPathComponent("baseline.json"))
+            XCTAssertThrowsError(try Baseline.record(output: out, baseline: base, ci: true, log: Console(capture: true))) { XCTAssertTrue($0 is UsageError, "\(bad): \($0)") }
+        }
+    }
+
     /// A report directory holding an earlier verify's files; the options of a verify into it.
     func staleRun(_ command: String = "verify") throws -> (URL, Options) {
         let report = tmp.appendingPathComponent("report")

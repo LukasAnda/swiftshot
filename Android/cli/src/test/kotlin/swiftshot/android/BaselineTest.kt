@@ -243,6 +243,49 @@ class BaselineTest {
         assertEquals("23F80", build("en-US/iPhone 17 Pro-Settings-iOS26.5"))
     }
 
+    @Test fun recordWithNothingRenderedAndNoErrorsRemovesNothing() {
+        val base = File(tmp, "base-empty-run").also { case("removed").resolve("baseline").copyRecursively(it) }
+        val out = output("removed")
+        val reportFile = File(out, "swiftshot-report.json")
+        File(reportFile.path).writeText(CanonicalJson.pretty((Json.parse(reportFile.readText()) as Map<*, *>).entries.associate { (k, v) -> k as String to if (k == "screenshots") emptyList<Any>() else v }))
+        val before = files(base).mapValues { it.value.readBytes().toList() }
+        assertEquals(2, Baseline.record(out, base, ci = true, log = Log(false)))
+        assertEquals(before, files(base).mapValues { it.value.readBytes().toList() })
+    }
+
+    @Test fun invalidBaselineJsonIsAUsageError() {
+        val base = File(tmp, "base-bad-id").also { case("removed").resolve("baseline").copyRecursively(it) }
+        val out = output("removed")
+        val outside = File(tmp, "outside.png").apply { writeBytes(byteArrayOf(1)) }
+        val original = baselineJson(base)
+        for (bad in listOf("../outside", outside.path)) {
+            val images = (original["images"] as Map<*, *>).toMutableMap().apply { put(bad, get("en-US/Pixel 9-Legacy")) }
+            File(base, "baseline.json").writeText(CanonicalJson.pretty(original.toMutableMap().apply { put("images", images) }))
+            val e = kotlin.test.assertFailsWith<UsageError> { Baseline.evaluate(out, base, File(tmp, "bad-report"), CompareConfig(null, emptyList()), env) }
+            assertTrue("baseline.json" in e.message!!, e.message)
+            kotlin.test.assertFailsWith<UsageError> { Baseline.record(out, base, ci = true, log = Log(false)) }
+            assertTrue(outside.isFile, bad)
+            assertTrue(File(base, "en-US/Pixel 9-Legacy.png").isFile, bad)
+        }
+        for (bad in listOf("[", "[]", """{"images": {"a": 1}}""")) {
+            File(base, "baseline.json").writeText(bad)
+            kotlin.test.assertFailsWith<UsageError>(bad) { Baseline.record(out, base, ci = true, log = Log(false)) }
+        }
+    }
+
+    @Test fun recordReplacesBaselineJsonAtomically() {
+        val base = File(tmp, "base-atomic").also { case("removed").resolve("baseline").copyRecursively(it) }
+        val json = File(base, "baseline.json")
+        val before = json.readText()
+        // A second name for the old file: an in-place write would change it too, a rename leaves it alone.
+        val link = File(tmp, "old-baseline.json")
+        Files.createLink(link.toPath(), json.toPath())
+        assertEquals(0, Baseline.record(output("removed"), base, ci = true, log = Log(false)))
+        assertEquals(before, link.readText())
+        assertTrue(json.readText() != before)
+        assertFalse(File(base, ".baseline.json.tmp").exists())
+    }
+
     /** A report directory holding an earlier verify's files; the command line of a verify into it. */
     private fun staleRun(command: String = "verify"): Pair<File, List<String>> {
         val report = File(tmp, "report").apply { mkdirs() }

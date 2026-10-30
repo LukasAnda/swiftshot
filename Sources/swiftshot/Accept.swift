@@ -297,9 +297,7 @@ enum Accept {
 
     /// A screenshot id is a relative `/`-separated path; nothing that could leave the baseline directory.
     private static func checkId(_ id: String, label: String) throws {
-        let bad = id.isEmpty || id.hasPrefix("/") || id.contains("\\") || id.contains("\0") || id.range(of: "^[A-Za-z]:", options: .regularExpression) != nil
-            || id.split(separator: "/", omittingEmptySubsequences: false).contains { $0.isEmpty || $0 == "." || $0 == ".." }
-        if bad { throw UsageError("\(label): \"\(id)\" is not a valid screenshot id") }
+        if !Baseline.validId(id) { throw UsageError("\(label): \"\(id)\" is not a valid screenshot id") }
     }
 
     // MARK: git

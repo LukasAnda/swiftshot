@@ -264,9 +264,7 @@ object Accept {
 
     /** A screenshot id is a relative `/`-separated path; nothing that could leave the baseline directory. */
     private fun checkId(id: String, label: String) {
-        val bad = id.isEmpty() || id.startsWith("/") || '\\' in id || '\u0000' in id || Regex("^[A-Za-z]:").containsMatchIn(id) ||
-            id.split('/').any { it.isEmpty() || it == "." || it == ".." }
-        if (bad) usage("$label: \"$id\" is not a valid screenshot id")
+        if (!Baseline.validId(id)) usage("$label: \"$id\" is not a valid screenshot id")
     }
 
     // Downloads and zips

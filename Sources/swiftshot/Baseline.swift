@@ -121,6 +121,7 @@ enum Baseline {
             var shots: [String: [String: JSON]] = [:], order: [String] = []
             for s in report["screenshots"]?.array ?? [] {
                 guard let o = s.object, let id = o["id"]?.string else { continue }
+                guard Baseline.validId(id) else { throw CLIError("swiftshot-report.json in \(output.path): \"\(id)\" is not a valid screenshot id") }
                 if shots[id] == nil { order.append(id) }
                 shots[id] = o
             }
@@ -139,7 +140,7 @@ enum Baseline {
         func mode(_ platform: JSON?) -> String? { platform?.string.flatMap { fingerprint[$0]?["mode"]?.string } }
     }
 
-    /// The baseline: baseline.json and every PNG under the directory (by id).
+    /// The baseline: baseline.json and every PNG under the directory (by id). A baseline.json that isn't one is a usage error.
     struct Stored {
         let fingerprints: [String: JSON]
         let images: [String: [String: JSON]]
@@ -149,13 +150,25 @@ enum Baseline {
             let file = dir.appendingPathComponent("baseline.json")
             var json: [String: JSON]?
             if FileManager.default.fileExists(atPath: file.path) {
-                guard let j = (try? JSON.parse(try Data(contentsOf: file)))?.object else { throw CLIError("\(file.path) is not valid JSON") }
+                guard let j = (try? JSON.parse(try Data(contentsOf: file)))?.object else { throw UsageError("\(file.path) is not valid JSON") }
                 json = j
             }
-            fingerprints = json?["fingerprints"]?.object ?? [:]
-            images = (json?["images"]?.object ?? [:]).compactMapValues { $0.object }
+            func section(_ key: String) throws -> [String: [String: JSON]] {
+                guard let v = json?[key] else { return [:] }
+                guard let o = v.object, o.values.allSatisfy({ $0.object != nil }) else { throw UsageError("\(file.path): \"\(key)\" must be an object of objects") }
+                return o.mapValues { $0.object! }
+            }
+            fingerprints = try section("fingerprints").mapValues { .object($0) }
+            images = try section("images")
+            for id in images.keys where !Baseline.validId(id) { throw UsageError("\(file.path): \"\(id)\" is not a valid screenshot id") }
             files = Baseline.pngIds(dir)
         }
+    }
+
+    /// A screenshot id is a relative `/`-separated path; nothing that could leave the baseline directory.
+    static func validId(_ id: String) -> Bool {
+        !(id.isEmpty || id.hasPrefix("/") || id.contains("\\") || id.contains("\0") || id.range(of: "^[A-Za-z]:", options: .regularExpression) != nil
+            || id.split(separator: "/", omittingEmptySubsequences: false).contains { $0.isEmpty || $0 == "." || $0 == ".." })
     }
 
     /// Every PNG under `dir`, as an id (relative path, `/`-separated, without `.png`).
@@ -381,14 +394,17 @@ enum Baseline {
             images[id] = .object(b)
             if let f = b["fingerprint"]?.string, let fp = stored.fingerprints[f], fp.object != nil { fingerprints[f] = fp }
         }
-        var removed = 0
-        if run.unattributed.isEmpty {
-            for (id, b) in stored.images.sorted(by: { utf8Less($0.key, $1.key) }) where run.shots[id] == nil && run.failed[id] == nil && inScope(b, run.scope) {
-                images[id] = nil
-                try? FileManager.default.removeItem(at: baseline.appendingPathComponent(id + ".png"))
-                removed += 1
-            }
+        let gone = !run.unattributed.isEmpty ? [] : stored.images.filter { id, b in run.shots[id] == nil && run.failed[id] == nil && inScope(b, run.scope) }.keys.sorted(by: utf8Less)
+        // A run that rendered nothing can't tell a deleted preview from a broken one: it wipes nothing.
+        if run.shots.isEmpty && !gone.isEmpty {
+            log.error("Nothing rendered; the baseline is unchanged (record would have removed \(gone.count) screenshots)")
+            return 2
         }
+        for id in gone {
+            images[id] = nil
+            try? FileManager.default.removeItem(at: baseline.appendingPathComponent(id + ".png"))
+        }
+        let removed = gone.count
         var written = 0
         var missing: [String] = []
         for id in run.shotOrder {
