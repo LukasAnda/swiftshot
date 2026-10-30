@@ -47,8 +47,8 @@ Examples below are abbreviated and not in the sorted key order the files use.
 | 64 | usage error |
 
 `verify` and `record`: a baseline.json that isn't valid (not JSON, `fingerprints` or `images` `null`
-or not an object of objects, an `images` id that isn't a relative `/`-separated path without `.` or `..`
-parts) is a usage error. `record`: 2 when the run had errors (images with errors keep their
+or not an object of objects: `"<key>" must be an object of objects`, an `images` id that isn't a
+relative `/`-separated path without `.` or `..` parts) is a usage error. `record`: 2 when the run had errors (images with errors keep their
 baseline entry), or when it rendered nothing but would remove baseline images (then nothing
 changes); else 0. baseline.json is written last (temp file, then rename).
 
@@ -363,7 +363,8 @@ directory or be a symbolic link, at most 2 GB extracted.
   unreferenced fingerprints are dropped and baseline.json is rewritten canonically.
 - `--only` (comma-separated, repeatable) restricts to those ids.
 - When every selected change is `removed` (and there is at least one), a warning:
-  `Every change in the report is a removal (N screenshots); check the run rendered what you expected`.
+  `Every change in the report is a removal (N screenshots); check the run rendered what you expected`
+  ("1 screenshot" for one).
 - A report whose `result.json` `status` is `error`: a warning, then its listed ids are applied as
   usual (ids with errors are in none of the lists, so they keep their baseline).
 - Stale: each report's `commit` must be HEAD, or every commit after it up to HEAD must carry the

@@ -99,7 +99,7 @@ object Accept {
         }
         val written = write(baseline, selected)
         val counts = listOf("changed", "added", "removed").map { k -> selected.count { it.kind == k } }
-        if (counts[2] == selected.size) log.warn("Every change in the report is a removal (${counts[2]} screenshots); check the run rendered what you expected")
+        if (counts[2] == selected.size) log.warn("Every change in the report is a removal (${counts[2]} screenshot${if (counts[2] == 1) "" else "s"}); check the run rendered what you expected")
         val summary = message(counts[0], counts[1], counts[2])
         log.ok("${summary.removePrefix("Update screenshot baseline (").removeSuffix(")")} → $baseline")
         if (!push) return 0

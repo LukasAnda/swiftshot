@@ -147,6 +147,12 @@ class AcceptTest {
         assertFalse(File(baseline, "en-US/Pixel 9-Legacy.png").exists())
     }
 
+    @Test fun acceptWarnsWhenTheOnlyChangeIsOneRemoval() {
+        repoWith("removed")
+        assertEquals(0, accept(report("removed")))
+        assertContains(errors.toString(), "is a removal (1 screenshot); check")
+    }
+
     @Test fun interruptedAcceptExits2() {
         repoWith("changed-pixels")
         val r = report("changed-pixels")

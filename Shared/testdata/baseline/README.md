@@ -8,3 +8,5 @@ byte for byte, and the exit code must follow `status` (passed 0, failed 1, error
 [docs/wiki/Baseline-format.md](../../../docs/wiki/Baseline-format.md); `python3 -I make.py`
 regenerates everything except `expected/images/`, which the JVM engine writes
 (`SWIFTSHOT_WRITE_FIXTURE_IMAGES=1` on `CompareTest`) and `make.py` checks pixel and byte for byte.
+The case `empty-run` (a report with no screenshots and no errors) expects `status: "error"` with the
+unattributed error `The run rendered no screenshots` and no removals; both implementations count 24 cases.

@@ -459,6 +459,12 @@ final class AcceptTests: XCTestCase {
         XCTAssertFalse(exists(baseline.appendingPathComponent("en-US/Pixel 9-Legacy.png")))
     }
 
+    func testAcceptWarnsWhenTheOnlyChangeIsOneRemoval() throws {
+        try repoWith("removed")
+        XCTAssertEqual(accept(try report("removed")), 0, errors)
+        XCTAssertTrue(errors.contains("is a removal (1 screenshot); check"), errors)
+    }
+
     func testNullImagesInBaselineJsonIsAUsageError() throws {
         try repoWith("changed-pixels")
         let bj = baseline.appendingPathComponent("baseline.json")
