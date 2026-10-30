@@ -159,6 +159,37 @@ final class BaselineTests: XCTestCase {
         XCTAssertEqual(files(base).mapValues(bytes), before)
     }
 
+    /// A report directory holding an earlier verify's files; the options of a verify into it.
+    func staleRun(_ command: String = "verify") throws -> (URL, Options) {
+        let report = tmp.appendingPathComponent("report")
+        try FileManager.default.createDirectory(at: report, withIntermediateDirectories: true)
+        for f in ["result.json", "manifest.json", "junit.xml"] { try Data("stale".utf8).write(to: report.appendingPathComponent(f)) }
+        let o = try Options.parse([command, "--output", tmp.appendingPathComponent("out").path, "--baseline-directory", tmp.appendingPathComponent("base").path,
+                                   "--report-directory", report.path])
+        return (report, o)
+    }
+
+    func testRunErrorIsAFreshFailureReport() async throws {
+        let (report, o) = try staleRun()
+        let code = await Command.baseline(o) { _ in throw CLIError("boom") }
+        XCTAssertEqual(code, 2)
+        let r = try readJSON(report.appendingPathComponent("result.json"))
+        XCTAssertEqual(r["status"], .string("error"))
+        XCTAssertTrue(r["errors"]!.text.contains("boom"), r.text)
+        XCTAssertFalse(String(decoding: try Data(contentsOf: report.appendingPathComponent("junit.xml")), as: UTF8.self).contains("stale"))
+    }
+
+    func testComparisonErrorExits2WithoutStaleReport() async throws {
+        let (report, o) = try staleRun()
+        let out = tmp.appendingPathComponent("out")
+        let code = await Command.baseline(o) { _ in
+            try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            try Data("{\"screenshots\": [".utf8).write(to: out.appendingPathComponent("swiftshot-report.json"))
+        }
+        XCTAssertEqual(code, 2)
+        for f in ["result.json", "manifest.json", "junit.xml"] { XCTAssertFalse(FileManager.default.fileExists(atPath: report.appendingPathComponent(f).path), f) }
+    }
+
     func testMultiRuntimeMismatchIsOnlyForTheChangedRuntime() throws {
         let v = try verify(fixture("multi-runtime"))
         XCTAssertEqual(v.mismatches, ["ios runtime: baseline 23F77, this run 23F80"])

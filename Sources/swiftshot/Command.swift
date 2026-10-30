@@ -43,28 +43,30 @@ enum Command {
 
     /// verify and record: the normal run into the output directory (PNG, no frames), then the comparison with the
     /// baseline or the recording into it. A run that fails as a whole (a build error) is a report with one error
-    /// without id: verify then exits 2 and reports no removals.
-    static func baseline(_ options: Options) async -> Int32 {
+    /// without id: verify then exits 2 and reports no removals. `render` is the run (tests replace it).
+    static func baseline(_ options: Options, render: (Options) async throws -> Void = { try await Runner(options: $0).run() }) async -> Int32 {
         let output = URL(fileURLWithPath: options.output).standardizedFileURL
         let report = output.appendingPathComponent("swiftshot-report.json")
         try? FileManager.default.removeItem(at: report)
         do {
-            try await Runner(options: options).run()
+            try await render(options)
         } catch {
             Log.failure("\(error)")
             if !FileManager.default.fileExists(atPath: report.path) { try? Report.writeFailure(to: output.path, message: "\(error)") }
         }
         if !FileManager.default.fileExists(atPath: report.path) { try? Report.writeFailure(to: output.path, message: "the run wrote no report") }
         let baseline = URL(fileURLWithPath: options.baselineDirectory).standardizedFileURL
+        let reportDir = URL(fileURLWithPath: options.reportPath)
         do {
             if options.command == "record" { return try Baseline.record(output: output, baseline: baseline, ci: BaselineEnv.ci(), log: Console()) }
             let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            return try Baseline.verify(output: output, baseline: baseline, report: URL(fileURLWithPath: options.reportPath), config: CompareConfig.from(options),
+            return try Baseline.verify(output: output, baseline: baseline, report: reportDir, config: CompareConfig.from(options),
                                        env: BaselineEnv.detect(cwd), log: Console())
-        } catch let error as UsageError {
-            fail(error); return 64
         } catch {
-            fail(error); return 2
+            // No result: nothing of an earlier verify may stay behind to be read as this one's.
+            if options.command == "verify" { try? BaselineReport.clear(reportDir) }
+            fail(error)
+            return error is UsageError ? 64 : 2
         }
     }
 }
