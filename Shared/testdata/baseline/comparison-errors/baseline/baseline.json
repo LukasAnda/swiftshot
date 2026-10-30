@@ -22,6 +22,17 @@
       "platform": "android",
       "preview": "Both Missing"
     },
+    "en-US/Pixel 9-Corrupt": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "241d8bd3b005",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Corrupt"
+    },
     "en-US/Pixel 9-Gone": {
       "appearance": "light",
       "device": "Pixel 9",

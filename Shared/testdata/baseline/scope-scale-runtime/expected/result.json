@@ -13,7 +13,7 @@
   "fingerprint": {
     "android": {
       "compose": "1.9.0",
-      "host": "linux-x64",
+      "host": "macos-arm64",
       "jdk": "21.0.8",
       "layoutlib": "16.0.1",
       "mode": "headless",
@@ -30,7 +30,7 @@
     }
   },
   "fingerprintMismatch": [],
-  "host": "linux-x64",
+  "host": "macos-arm64",
   "localBaseline": false,
   "schema": 1,
   "screenshots": [

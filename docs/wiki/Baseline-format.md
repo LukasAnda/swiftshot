@@ -60,13 +60,17 @@ interlace 0, filter type 0 on every row, chunks `IHDR`, one `IDAT`, `IEND` and n
 1.2.12). Implementations must use zlib (madler) with these defaults, not zlib-ng.
 
 **Decoding** (for comparison): bit depth 8, colour type 6 (RGBA) or 2 (RGB, alpha 255), any filter,
-interlace 0; all other chunks ignored. Samples are used as stored: no colour management, no
-premultiplication. Any other PNG is the error `unsupported PNG` for that id.
+interlace 0; other chunk types ignored. Samples are used as stored: no colour management, no
+premultiplication. Strict: a bad signature, a truncated chunk, a CRC mismatch, `IHDR` missing or
+not first, a zlib error, decompressed data of the wrong length or a filter byte above 4 is
+malformed. Any other or malformed PNG is the error `unsupported PNG` for that id.
 
 **Determinism**: `commit`, `branch`, `version` and `ci` come from `SWIFTSHOT_COMMIT`,
 `SWIFTSHOT_BRANCH`, `SWIFTSHOT_VERSION_OVERRIDE` and `SWIFTSHOT_CI` (`true`/`false`) when set (tests
 set them: `0123456789abcdef0123456789abcdef01234567`, `feature/x`, `1.0.0-test`, `false`).
-Otherwise from git/CI detection and the binary; an unknown commit or branch is `null`.
+Otherwise from git/CI detection and the binary; an unknown commit or branch is `null`. The host is
+detected once per run (`SWIFTSHOT_HOST` overrides it) and written into every fingerprint of
+that run.
 
 ## swiftshot-report.json additions
 
@@ -96,7 +100,7 @@ The run report keeps its current keys and gains:
   `textSize` (iOS, absent = `"default"`), `runtime` (iOS).
 - `errors` become objects: `{"id": "<id>", "message": "…"}`, the id being the one the failed shot
   would have had. An error the run can't tie to a shot (e.g. a module that doesn't compile) has
-  no `id`.
+  no `id`. Several errors for one id: the first in report order counts, the rest are ignored.
 
 The verify inputs are the report's `screenshots`, `errors`, `scope` and `fingerprint`; the output
 directory is not listed.
@@ -114,7 +118,8 @@ directory is not listed.
 | `skiko`, `compose`, `jdk` | desktop | versions from the resolved classpath |
 | `flutter`, `renderer`, `fonts` | flutter | version; `impeller`, `skia` or `exact-ios`; sorted font file names |
 
-Values are strings, `fonts` an array of strings. **Fingerprint id**: the first 12 hex digits of the
+Values are strings, `fonts` an array of strings. One run, one host: all platform fingerprints of a
+run carry the same `host` (a run with iOS is on macOS). **Fingerprint id**: the first 12 hex digits of the
 fingerprint's hash.
 
 **Pixel-relevant**: every field, except `swiftshot` compares only its first two `.`-separated parts
@@ -146,7 +151,8 @@ is a difference (the other shown as `none`).
 
 The baseline set is `images`. A PNG under the baseline directory with no `images` entry is
 **stray**: it can't be scope-checked, so it is an error only when its id is in this run's output
-(below); otherwise it is ignored and counted in `strayBaselineFiles`. The stray scan runs whether
+(below) or has a render error (then the render error is its entry); otherwise it is ignored and
+counted in `strayBaselineFiles`. So `strayBaselineFiles` = stray PNGs whose id is not listed. The stray scan runs whether
 or not the run has errors.
 
 ## Comparison config
@@ -269,10 +275,10 @@ first; they never change the status.
   `passed`. Exit code 2, 1, 0.
 - `counts.errors` = length of `errors` (`error` entries plus errors without id).
 - `ci`: whether this run was on CI (`SWIFTSHOT_CI` overrides detection). `host`: this run's host,
-  the same value as `host` in its fingerprints (`null` when nothing rendered). The detected CI
+  the same value as `host` in each of its fingerprints; `null` when the run fingerprint is empty. The detected CI
   vendor and git host are added later as new keys; readers must ignore unknown keys.
 - `fingerprint`: the run's, as in the report.
-- `strayBaselineFiles`: stray baseline PNGs ignored because the run didn't produce their id.
+- `strayBaselineFiles`: stray baseline PNGs whose id is not listed in `screenshots`.
 - `screenshots`: every listed id, sorted by id (UTF-8 bytes). Each has `platform`, `device`,
   `language`, `appearance`, `preview`, `fontScale` or `textSize` (`"default"` when none), `module`
   (Android, desktop) and `runtime` (iOS): every one the report's screenshot entry provides,

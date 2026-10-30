@@ -182,26 +182,50 @@ def png_size(data):
 
 
 def decode(data):
-    """The comparison's decoder: 8-bit RGB or RGBA, no interlace, any filter; samples as stored."""
+    """The comparison's decoder: 8-bit RGB or RGBA, no interlace, any filter; samples as stored.
+    Strict: anything malformed raises Unsupported."""
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         raise Unsupported()
     i, idat, ihdr = 8, b"", None
     while i < len(data):
+        if i + 12 > len(data):
+            raise Unsupported()
         n, = struct.unpack(">I", data[i:i + 4])
         kind, body = data[i + 4:i + 8], data[i + 8:i + 8 + n]
+        if len(body) != n or i + 12 + n > len(data):
+            raise Unsupported()
+        crc, = struct.unpack(">I", data[i + 8 + n:i + 12 + n])
+        if crc != zlib.crc32(kind + body) & 0xFFFFFFFF:
+            raise Unsupported()
         i += 12 + n
+        if (ihdr is None) != (kind == b"IHDR"):
+            raise Unsupported()
         if kind == b"IHDR":
+            if n != 13:
+                raise Unsupported()
             ihdr = struct.unpack(">IIBBBBB", body)
         elif kind == b"IDAT":
             idat += body
+        elif kind == b"IEND":
+            break
+    if ihdr is None:
+        raise Unsupported()
     w, h, depth, ctype, _, _, interlace = ihdr
     if depth != 8 or ctype not in (2, 6) or interlace != 0:
         raise Unsupported()
     bpp = 4 if ctype == 6 else 3
-    raw, prev, px, o = zlib.decompress(idat), bytearray(w * bpp), bytearray(), 0
+    try:
+        raw = zlib.decompress(idat)
+    except zlib.error:
+        raise Unsupported()
+    if len(raw) != h * (1 + w * bpp):
+        raise Unsupported()
+    prev, px, o = bytearray(w * bpp), bytearray(), 0
     for y in range(h):
         f, row = raw[o], bytearray(raw[o + 1:o + 1 + w * bpp])
         o += 1 + w * bpp
+        if f > 4:
+            raise Unsupported()
         for x in range(len(row)):
             a = row[x - bpp] if x >= bpp else 0
             b = prev[x]
@@ -433,6 +457,13 @@ def xml_attr(s):
     return "".join(out)
 
 
+def run_host(run_fps):
+    """One run, one host: every platform fingerprint carries it."""
+    hosts = {fp["host"] for fp in run_fps.values()}
+    assert len(hosts) <= 1, hosts
+    return hosts.pop() if hosts else None
+
+
 def verify(case):
     """The reference implementation of the format: returns (result, junit, manifest)."""
     report, baseline, config = case["report"], case["baseline_json"], case["config"]
@@ -441,7 +472,10 @@ def verify(case):
     run_fps = report["fingerprint"]
     scope = report["scope"]
     out_imgs = {s["id"]: s for s in report["screenshots"]}
-    failed = {e["id"]: e["message"] for e in report["errors"] if "id" in e}
+    failed = {}
+    for err in report["errors"]:
+        if "id" in err:
+            failed.setdefault(err["id"], err["message"])  # first per id wins
     unattributed = [e for e in report["errors"] if "id" not in e]
     stray = {sid for sid in bfiles if sid not in listed}
     entries, compared_fps, local = [], set(), False
@@ -505,9 +539,9 @@ def verify(case):
     status = "error" if errors else "failed" if counts["changed"] + counts["added"] + counts["removed"] else "passed"
     result = {
         "schema": 1, "status": status, "counts": counts, "commit": COMMIT, "branch": BRANCH, "version": VERSION,
-        "ci": CI, "host": run_fps[min(run_fps)]["host"] if run_fps else None,
+        "ci": CI, "host": run_host(run_fps),
         "fingerprint": run_fps, "fingerprintMismatch": sorted(mism, key=key_order), "localBaseline": local,
-        "screenshots": entries, "errors": errors, "strayBaselineFiles": len(stray - set(out_imgs)),
+        "screenshots": entries, "errors": errors, "strayBaselineFiles": len(stray - {e["id"] for e in entries}),
     }
     manifest = {
         "schema": 1, "commit": COMMIT, "branch": BRANCH, "ci": CI, "configHash": sha(compact(normalized(config))),
@@ -633,8 +667,10 @@ def case(name, baseline, output, config=None, scope=None, requested=None, errors
          local=(), missing_baseline=(), missing_output=(), stray=()):
     """baseline/output: lists of (meta, image or PNG bytes). run_fp/base_fps: platform -> fingerprint.
     missing_*: ids listed without a PNG on disk; stray: (id, image) PNGs not in baseline.json."""
-    run_fp = run_fp or {p: FP[p] for p in sorted({m["platform"] for m, _ in output})}
-    base_fps = base_fps or FP
+    plats = sorted({m["platform"] for m, _ in output})
+    host = "macos-arm64" if "ios" in plats else "linux-x64"
+    run_fp = run_fp or {p: dict(FP[p], host=host) for p in plats}
+    base_fps = base_fps or dict(FP, **run_fp)
     metas = [m for m, _ in output]
     plats = sorted({m["platform"] for m, _ in output})
     report = {
@@ -734,7 +770,7 @@ def cases():
     # Baseline recorded with other tools. Reported: iOS xcode and runtime, Android host and jdk.
     # Not reported: the swiftshot patch version, and the host for iOS.
     old_ios = dict(FP["ios"], host="macos-x64", runtime="23A300", swiftshot="1.0.3", xcode="17A324")
-    old_android = dict(FP["android"], host="macos-arm64", jdk="21.0.5", swiftshot="1.0.3")
+    old_android = dict(FP["android"], host="linux-x64", jdk="21.0.5", swiftshot="1.0.3")
     imgs = [(ios("Home"), base(1)), (android("Home"), base(2))]
     out.append(case("fingerprint-mismatch", imgs, imgs, base_fps={"ios": old_ios, "android": old_android}))
 
@@ -758,20 +794,27 @@ def cases():
 
     # One problem per id, plus precedence: render error > output image missing > baseline image
     # missing > not in baseline.json > unsupported PNG. A stray baseline PNG whose id the run
-    # didn't produce is only counted (strayBaselineFiles). Byte-equal files never get decoded.
+    # didn't produce is only counted (strayBaselineFiles); one with a render error is listed (the
+    # render error) and not counted. Byte-equal files never get decoded; a bad CRC is unsupported.
+    # The second error for one id is ignored.
     a = lambda p: android(p)
     sixteen = encode_with(base(6), bit_depth=16)
     palette = encode_palette(W, H, (10, 20, 30))
+    corrupt = bytearray(encode(base(9)))
+    corrupt[-20] ^= 0xFF  # a byte of the IDAT data: its CRC no longer matches
+    corrupt = bytes(corrupt)
     out.append(case("comparison-errors",
                     [(a("Missing Baseline"), base(1)), (a("Missing Output"), base(2)), (a("Both Missing"), base(3)),
-                     (a("Sixteen Bit"), base(6)), (a("Palette Same"), palette), (a("Gone"), base(7)),
+                     (a("Sixteen Bit"), base(6)), (a("Corrupt"), base(9)), (a("Palette Same"), palette), (a("Gone"), base(7)),
                      (a("Render And Missing"), base(8))],
                     [(a("Missing Baseline"), base(1)), (a("Missing Output"), base(2)), (a("Both Missing"), base(3)),
-                     (a("Stray"), base(4)), (a("Sixteen Bit"), sixteen), (a("Palette Same"), palette)],
+                     (a("Stray"), base(4)), (a("Sixteen Bit"), sixteen), (a("Corrupt"), corrupt), (a("Palette Same"), palette)],
                     missing_baseline={a("Missing Baseline")["id"], a("Both Missing")["id"], a("Gone")["id"], a("Render And Missing")["id"]},
                     missing_output={a("Missing Output")["id"], a("Both Missing")["id"]},
-                    stray=[(a("Stray")["id"], base(4)), (a("Stray Old")["id"], base(5))],
-                    errors=[{"id": a("Render And Missing")["id"], "message": "IllegalStateException: boom"}]))
+                    stray=[(a("Stray")["id"], base(4)), (a("Stray Old")["id"], base(5)), (a("Stray Broken")["id"], base(10))],
+                    errors=[{"id": a("Render And Missing")["id"], "message": "IllegalStateException: boom"},
+                            {"id": a("Render And Missing")["id"], "message": "second error for the same id: ignored"},
+                            {"id": a("Stray Broken")["id"], "message": "Timed out after 60 s"}]))
 
     # Scope = requested matrix + rendered values: "Tablet Home" (the last preview on Pixel Tablet,
     # through a per-preview `devices` rule) was deleted; Pixel Tablet is still requested, so its

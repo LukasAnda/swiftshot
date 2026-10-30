@@ -1,8 +1,8 @@
 {
   "fingerprints": {
-    "241d8bd3b005": {
+    "70e9fbb1bf7a": {
       "compose": "1.9.0",
-      "host": "linux-x64",
+      "host": "macos-arm64",
       "jdk": "21.0.8",
       "layoutlib": "16.0.1",
       "mode": "headless",
@@ -22,7 +22,7 @@
     "en-US/Pixel 9-Home": {
       "appearance": "light",
       "device": "Pixel 9",
-      "fingerprint": "241d8bd3b005",
+      "fingerprint": "70e9fbb1bf7a",
       "fontScale": 1,
       "language": "en-US",
       "local": false,
@@ -33,7 +33,7 @@
     "en-US/Pixel 9-Home-1.3x": {
       "appearance": "light",
       "device": "Pixel 9",
-      "fingerprint": "241d8bd3b005",
+      "fingerprint": "70e9fbb1bf7a",
       "fontScale": 1.3,
       "language": "en-US",
       "local": false,

@@ -1,8 +1,8 @@
 {
   "fingerprints": {
-    "7d572793275d": {
+    "06b7d19007fa": {
       "compose": "1.9.0",
-      "host": "macos-arm64",
+      "host": "linux-x64",
       "jdk": "21.0.5",
       "layoutlib": "16.0.1",
       "mode": "headless",
@@ -22,7 +22,7 @@
     "en-US/Pixel 9-Home": {
       "appearance": "light",
       "device": "Pixel 9",
-      "fingerprint": "7d572793275d",
+      "fingerprint": "06b7d19007fa",
       "fontScale": 1,
       "language": "en-US",
       "local": false,
