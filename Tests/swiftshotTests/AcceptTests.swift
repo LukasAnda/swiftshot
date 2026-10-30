@@ -81,6 +81,28 @@ final class AcceptTests: XCTestCase {
         XCTAssertEqual(try statusLines(), ["M screenshots-baseline/baseline.json", "M \"screenshots-baseline/en-US/Pixel 9-Home.png\""])
     }
 
+    func testAcceptedImagesGetTheirOwnRuntimesBuild() throws {
+        try repoWith("multi-runtime")
+        let r = try report("multi-runtime")
+        let id = "en-US/iPhone 17 Pro-Settings-iOS26.5"
+        let resultFile = r.appendingPathComponent("result.json")
+        var result = try readJSON(resultFile).object!
+        result["screenshots"] = .array(result["screenshots"]!.array!.map { e in
+            guard e["id"] == .string(id), var o = e.object else { return e }
+            o["status"] = .string("changed"); return .object(o)
+        })
+        try JSON.object(result).pretty().write(to: resultFile, atomically: true, encoding: .utf8)
+        try setManifest(r) { $0["ids"] = .object(["added": .array([]), "changed": .array([.string(id)]), "removed": .array([])]) }
+        try FileManager.default.createDirectory(at: r.appendingPathComponent("images/new/en-US"), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: fixtures.appendingPathComponent("multi-runtime/output/\(id).png"), to: r.appendingPathComponent("images/new/\(id).png"))
+        XCTAssertEqual(accept(r), 0, errors)
+        let fps = try readJSON(baseline.appendingPathComponent("baseline.json"))["fingerprints"]!
+        let fp = fps[try images()[id]!["fingerprint"]!.string!]!
+        XCTAssertEqual(fp["runtime"], .string("23F80"))
+        XCTAssertNil(fp["runtimes"])
+        XCTAssertEqual(fps[try images()["en-US/iPhone 17 Pro-Home-iOS26.0"]!["fingerprint"]!.string!]!["runtime"], .string("23A343"))
+    }
+
     func testCiReportWritesNonLocalImages() throws {
         try repoWith("changed-pixels")
         let r = try report("changed-pixels")
@@ -311,6 +333,59 @@ final class AcceptTests: XCTestCase {
         let z = tmp.appendingPathComponent("big.zip"); try Data(w.finish()).write(to: z)
         XCTAssertThrowsError(try Zip.extract(z, to: dir, label: "big.zip", maxBytes: 4000)) { XCTAssertTrue("\($0)".contains("larger than"), "\($0)") }
         XCTAssertThrowsError(try Zip.extract(z, to: tmp.appendingPathComponent("big2"), label: "big.zip", maxEntries: 0)) { XCTAssertTrue("\($0)".contains("entries"), "\($0)") }
+    }
+
+    // Crafted zips whose sizes and offsets overflow or overrun: a usage error, never a crash.
+
+    private func le16(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8 & 255)] }
+    private func le32(_ v: UInt64) -> [UInt8] { (0..<4).map { UInt8(v >> (8 * UInt64($0)) & 255) } }
+    private func le64(_ v: UInt64) -> [UInt8] { (0..<8).map { UInt8(v >> (8 * UInt64($0)) & 255) } }
+
+    /// A zip64 end record (at `z64At`) with the given central directory size and offset, then its locator and the end record.
+    private func zip64End(prefix: [UInt8], count: UInt64, size: UInt64, offset: UInt64) -> [UInt8] {
+        let z64At = UInt64(prefix.count)
+        let z64 = le32(0x0606_4b50) + le64(44) + le16(45) + le16(45) + le32(0) + le32(0) + le64(count) + le64(count) + le64(size) + le64(offset)
+        let locator = le32(0x0706_4b50) + le32(0) + le64(z64At) + le32(1)
+        let end = le32(0x0605_4b50) + le16(0) + le16(0) + le16(0xffff) + le16(0xffff) + le32(0xffff_ffff) + le32(0xffff_ffff) + le16(0)
+        return prefix + z64 + locator + end
+    }
+
+    /// A central directory entry; `extra` is its extra field.
+    private func centralEntry(name: String, compressed: UInt64, size: UInt64, offset: UInt64, extra: [UInt8]) -> [UInt8] {
+        let n = Array(name.utf8)
+        return le32(0x0201_4b50) + le16(45) + le16(45) + le16(0) + le16(0) + le16(0) + le16(0) + le32(0) + le32(compressed) + le32(size)
+            + le16(n.count) + le16(extra.count) + le16(0) + le16(0) + le16(0) + le32(0) + le32(offset) + n + extra
+    }
+
+    private func assertUsageError(_ data: [UInt8], _ what: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        let z = tmp.appendingPathComponent("crafted.zip")
+        try Data(data).write(to: z)
+        XCTAssertThrowsError(try Zip.extract(z, to: tmp.appendingPathComponent("out-\(UUID().uuidString)"), label: "crafted.zip"), what, file: file, line: line) {
+            XCTAssertTrue($0 is UsageError, "\(what): \($0)", file: file, line: line)
+        }
+    }
+
+    func testZip64CentralDirectorySizeThatOverflows() throws {
+        // offset + size wraps around UInt64.
+        try assertUsageError(zip64End(prefix: [], count: 1, size: UInt64.max - 4, offset: 10), "huge central directory size")
+    }
+
+    func testZip64EntrySizeThatOverflowsPastItsData() throws {
+        // A real local header at 0; the zip64 extra gives a compressed size that wraps start + size.
+        let local = le32(0x0403_4b50) + le16(45) + le16(0) + le16(0) + le16(0) + le16(0) + le32(0) + le32(0) + le32(0) + le16(1) + le16(0) + Array("a".utf8)
+        let extra = le16(1) + le16(16) + le64(1) + le64(UInt64.max - 8)
+        let cd = centralEntry(name: "a", compressed: 0xffff_ffff, size: 0xffff_ffff, offset: 0, extra: extra)
+        try assertUsageError(zip64End(prefix: local + cd, count: 1, size: UInt64(cd.count), offset: UInt64(local.count)), "huge entry size")
+        // And a local header offset near UInt64.max.
+        let far = centralEntry(name: "a", compressed: 1, size: 1, offset: 0xffff_ffff, extra: le16(1) + le16(8) + le64(UInt64.max - 2))
+        try assertUsageError(zip64End(prefix: local + far, count: 1, size: UInt64(far.count), offset: UInt64(local.count)), "huge local offset")
+    }
+
+    func testZip64ExtraFieldLongerThanTheExtraArea() throws {
+        // The zip64 field says 24 bytes, but the entry's extra area (and the central directory) ends after 8.
+        let extra = le16(1) + le16(24) + le64(5)
+        let cd = centralEntry(name: "a", compressed: 0xffff_ffff, size: 0xffff_ffff, offset: 0xffff_ffff, extra: extra)
+        try assertUsageError(zip64End(prefix: cd, count: 1, size: UInt64(cd.count), offset: 0), "zip64 field past the extra area")
     }
 
     func testBaselineJsonIsWrittenWithoutLeftovers() throws {

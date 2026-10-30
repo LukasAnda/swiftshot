@@ -50,10 +50,12 @@ enum Zip {
             }
             if e.flags & 1 != 0 { throw UsageError("\(label): zip entry \"\(e.name)\" is encrypted") }
             guard e.method == 0 || e.method == 8 else { throw UsageError("\(label): damaged zip file (entry \"\(e.name)\" uses compression method \(e.method))") }
+            // Every size and offset comes from the file: compare by subtraction, never by an addition that could overflow.
+            guard e.offset <= length, length - e.offset >= 30 else { throw UsageError("\(label): damaged zip file (no local header for \"\(e.name)\")") }
             let local = try read(at: e.offset, 30)
             guard u32(local, 0) == 0x0403_4b50 else { throw UsageError("\(label): damaged zip file (no local header for \"\(e.name)\")") }
             let start = e.offset + 30 + UInt64(u16(local, 26)) + UInt64(u16(local, 28))
-            guard start + e.compressed <= length else { throw UsageError("\(label): damaged zip file (entry \"\(e.name)\" is cut off)") }
+            guard start <= length, e.compressed <= length - start else { throw UsageError("\(label): damaged zip file (entry \"\(e.name)\" is cut off)") }
             try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: target)
             guard FileManager.default.createFile(atPath: target.path, contents: nil), let out = FileHandle(forWritingAtPath: target.path) else {
@@ -130,7 +132,7 @@ enum Zip {
             count = u64(z64, 32); size = u64(z64, 40); offset = u64(z64, 48)
         }
         if count > UInt64(maxEntries) { throw UsageError("\(label): more than \(maxEntries) entries") }
-        guard offset < length || (count == 0 && offset == length), offset + size <= length, size <= UInt64(Int32.max) else { throw UsageError("\(label): damaged zip file") }
+        guard offset < length || (count == 0 && offset == length), offset <= length, size <= length - offset, size <= UInt64(Int32.max) else { throw UsageError("\(label): damaged zip file") }
         let cd = try read(offset, Int(size))
         var entries: [Entry] = []
         var i = 0
@@ -148,10 +150,11 @@ enum Zip {
             while x + 4 <= extraEnd {
                 let id = u16(cd, x), n = u16(cd, x + 2)
                 if id == 1 {
+                    let fieldEnd = min(x + 4 + n, extraEnd)   // a field claiming more than the extra area holds is cut there
                     var p = x + 4
-                    if uncompressed == 0xffff_ffff, p + 8 <= x + 4 + n { uncompressed = u64(cd, p); p += 8 }
-                    if compressed == 0xffff_ffff, p + 8 <= x + 4 + n { compressed = u64(cd, p); p += 8 }
-                    if local == 0xffff_ffff, p + 8 <= x + 4 + n { local = u64(cd, p); p += 8 }
+                    if uncompressed == 0xffff_ffff, p + 8 <= fieldEnd { uncompressed = u64(cd, p); p += 8 }
+                    if compressed == 0xffff_ffff, p + 8 <= fieldEnd { compressed = u64(cd, p); p += 8 }
+                    if local == 0xffff_ffff, p + 8 <= fieldEnd { local = u64(cd, p); p += 8 }
                 }
                 x += 4 + n
             }

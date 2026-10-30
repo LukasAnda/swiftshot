@@ -88,14 +88,15 @@ enum Compare {
         return Region(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 
-    /// Pair checks and grid entries of the last `boxes` call (tests keep it bounded).
-    nonisolated(unsafe) static var lastBoxWork = 0
-
     /// Bounding boxes of the 8-connected components, merged while any two are closer than mergeDistance; sorted by
     /// y, x, w, h. The merged result doesn't depend on the order of merges, and every merge of a close pair is forced,
     /// so this starts from coarser groups that would merge anyway: all differing pixels of one 16×16 cell are at most
     /// 15 px apart, so their components are close. It then unions close boxes (found through a 16 px grid) until none is.
-    static func boxes(_ mask: [Bool], _ w: Int, _ h: Int) -> [Region] {
+    static func boxes(_ mask: [Bool], _ w: Int, _ h: Int) -> [Region] { boxesCounted(mask, w, h).boxes }
+
+    /// `boxes`, with the work it did: pair checks and grid entries (tests keep it bounded). Per call, so
+    /// comparisons running in parallel don't share it.
+    static func boxesCounted(_ mask: [Bool], _ w: Int, _ h: Int) -> (boxes: [Region], work: Int) {
         let c = mergeDistance
         let gw = (w + c - 1) / c, gh = (h + c - 1) / c
         var work = 0
@@ -178,9 +179,9 @@ enum Compare {
             }
             boxes = order.map { groups[$0]! }
         }
-        lastBoxWork = work
-        return boxes.map { Region(x: $0[0], y: $0[1], width: $0[2] - $0[0], height: $0[3] - $0[1]) }
+        let regions = boxes.map { Region(x: $0[0], y: $0[1], width: $0[2] - $0[0], height: $0[3] - $0[1]) }
             .sorted { ($0.y, $0.x, $0.width, $0.height) < ($1.y, $1.x, $1.width, $1.height) }
+        return (regions, work)
     }
 
     /// Canvas-sized, opaque: differing pixels #FF2D55, other baseline pixels at 30 % over white, the rest white.

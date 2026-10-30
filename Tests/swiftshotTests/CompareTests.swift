@@ -297,11 +297,13 @@ final class CompareTests: XCTestCase {
             for y in stride(from: 0, to: h, by: step) { for x in stride(from: 0, to: w, by: step) { m[y * w + x] = true } }
             return m
         }
-        XCTAssertEqual(Compare.boxes(grid(2), w, h), [Region(x: 0, y: 0, width: 1319, height: 2867)])
-        XCTAssertLessThan(Compare.lastBoxWork, 2_000_000)
+        let dense = Compare.boxesCounted(grid(2), w, h)
+        XCTAssertEqual(dense.boxes, [Region(x: 0, y: 0, width: 1319, height: 2867)])
+        XCTAssertLessThan(dense.work, 2_000_000)
         XCTAssertEqual(Compare.boxes(grid(16), w, h).count, 1)
-        XCTAssertEqual(Compare.boxes(grid(17), w, h).count, 78 * 169)
-        XCTAssertLessThan(Compare.lastBoxWork, 2_000_000)
+        let sparse = Compare.boxesCounted(grid(17), w, h)
+        XCTAssertEqual(sparse.boxes.count, 78 * 169)
+        XCTAssertLessThan(sparse.work, 2_000_000)
     }
 }
 
