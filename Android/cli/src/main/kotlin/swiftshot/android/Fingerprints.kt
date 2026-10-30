@@ -68,9 +68,6 @@ object Fingerprints {
         return fp
     }
 
-    /** iOS when the iOS renderer didn't report its own: what this side knows. */
-    fun iosFallback(host: String = this.host): Map<String, Any?> = base("ios", host, "no-boot")
-
     fun flutterVersion(sdk: File): String? {
         File(sdk, "bin/cache/flutter.version.json").takeIf { it.isFile }?.let { f ->
             runCatching { (Json.parse(f.readText()) as Map<*, *>)["frameworkVersion"] as String? }.getOrNull()?.let { return it }

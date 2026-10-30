@@ -133,7 +133,7 @@ class Runner(private val o: Options, private val log: Log) {
         val fingerprint = linkedMapOf<String, Map<String, Any?>>()
         modules.filter { it.platform == "android" }.takeIf { it.isNotEmpty() }?.let { fingerprint["android"] = Fingerprints.android(it, javaBin) }
         modules.filter { it.desktop }.takeIf { it.isNotEmpty() }?.let { fingerprint["desktop"] = Fingerprints.desktop(it, javaBin) }
-        if (ios != null) fingerprint["ios"] = ios.fingerprint()
+        ios?.fingerprint()?.let { fingerprint["ios"] = it }
         report(results, ios, modules, found, fingerprint)
         val ok = results.count { it.second.ok } + iosShots.size
         log.ok("$ok screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
@@ -366,11 +366,14 @@ class Runner(private val o: Options, private val log: Log) {
 
     /** What the iOS renderer rendered for Compose Multiplatform's iOS targets, and what its reports say. */
     class IosPart(val shots: List<Ios.Shot>, val reports: List<Map<*, *>>) {
-        /** The iOS renderer's fingerprint, on this run's host; what this side knows when it reports none. */
-        fun fingerprint(): Map<String, Any?> {
+        /**
+         * The iOS renderer's fingerprint (its mode, Xcode and runtime builds), on this run's host; null when its runs
+         * reported none (none rendered anything).
+         */
+        fun fingerprint(): Map<String, Any?>? {
             @Suppress("UNCHECKED_CAST")
             val own = reports.firstNotNullOfOrNull { (it["fingerprint"] as Map<*, *>?)?.get("ios") as Map<String, Any?>? }
-            return own?.let { LinkedHashMap(it).apply { put("host", Fingerprints.host) } } ?: Fingerprints.iosFallback()
+            return own?.let { LinkedHashMap(it).apply { put("host", Fingerprints.host) } }
         }
 
         /** The iOS renderer's scope (merged over its runs), or null when it reports none. */
@@ -378,7 +381,7 @@ class Runner(private val o: Options, private val log: Log) {
             all.flatMap { it.keys }.distinct().associateWith { k -> all.flatMap { (it[k] as List<*>?).orEmpty() }.distinct() }
         }
 
-        /** Its errors: objects keep their id; a plain message (an older renderer) can't be tied to a shot. */
+        /** Its errors: `{"id", "message"}` keep their id (the same ids as here: the files are copied as they are); id-less ones stay so. */
         fun errors(): List<Map<String, Any?>> = reports.flatMap { (it["errors"] as List<*>?).orEmpty() }.map { e ->
             if (e is Map<*, *> && e["id"] is String) linkedMapOf("id" to e["id"], "message" to e["message"]?.toString())
             else linkedMapOf("message" to (if (e is Map<*, *>) e["message"] else e)?.toString())

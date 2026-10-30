@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IosTest {
@@ -241,5 +242,24 @@ class IosTest {
             listOf("#Preview(\"Say \\\"hi\\\" \\\\ bye\") { SwiftshotPreviewsKt.swiftshotPreview0() }"),
             previewLines(Ios.hostMain(listOf(p), emptyMap(), emptyMap())),
         )
+    }
+
+    // The iOS renderer's report (the Swift binary): its error ids and its own fingerprint
+
+    @Test fun iosPartReadsTheRenderersErrorIdsAndFingerprint() {
+        val report = swiftshot.android.shared.Json.parse(
+            """{"errors": [{"id": "en-US/iPhone 17 Pro-Home", "message": "no image from the render server"}, {"message": "iOS 26.0 · launch failed"}],
+               "fingerprint": {"ios": {"host": "macos-x64", "mode": "no-boot", "platform": "ios", "runtime": "23A343", "swiftshot": "1.0.0", "xcode": "17A400"}},
+               "screenshots": []}""",
+        ) as Map<*, *>
+        val part = Runner.IosPart(emptyList(), listOf(report))
+        assertEquals(
+            listOf(mapOf<String, Any?>("id" to "en-US/iPhone 17 Pro-Home", "message" to "no image from the render server"), mapOf<String, Any?>("message" to "iOS 26.0 · launch failed")),
+            part.errors(),
+        )
+        val fp = part.fingerprint()!!
+        assertEquals(mapOf("platform" to "ios", "mode" to "no-boot", "runtime" to "23A343", "swiftshot" to "1.0.0", "xcode" to "17A400", "host" to Fingerprints.host), fp)
+        // Nothing reported (no iOS run rendered): no iOS fingerprint, rather than one that lacks Xcode and the runtime.
+        assertNull(Runner.IosPart(emptyList(), listOf(mapOf("screenshots" to emptyList<Any>()))).fingerprint())
     }
 }
