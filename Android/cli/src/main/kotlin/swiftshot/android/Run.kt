@@ -5,13 +5,13 @@ import java.io.File
 import java.util.Locale
 import kotlin.math.roundToInt
 
-class Log(val verbose: Boolean) {
+open class Log(val verbose: Boolean) {
     private val start = System.nanoTime()
     private val tty = System.console() != null
     private fun t() = String.format(Locale.ROOT, "%6.1fs", (System.nanoTime() - start) / 1e9)
     private fun c(code: String, s: String) = if (tty) "\u001b[${code}m$s\u001b[0m" else s
     fun step(s: String) = System.err.println("${c("2", t())} ${c("36", "▸")} $s")
-    fun ok(s: String) = System.err.println("${c("2", t())} ${c("32", "✔")} $s")
+    open fun ok(s: String) = System.err.println("${c("2", t())} ${c("32", "✔")} $s")
     fun warn(s: String) = System.err.println("${c("2", t())} ${c("33", "!")} $s")
     /** A line under the last step, indented to its text. */
     fun plain(s: String) = System.err.println("          $s")
@@ -35,7 +35,7 @@ data class Shot(
 )
 
 class Runner(private val o: Options, private val log: Log) {
-    private val output = File(o.output).absoluteFile
+    val output: File = o.outputDir(flutter = false)
 
     fun run(): Int {
         val cores = Runtime.getRuntime().availableProcessors()
@@ -44,7 +44,7 @@ class Runner(private val o: Options, private val log: Log) {
         val budgetAll = if (o.parallel > 0) o.parallel else auto
         // Renderer processes for last run's classpath start now, while Gradle builds; they are
         // used if the classpath comes out the same.
-        val warm = if (o.command == "run") warmPools(budgetAll) else emptyMap()
+        val warm = if (o.command != "list") warmPools(budgetAll) else emptyMap()
         // Not on a Mac: iOS targets aren't prepared (Kotlin/Native can't build them here either).
         if (!Host.mac) {
             if ("ios" in o.platforms) throw CliError(iosOnly(null))
@@ -126,10 +126,15 @@ class Runner(private val o: Options, private val log: Log) {
         warm.values.forEach { it.close() }
         val measured = results.filter { it.first in measureSet }
         results.removeAll(measured)
-        val iosShots = renderIos(iosModules, allFound, measured)
+        val ios = renderIos(iosModules, allFound, measured)
+        val iosShots = ios?.shots.orEmpty()
         measures.firstOrNull()?.file?.parentFile?.deleteRecursively()
         val failed = results.filter { !it.second.ok }
-        report(results, iosShots)
+        val fingerprint = linkedMapOf<String, Map<String, Any?>>()
+        modules.filter { it.platform == "android" }.takeIf { it.isNotEmpty() }?.let { fingerprint["android"] = Fingerprints.android(it, javaBin) }
+        modules.filter { it.desktop }.takeIf { it.isNotEmpty() }?.let { fingerprint["desktop"] = Fingerprints.desktop(it, javaBin) }
+        ios?.fingerprint()?.let { fingerprint["ios"] = it }
+        report(results, ios, modules, found, fingerprint)
         val ok = results.count { it.second.ok } + iosShots.size
         log.ok("$ok screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
         return if (failed.isEmpty() && ok > 0) 0 else 1
@@ -359,13 +364,43 @@ class Runner(private val o: Options, private val log: Log) {
         }
     }
 
-    /** Compose Multiplatform iOS targets, with the previews their module has on a JVM target. */
-    private fun renderIos(iosModules: List<Module>, found: Map<Module, List<Preview>>, results: List<Pair<Shot, Result>>): List<Ios.Shot> {
-        if (iosModules.isEmpty()) return emptyList()
+    /** What the iOS renderer rendered for Compose Multiplatform's iOS targets, and what its reports say. */
+    class IosPart(val shots: List<Ios.Shot>, val reports: List<Map<*, *>>) {
+        /**
+         * The iOS renderer's fingerprint (its mode, Xcode and the runtimes' builds), on this run's host, with the
+         * `runtimes` of all its runs (one per iOS module); null when they reported none (none rendered anything).
+         */
+        fun fingerprint(): Map<String, Any?>? {
+            val all = reports.mapNotNull { (it["fingerprint"] as Map<*, *>?)?.get("ios") as Map<*, *>? }
+            if (all.isEmpty()) return null
+            val fp = LinkedHashMap<String, Any?>()
+            for ((k, v) in all[0]) fp[k.toString()] = v
+            val runtimes = sortedMapOf<String, Any?>(CanonicalJson.utf8)
+            for (f in all) (f["runtimes"] as Map<*, *>?)?.forEach { (k, v) -> runtimes.putIfAbsent(k.toString(), v) }
+            if (runtimes.isNotEmpty()) fp["runtimes"] = runtimes
+            fp["host"] = Fingerprints.host
+            return fp
+        }
+
+        /** The iOS renderer's scope (merged over its runs), or null when it reports none. */
+        fun scope(): Map<*, *>? = reports.mapNotNull { it["scope"] as Map<*, *>? }.takeIf { it.isNotEmpty() }?.let { all ->
+            all.flatMap { it.keys }.distinct().associateWith { k -> all.flatMap { (it[k] as List<*>?).orEmpty() }.distinct() }
+        }
+
+        /** Its errors: `{"id", "message"}` keep their id (the same ids as here: the files are copied as they are); id-less ones stay so. */
+        fun errors(): List<Map<String, Any?>> = reports.flatMap { (it["errors"] as List<*>?).orEmpty() }.map { e ->
+            if (e is Map<*, *> && e["id"] is String) linkedMapOf("id" to e["id"], "message" to e["message"]?.toString())
+            else linkedMapOf("message" to (if (e is Map<*, *>) e["message"] else e)?.toString())
+        }
+    }
+
+    /** Compose Multiplatform iOS targets, with the previews their module has on a JVM target; null when none were rendered. */
+    private fun renderIos(iosModules: List<Module>, found: Map<Module, List<Preview>>, results: List<Pair<Shot, Result>>): IosPart? {
+        if (iosModules.isEmpty()) return null
         val ios = Ios(o, log, output)
         if (!ios.available) {
             log.warn("iOS targets need a Mac with Xcode and the swiftshot iOS renderer; skipped ${iosModules.joinToString { it.path }}")
-            return emptyList()
+            return null
         }
         val shots = mutableListOf<Ios.Shot>()
         for (m in iosModules) {
@@ -389,31 +424,87 @@ class Runner(private val o: Options, private val log: Log) {
             log.ok("${m.label}: ${rendered.size} screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t0) / 1e9)}s")
             shots += rendered
         }
-        return shots
+        return IosPart(shots, ios.reports)
     }
 
-    private fun report(results: List<Pair<Shot, Result>>, iosShots: List<Ios.Shot> = emptyList()) {
+    private fun report(results: List<Pair<Shot, Result>>, ios: IosPart?, modules: List<Module>, found: Map<Module, List<Preview>>, fingerprint: Map<String, Map<String, Any?>>) {
         output.mkdirs()
-        val sorted = results.sortedWith(compareBy({ it.first.language }, { it.first.device.name }, { it.first.preview.name }, { it.first.dark }))
-        val shots = sorted.filter { it.second.ok }.map { (s, r) ->
+        val shots = results.filter { it.second.ok }.map { (s, r) ->
             val (w, h) = r.size.split('x').let { (it.getOrNull(0)?.toIntOrNull() ?: 0) to (it.getOrNull(1)?.toIntOrNull() ?: 0) }
-            linkedMapOf(
-                "file" to File(r.file).relativeTo(output).path, "module" to s.module.path, "preview" to s.preview.name,
+            val file = File(r.file)
+            linkedMapOf<String, Any?>(
+                "file" to file.relativeTo(output).invariantSeparatorsPath, "id" to RunReport.id(output, file), "module" to s.module.path, "preview" to s.preview.name,
                 "composable" to s.preview.composable, "device" to s.device.name, "language" to s.language,
                 "appearance" to if (s.dark) "dark" else "light", "fontScale" to s.fontScale, "width" to w, "height" to h, "millis" to r.millis,
-                "platform" to s.module.platform,
+                "platform" to s.module.platform, "scale" to s.device.density / 160.0,
             )
-        } + iosShots.map { i ->
-            linkedMapOf<String, Any?>(
-                "file" to i.file, "preview" to i.preview, "device" to i.device, "language" to i.language,
-                "appearance" to i.appearance, "width" to i.width, "height" to i.height, "platform" to "ios",
-            )
-        }
-        val errors = sorted.filter { !it.second.ok }.map { (s, r) -> "${s.preview.name} · ${s.device.name} · ${s.language}: ${r.error}" }
-        File(output, "swiftshot-report.json").writeText(
-            Json.write(linkedMapOf("platform" to "android", "totalSeconds" to log.seconds, "screenshots" to shots, "errors" to errors), "  ") + "\n"
-        )
+        }.plus(ios?.shots.orEmpty().map { i -> iosEntry(i) }).sortedWith(compareBy(CanonicalJson.utf8) { it["id"] as String })
+        val errors = errors(results) + ios?.errors().orEmpty()
+        RunReport.write(output, "android", log.seconds, shots, errors, scope(modules, found, shots, ios?.scope(), ios != null), fingerprint)
         if (o.html) Gallery.write(output, shots, log.seconds)
+    }
+
+    /**
+     * The report's errors for failed shots, with the id the shot would have had. A @PreviewParameter preview that
+     * failed without a value index (its provider couldn't be counted, or the renderer died before it got that far)
+     * lost an unknown number of `_N` shots: its error has no id, so the run reports no removals.
+     */
+    internal fun errors(results: List<Pair<Shot, Result>>): List<Map<String, Any?>> =
+        results.filter { !it.second.ok }.sortedWith(compareBy({ it.first.language }, { it.first.device.name }, { it.first.preview.name }, { it.first.dark }))
+            .map { (s, r) ->
+                if (s.preview.provider != null && !Regex("_\\d+\\.png$").containsMatchIn(r.file))
+                    linkedMapOf<String, Any?>("message" to "${s.preview.name} · ${s.device.name} · ${s.language}: ${r.error}")
+                else linkedMapOf("id" to (RunReport.idOrNull(output, File(r.file)) ?: RunReport.id(output, s.file)), "message" to r.error)
+            }
+
+    /** An iOS screenshot as the iOS renderer reported it (id, scale, runtime, textSize when it says), under this output. */
+    private fun iosEntry(i: Ios.Shot): Map<String, Any?> {
+        val e = linkedMapOf<String, Any?>(
+            "file" to i.file, "id" to i.file.replace('\\', '/').removeSuffix(".png"), "preview" to i.preview, "device" to i.device, "language" to i.language,
+            "appearance" to i.appearance, "width" to i.width, "height" to i.height, "platform" to "ios",
+        )
+        for (k in listOf("runtime", "textSize", "renderMs")) i.record[k]?.let { e[k] = it }
+        val scale = (i.record["scale"] as Number?)?.toDouble() ?: AppleDevices.matching(i.device).firstOrNull()?.scale
+        scale?.let { e["scale"] = it }
+        return e
+    }
+
+    /**
+     * The run's scope: the platforms, modules, devices, languages, appearances and font scales it selected (flags,
+     * config, every value of a `screens` rule) ∪ what it rendered, and the iOS renderer's own scope when iOS ran.
+     */
+    internal fun scope(selected: List<Module>, found: Map<Module, List<Preview>>, shots: List<Map<String, Any?>>, iosScope: Map<*, *>?, iosRan: Boolean = iosScope != null): Map<String, Any?> {
+        val b = ScopeBuilder(o.previews)
+        fun resolve(names: List<String>) = runCatching { Devices.resolve(names).map { it.name } }.getOrDefault(emptyList())
+        for (m in selected) {
+            b.platforms += m.platform
+            b.modules += m.path
+            if (m.desktop) {
+                b.devices += runCatching { Devices.resolveDesktop(o.desktopDevices.ifEmpty { Devices.defaultDesktop }).map { it.name } }.getOrDefault(emptyList())
+                for (r in o.screens) r.devices?.let { ds -> b.devices += Devices.desktop.filter { d -> ds.any { glob(it).matches(d.name) || it == d.id } }.map { it.name } }
+            } else {
+                val previews = found[m].orEmpty()
+                if (!m.wear) b.devices += resolve(o.devices.ifEmpty { Devices.defaults })
+                if (m.wear || previews.any { it.isWatchDevice }) b.devices += resolve(o.watchDevices.ifEmpty { Devices.defaultWatch })
+                for (r in o.screens) r.devices?.let { b.devices += resolve(it) }
+            }
+            b.previews += found[m].orEmpty().filter { p -> (o.previews.isEmpty() || o.previews.any { glob(it).matches(p.name) }) && o.rule(p)?.skip != true }.map { it.name }
+        }
+        if (selected.isNotEmpty()) {
+            b.languages += o.languages + o.screens.flatMap { it.languages.orEmpty() }
+            b.appearances += o.appearances + o.screens.flatMap { it.appearances.orEmpty() }
+            b.fontScales += o.fontScales + o.screens.flatMap { it.fontScales.orEmpty() }
+        }
+        if (iosRan) {
+            b.platforms += "ios"
+            if (iosScope != null) b.merge(iosScope) else {
+                b.devices += o.iosDevices.ifEmpty { Ios.defaultDevices }
+                b.languages += o.languages
+                b.appearances += o.appearances
+            }
+        }
+        shots.forEach(b::shot)
+        return b.toJson()
     }
 
     /** The worker jars ship next to this one (or sit in the build output while developing). */

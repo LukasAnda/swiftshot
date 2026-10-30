@@ -1,0 +1,76 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "platform": "android",
+  "scope": {
+    "appearances": [
+      "dark",
+      "light"
+    ],
+    "devices": [
+      "Pixel 9"
+    ],
+    "fontScales": [
+      1
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [
+      ":app"
+    ],
+    "platforms": [
+      "android"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Feed"
+    ],
+    "runtimes": []
+  },
+  "screenshots": [
+    {
+      "appearance": "dark",
+      "composable": "com.example.ui.FeedKt.FeedPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Feed-dark.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Feed-dark",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Feed",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.FeedKt.FeedPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Feed-light.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Feed-light",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Feed",
+      "scale": 2.625,
+      "width": 40
+    }
+  ],
+  "totalSeconds": 1.5
+}

@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IosTest {
@@ -241,5 +242,27 @@ class IosTest {
             listOf("#Preview(\"Say \\\"hi\\\" \\\\ bye\") { SwiftshotPreviewsKt.swiftshotPreview0() }"),
             previewLines(Ios.hostMain(listOf(p), emptyMap(), emptyMap())),
         )
+    }
+
+    // The iOS renderer's report (the Swift binary): its error ids and its own fingerprint
+
+    @Test fun iosPartReadsTheRenderersErrorIdsAndFingerprint() {
+        val report = swiftshot.android.shared.Json.parse(
+            """{"errors": [{"id": "en-US/iPhone 17 Pro-Home", "message": "no image from the render server"}, {"message": "iOS 26.0 · launch failed"}],
+               "fingerprint": {"ios": {"host": "macos-x64", "mode": "no-boot", "platform": "ios", "runtimes": {"26.0": "23A343"}, "swiftshot": "1.0.0", "xcode": "17A400"}},
+               "screenshots": []}""",
+        ) as Map<*, *>
+        // A second iOS module's run, on another runtime too.
+        val second = mapOf("fingerprint" to mapOf("ios" to mapOf("host" to "macos-x64", "mode" to "no-boot", "platform" to "ios",
+            "runtimes" to mapOf("26.5" to "23F77"), "swiftshot" to "1.0.0", "xcode" to "17A400")))
+        val part = Runner.IosPart(emptyList(), listOf(report, second))
+        assertEquals(
+            listOf(mapOf<String, Any?>("id" to "en-US/iPhone 17 Pro-Home", "message" to "no image from the render server"), mapOf<String, Any?>("message" to "iOS 26.0 · launch failed")),
+            part.errors(),
+        )
+        val fp = part.fingerprint()!!
+        assertEquals(mapOf("platform" to "ios", "mode" to "no-boot", "runtimes" to mapOf("26.0" to "23A343", "26.5" to "23F77"), "swiftshot" to "1.0.0", "xcode" to "17A400", "host" to Fingerprints.host), fp)
+        // Nothing reported (no iOS run rendered): no iOS fingerprint, rather than one that lacks Xcode and the runtime.
+        assertNull(Runner.IosPart(emptyList(), listOf(mapOf("screenshots" to emptyList<Any>()))).fingerprint())
     }
 }

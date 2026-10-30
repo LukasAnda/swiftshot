@@ -207,6 +207,15 @@ struct ShotRecord: Codable {
     var renderMs: Double
     /// The framed version (--frame), relative to the output directory.
     var framed: String? = nil
+    /// Pixels per point of the image (the device's scale; less for a panel downsampled from @3x).
+    var scale: Double? = nil
+}
+
+/// A render error tied to one screenshot: `id` is the file it would have written, relative to the output
+/// directory, without the extension.
+struct ShotError: Codable, Equatable {
+    var id: String?
+    var message: String
 }
 
 struct JobResult: Codable {
@@ -215,6 +224,8 @@ struct JobResult: Codable {
     var errors: [String]
     var calibration: DeviceProfile?
     var totalMs: Double
+    /// Errors of single screenshots (optional: an older agent reports every error in `errors`).
+    var shotErrors: [ShotError]? = nil
 }
 
 /// "XL" -> "UICTContentSizeCategoryXL", "AX2" -> "UICTContentSizeCategoryAccessibilityL"…

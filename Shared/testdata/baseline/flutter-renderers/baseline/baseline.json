@@ -1,0 +1,55 @@
+{
+  "fingerprints": {
+    "10b8f4dea010": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf",
+        "SF-Pro.ttf"
+      ],
+      "host": "macos-arm64",
+      "mode": "exact-ios",
+      "platform": "flutter",
+      "renderer": "exact-ios",
+      "swiftshot": "1.0.0-test"
+    },
+    "3845a13a0785": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf",
+        "SF-Pro.ttf"
+      ],
+      "host": "macos-arm64",
+      "mode": "headless",
+      "platform": "flutter",
+      "renderer": "impeller",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "images": {
+    "en-US/Pixel 9-Home": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "3845a13a0785",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "platform": "flutter",
+      "preview": "Home",
+      "renderer": "impeller"
+    },
+    "en-US/iPhone 17 Pro-Home": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "10b8f4dea010",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "platform": "flutter",
+      "preview": "Home",
+      "renderer": "exact-ios"
+    }
+  },
+  "schema": 1
+}

@@ -25,6 +25,7 @@ gives plain device frames.
 - [iOS](#example)
 - [Android](#android)
 - [Flutter](#flutter)
+- [Screenshot testing](#screenshot-testing)
 
 ## Example
 
@@ -255,3 +256,27 @@ in `devices` too, plus `flutter_root` and `flutter_ios`:
 ```
 
 Output: `<output_directory>/<language>/<device>-<preview>[-light|-dark].png`. See [[Flutter]].
+
+## Screenshot testing
+
+Keys for `verify`, `record` and `accept` (all platforms), see [[Screenshot testing]]:
+
+| key | default | |
+|---|---|---|
+| `baseline_directory` | `screenshots-baseline` | the approved screenshots |
+| `report_directory` | `<output_directory>-report` | where `verify` writes what it found |
+| `tolerance` | exact | `{"pixels": n, "max_channel_delta": d}`: up to n pixels may differ; a channel may differ by d |
+
+In `screens` rules, also:
+
+| key | |
+|---|---|
+| `tolerance` | replaces the global `tolerance` for these previews |
+| `ignore_regions` | `[[x, y, width, height], …]` in points (iOS) or dp, never compared |
+
+```json
+{
+  "tolerance": {"max_channel_delta": 1},
+  "screens": [{"preview": "Clock*", "ignore_regions": [[0, 0, 120, 44]]}]
+}
+```

@@ -1,0 +1,33 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "configHash": "8f36dfee0cfcc981c95ea8bb102eb44823ed953419c97f19da5fd193b520117a",
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "macos-arm64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    },
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtimes": {
+        "26.0": "23A343"
+      },
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "ids": {
+    "added": [],
+    "changed": [],
+    "removed": []
+  },
+  "schema": 1
+}

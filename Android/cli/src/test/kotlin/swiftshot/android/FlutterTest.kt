@@ -72,4 +72,13 @@ class FlutterTest {
         assertEquals("headless", Options.parse(listOf("--project-dir", dir.path, "--flutter-ios", "headless")).flutterIos)
         assertTrue(runCatching { Options.parse(listOf("--project-dir", dir.path, "--flutter-ios", "fast")) }.isFailure)
     }
+
+    @Test fun eachReportScreenshotNamesItsRenderer() {
+        val r = mapOf("file" to File(dir, "en-US/iPhone 17 Pro-Home.png").path, "preview" to "Home", "device" to "iPhone 17 Pro", "language" to "en-US",
+            "appearance" to "light", "fontScale" to 1.0, "size" to "1206x2622", "millis" to 0, "script" to null, "line" to null, "renderer" to "exact-ios")
+        val shot = Flutter.reportShot(r, dir, 3.0)
+        assertEquals("en-US/iPhone 17 Pro-Home", shot["id"])
+        assertEquals("exact-ios", shot["renderer"])
+        assertEquals(3.0, shot["scale"])
+    }
 }

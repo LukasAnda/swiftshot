@@ -15,11 +15,18 @@ data class ScreenRule(
     val skip: Boolean = false,
     /** The rule's devices, languages, appearances and font scales win over the preview's own. */
     val overridePreview: Boolean = false,
+    /** verify: replaces the global `tolerance` for these screenshots. */
+    val tolerance: Tolerance? = null,
+    /** verify: `[x, y, w, h]` in points/dp whose pixels never differ. */
+    val ignoreRegions: List<List<Double>>? = null,
 ) {
     fun matches(name: String) = glob(preview).matches(name)
     /** By display name, or by the fully qualified function (`com.example.UiKt.Checkout`) when the pattern has a `.`. */
     fun matches(p: Preview) = matches(p.name) || '.' in preview && matches(p.composable)
 }
+
+/** A usage error: wrong flags or settings for the command (exit 64 for verify and record). */
+class UsageError(message: String) : IllegalArgumentException(message)
 
 fun glob(pattern: String) = Regex(pattern.split('*').joinToString(".*") { Regex.escape(it) }, RegexOption.IGNORE_CASE)
 
@@ -63,20 +70,49 @@ class Options {
     val notes = mutableListOf<String>()
     var frame = "none"
     var config: String? = null
+    /** png; jpeg is the iOS tool's, and verify/record compare PNGs only. */
+    var format = "png"
+    /** verify/record: where the baseline lives (default screenshots-baseline) and where verify writes its report. */
+    var baselineDirectory = "screenshots-baseline"
+    var reportDirectory: String? = null
+    /** verify: the global tolerance (null: exact, or channel delta 1 for booted simulators). */
+    var tolerance: Tolerance? = null
+    /** accept: report directories, zips or URLs (repeatable); the ids to restrict to; commit and push; the commit author. */
+    var from: List<String> = emptyList()
+    var only: Set<String>? = null
+    var push = false
+    var author: String? = null
+    /** Whether `--frame` was passed (a config's frame is skipped by verify/record, a flag is an error). */
+    private var frameFlag = false
+    /** Where relative output, baseline and report paths from flags resolve: Flutter runs resolve them in the project. */
+    private fun resolve(path: String, flutter: Boolean) = File(path).let { if (it.isAbsolute) it else if (flutter) File(File(projectDir).absoluteFile, path) else it.absoluteFile }.normalize()
+
+    /** The output directory as the runner writes it (Flutter: relative to the project). */
+    fun outputDir(flutter: Boolean): File = resolve(output, flutter)
+    fun baselineDir(flutter: Boolean): File = resolve(baselineDirectory, flutter)
+    fun reportDir(flutter: Boolean): File = reportDirectory?.let { resolve(it, flutter) } ?: File(outputDir(flutter).path + "-report")
 
     fun rule(p: Preview) = screens.firstOrNull { it.matches(p) }
     fun rule(preview: String) = screens.firstOrNull { it.matches(preview) }
 
     companion object {
+        /** Flags without a value (parse and [command] read the command line alike). */
+        val BOOLEAN_FLAGS = setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license", "--push")
+
         val usage = """
             swiftshot — screenshot tests and Play Store screenshots from Jetpack Compose and Compose
             Multiplatform @Previews (Android and desktop; Compose Multiplatform iOS needs a Mac).
 
             USAGE
-              swiftshot [run|list|devices|init] [options]
+              swiftshot [run|verify|record|accept|list|devices|init] [options]
 
             COMMANDS
               run       Build, render every preview for every device × language × appearance (default)
+              verify    Render as run does, then compare with the baseline: exit 0 same, 1 differences,
+                        2 errors, 64 usage error; the report goes to <output>-report
+              record    Render as run does and write the screenshots into the baseline
+              accept    Apply a verify report to the baseline without rendering: exit 0 applied (or nothing
+                        to do), 1 refused (report not from HEAD, push failed), 64 usage or invalid report
               list      Build and print the previews that were found
               devices   List the devices and their screens
               init      Write a swiftshot.json for the project here: modules, languages and Play devices
@@ -124,6 +160,20 @@ class Options {
               --round-corners black|transparent     Outside round watch screens (default: black, as Play requires)
               --parallel <n>                        Renderer processes (default: from cores and memory)
 
+            BASELINE (verify, record; PNG only, no frames)
+              --baseline-directory <dir>            Default: screenshots-baseline
+              --report-directory <dir>              Default: <output>-report
+              (swiftshot.json: "tolerance": {"pixels": n, "max_channel_delta": d}; per screen also
+               "tolerance" and "ignore_regions": [[x, y, w, h]] in dp)
+
+            ACCEPT
+              --from <dir|zip|url>                  A verify report directory, a zip of one, or an http(s) URL of the zip
+                                                    (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token,
+                                                    over https only, to that host only)
+              --only "<id>,<id>"                    Only these screenshot ids (repeatable)
+              --push                                Commit the baseline ("Update screenshot baseline (…)") and git push
+              --author "Name <email>"               Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+
               --config <file>                       Default: ./swiftshot.json
               -v, --verbose
         """.trimIndent()
@@ -136,7 +186,7 @@ class Options {
             while (i < args.size) {
                 val a = args[i]
                 if (a.startsWith("-")) {
-                    val boolean = a in setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license")
+                    val boolean = a in BOOLEAN_FLAGS
                     val (key, inline) = a.split('=', limit = 2).let { it[0] to it.getOrNull(1) }
                     val value = if (boolean || inline != null) inline else args.getOrNull(++i) ?: error("$a needs a value")
                     flags += key to value
@@ -190,7 +240,14 @@ class Options {
                 "--screen" -> rules += screenFlag(v!!)
                 "-v", "--verbose" -> o.verbose = true
                 "--force" -> o.force = true
-                "--frame" -> o.frame = v!!
+                "--frame" -> { o.frame = v!!; o.frameFlag = true }
+                "--format" -> o.format = v!!
+                "--baseline-directory" -> o.baselineDirectory = v!!
+                "--report-directory" -> o.reportDirectory = v!!
+                "--from" -> o.from = o.from + v!!
+                "--only" -> o.only = o.only.orEmpty() + list(v)
+                "--push" -> o.push = true
+                "--author" -> o.author = v!!
                 "--config", "--project-dir" -> Unit
                 else -> error("Unknown option $k. `swiftshot --help` lists them.")
             }
@@ -217,8 +274,43 @@ class Options {
             })
         }
 
+        /** The command a command line runs (its first positional argument), as [parse] reads it. */
+        fun command(args: List<String>): String {
+            var i = 0
+            while (i < args.size) {
+                val a = args[i]
+                if (!a.startsWith("-")) return a
+                val boolean = a in BOOLEAN_FLAGS
+                if (!boolean && '=' !in a) i++
+                i++
+            }
+            return "run"
+        }
+
+        /** `{"pixels": n, "max_channel_delta": d}`: non-negative integers, nothing else. */
+        fun tolerance(v: Any?, where: String): Tolerance {
+            require(v is Map<*, *>) { "$where: an object like {\"pixels\": 5, \"max_channel_delta\": 1}" }
+            for (k in v.keys) require(k == "pixels" || k == "max_channel_delta") { "$where: unknown key \"$k\" (pixels, max_channel_delta)" }
+            fun count(k: String): Int {
+                val n = v[k] ?: return 0
+                require(n is Number && n.toDouble() >= 0 && n.toDouble() == Math.floor(n.toDouble()) && n.toDouble() <= Int.MAX_VALUE) { "$where.$k: a whole number ≥ 0, not $n" }
+                return n.toInt()
+            }
+            return Tolerance(pixels = count("pixels"), maxChannelDelta = count("max_channel_delta"))
+        }
+
+        private fun regions(v: Any?, where: String): List<List<Double>> {
+            require(v is List<*>) { "$where: a list of [x, y, w, h]" }
+            return v.map { r ->
+                require(r is List<*> && r.size == 4 && r.all { it is Number }) { "$where: each region is [x, y, w, h] in points/dp, not $r" }
+                val d = r.map { (it as Number).toDouble() }
+                require(d[2] >= 0 && d[3] >= 0) { "$where: width and height must be ≥ 0" }
+                d
+            }
+        }
+
         fun rule(preview: String, m: Map<String, Any?>): ScreenRule {
-            for (k in m.keys) require(k in setOf("preview", "appearances", "languages", "devices", "font_scales", "full_length", "delay", "skip", "override_preview")) {
+            for (k in m.keys) require(k in setOf("preview", "appearances", "languages", "devices", "font_scales", "full_length", "delay", "skip", "override_preview", "tolerance", "ignore_regions")) {
                 "screens: unknown key \"$k\""
             }
             @Suppress("UNCHECKED_CAST")
@@ -232,6 +324,8 @@ class Options {
                 delay = (m["delay"] as Number?)?.toDouble(),
                 skip = m["skip"] as Boolean? ?: false,
                 overridePreview = m["override_preview"] as Boolean? ?: false,
+                tolerance = m["tolerance"]?.let { tolerance(it, "screens[$preview].tolerance") },
+                ignoreRegions = m["ignore_regions"]?.let { regions(it, "screens[$preview].ignore_regions") },
             )
         }
     }
@@ -276,12 +370,23 @@ class Options {
         (c["flutter_root"] as String?)?.let { flutterRoot = File(base, it).path }
         (c["flutter_ios"] as String?)?.let { flutterIos = it }
         (c["accept_bezel_license"] as Boolean?)?.let { acceptBezelLicense = it }
+        (c["baseline_directory"] as String?)?.let { baselineDirectory = File(base, it).path }
+        (c["report_directory"] as String?)?.let { reportDirectory = File(base, it).path }
+        c["tolerance"]?.let { tolerance = tolerance(it, "tolerance") }
         (c["screens"] as List<*>?)?.let { l -> screens = l.map { val m = it as Map<*, *>; rule(m["preview"] as String, m.mapKeys { e -> e.key.toString() }) } }
     }
 
     private fun validate() {
         if (command in setOf("frame", "calibrate", "emit-table")) throw CliError("`swiftshot $command` is part of the iOS tool and needs a Mac with Xcode.")
-        require(command in setOf("run", "list", "devices", "init", "auto-setup", "emit-devices")) { "Unknown command \"$command\"" }
+        require(command in setOf("run", "verify", "record", "list", "devices", "init", "auto-setup", "emit-devices", "accept")) { "Unknown command \"$command\"" }
+        if (command == "accept") { if (from.isEmpty()) throw UsageError("accept needs --from <report directory, .zip or URL>") }
+        else require(from.isEmpty() && only == null && !push && author == null) { "--from, --only, --push and --author are for accept" }
+        if (command == "verify" || command == "record") {
+            if (format != "png") throw UsageError("$command compares plain PNG screenshots; --format $format can't be used with it (drop --format, or use run).")
+            if (frameFlag && frame != "none") throw UsageError("$command compares plain screenshots; device frames aren't written (drop --frame, or use run).")
+            // A config's frame is for `run`: verify and record skip framing.
+            frame = "none"
+        } else require(format == "png") { "--format: png (JPEG is the iOS tool's)" }
         for (a in appearances) require(a == "light" || a == "dark") { "appearances: light or dark, not \"$a\"" }
         require(layout == "swiftshot" || layout == "fastlane") { "layout: swiftshot or fastlane" }
         require(systemUi in setOf("preview", "always", "never")) { "system_ui: preview, always or never" }
@@ -306,6 +411,6 @@ class Options {
         "project_dir", "modules", "variant", "devices", "watch_devices", "desktop_devices", "ios_devices", "ios_versions", "platforms", "languages", "appearances", "font_scales",
         "previews", "output_directory", "clear_previous_screenshots", "html", "layout", "full_length", "delay",
         "system_ui", "android_theme", "round_corners", "frame", "parallel", "gradle_args", "java_home", "flutter_root", "flutter_ios", "accept_bezel_license", "screens",
-        "platform", "android",
+        "platform", "android", "baseline_directory", "report_directory", "tolerance",
     )
 }

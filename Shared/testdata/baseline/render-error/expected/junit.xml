@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="3" failures="0" errors="2">
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Broken">
+    <error message="IllegalStateException: boom"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Home"/>
+  <testcase classname="swiftshot" name="en-US/Pixel 9-New">
+    <error message="Timed out after 60 s"/>
+  </testcase>
+</testsuite>

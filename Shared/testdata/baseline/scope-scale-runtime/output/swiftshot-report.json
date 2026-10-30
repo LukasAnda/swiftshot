@@ -1,0 +1,90 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "macos-arm64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    },
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtimes": {
+        "26.0": "23A343"
+      },
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "platform": "android",
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "Pixel 9",
+      "iPhone 17 Pro"
+    ],
+    "fontScales": [
+      1
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [
+      ":app"
+    ],
+    "platforms": [
+      "android",
+      "ios"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Home"
+    ],
+    "runtimes": [
+      "26.0"
+    ],
+    "textSizes": [
+      "default"
+    ]
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.HomeKt.HomePreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Home.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Home",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    }
+  ],
+  "totalSeconds": 1.5
+}

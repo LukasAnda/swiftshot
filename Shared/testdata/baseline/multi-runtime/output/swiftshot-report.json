@@ -1,0 +1,103 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtimes": {
+        "26.0": "23A343",
+        "26.5": "23F80"
+      },
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "iPhone 17 Pro"
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [],
+    "platforms": [
+      "ios"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Home",
+      "Settings"
+    ],
+    "runtimes": [
+      "26.0",
+      "26.5"
+    ],
+    "textSizes": [
+      "default"
+    ]
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home-iOS26.0.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home-iOS26.0",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home-iOS26.5.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home-iOS26.5",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "renderMs": 12.5,
+      "runtime": "26.5",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Settings-iOS26.0.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Settings-iOS26.0",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Settings",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Settings-iOS26.5.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Settings-iOS26.5",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Settings",
+      "renderMs": 12.5,
+      "runtime": "26.5",
+      "scale": 3,
+      "width": 40
+    }
+  ],
+  "timings": {},
+  "totalSeconds": 1.5
+}

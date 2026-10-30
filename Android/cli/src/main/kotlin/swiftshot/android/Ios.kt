@@ -13,7 +13,15 @@ import java.security.MessageDigest
  * iOS devices, without a simulator.
  */
 class Ios(private val o: Options, private val log: Log, private val output: File) {
-    data class Shot(val file: String, val preview: String, val device: String, val language: String, val appearance: String, val width: Int, val height: Int)
+    /** [record]: the iOS renderer's report entry (id, scale, runtime, textSize… when it writes them). */
+    data class Shot(val file: String, val preview: String, val device: String, val language: String, val appearance: String, val width: Int, val height: Int,
+                    val record: Map<*, *> = emptyMap<String, Any?>())
+
+    /** What the iOS renderer reported: its exit status, its screenshots and the whole report (scope, fingerprint, errors). */
+    data class Rendered(val status: Int, val shots: List<Map<*, *>>, val report: Map<*, *>)
+
+    /** The reports of the iOS renderer runs so far (for the run's scope, fingerprint and errors). */
+    val reports = mutableListOf<Map<*, *>>()
 
     val available: Boolean
         get() = System.getProperty("os.name").lowercase().contains("mac") && File("/usr/bin/xcrun").canExecute() && swiftshot() != null
@@ -124,7 +132,7 @@ class Ios(private val o: Options, private val log: Log, private val output: File
      * Renders a host app's previews with the iOS renderer into [iosOut]: its exit status and its
      * report's screenshots (file relative to [iosOut], preview, device, language, appearance, size).
      */
-    internal fun renderApp(app: File, devices: List<String>, iosOut: File, extra: List<String> = emptyList()): Pair<Int, List<Map<*, *>>> {
+    internal fun renderApp(app: File, devices: List<String>, iosOut: File, extra: List<String> = emptyList()): Rendered {
         val tool = swiftshot() ?: throw CliError("The iOS renderer (swiftshot) is not installed next to swiftshot-android.jar.")
         iosOut.deleteRecursively()
         val cmd = mutableListOf(tool.path, "--platform", "ios", "run", "--app", app.path,
@@ -142,7 +150,9 @@ class Ios(private val o: Options, private val log: Log, private val output: File
         val status = p.waitFor()
         val report = File(iosOut, "swiftshot-report.json")
         if (!report.isFile) throw CliError("The iOS renderer failed (exit $status).")
-        return status to ((Json.parse(report.readText()) as Map<*, *>)["screenshots"] as List<*>).map { it as Map<*, *> }
+        val json = Json.parse(report.readText()) as Map<*, *>
+        reports += json
+        return Rendered(status, (json["screenshots"] as List<*>).map { it as Map<*, *> }, json)
     }
 
     /** Existing screenshots in [dir] into their device (plain frames) under [framed]. */
@@ -166,7 +176,7 @@ class Ios(private val o: Options, private val log: Log, private val output: File
             target.parentFile.mkdirs()
             File(iosOut, rel).copyTo(target, overwrite = true)
             result += Shot(rel, s["preview"] as String, s["device"] as String, s["language"] as String, s["appearance"] as String? ?: "light",
-                (s["width"] as Number?)?.toInt() ?: 0, (s["height"] as Number?)?.toInt() ?: 0)
+                (s["width"] as Number?)?.toInt() ?: 0, (s["height"] as Number?)?.toInt() ?: 0, s)
         }
         iosOut.deleteRecursively()
         if (status != 0) log.warn("iOS: some screenshots failed (exit $status)")

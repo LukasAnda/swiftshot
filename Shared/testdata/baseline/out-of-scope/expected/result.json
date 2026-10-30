@@ -1,0 +1,45 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtimes": {
+        "26.0": "23A343"
+      },
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "macos-arm64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "id": "en-US/iPhone 17 Pro-Home One",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home One",
+      "runtime": "26.0",
+      "status": "unchanged",
+      "textSize": "default"
+    }
+  ],
+  "status": "passed",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

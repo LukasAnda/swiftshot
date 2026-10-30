@@ -64,6 +64,7 @@ r = json.load(open(sys.argv[1]))
 stages = "; ".join(f"{k} {v:.0f}s" for k, v in sorted(r["timings"].items(), key=lambda kv: -kv[1]))
 print(f"::notice title={sys.argv[2]} stages::{stages}" if os.environ.get("GITHUB_ACTIONS") else "   stages: " + stages)
 for e in r.get("errors", [])[:5]:
+    e = (e.get("id", "") + ": " if e.get("id") else "") + e.get("message", "") if isinstance(e, dict) else str(e)
     print(f"::warning title={sys.argv[2]} error::{e}" if os.environ.get("GITHUB_ACTIONS") else "   error: " + e)
 ' "$out/screenshots/swiftshot-report.json" "$name"
     [ -n "${GITHUB_ACTIONS:-}" ] && sed 's/\x1b\[[0-9;]*m//g' "$out/log.txt" | grep -E '^ *[0-9.]+s (▸ (First boot|Template|Ready)|✔ Built|!)' | tr '\n' '|' | sed 's/^/::notice title='"$name"' timeline::/; s/$/\n/' 

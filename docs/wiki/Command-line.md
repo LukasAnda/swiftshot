@@ -24,11 +24,16 @@ a message that iOS needs a Mac with Xcode. Compose Multiplatform iOS targets are
 
 ```
 USAGE
-  swiftshot [run|list|devices|calibrate|emit-table|init] [options]
+  swiftshot [run|verify|record|accept|list|devices|calibrate|emit-table|init] [options]
   swiftshot frame [<dir>] [frame options]
 
 COMMANDS
   run         Build, render every preview for every device × iOS × language × appearance (default)
+  verify      Render as run does (PNG, no frames), then compare with the baseline: exit 0 same,
+              1 differences, 2 errors, 64 usage error; the report goes to <output>-report
+  record      Render as run does and write the screenshots into the baseline
+  accept      Apply a verify report to the baseline without rendering: exit 0 applied (or nothing
+              to do), 1 refused (report not from HEAD, push failed), 64 usage or invalid report
   list        Build and print the previews that were discovered
   devices     Show installed iOS runtimes and the geometry used for each device
   calibrate   Boot the given devices once and measure their real safe areas (cached)
@@ -106,6 +111,20 @@ PER SCREENSHOT
                                           e.g. --screen "Welcome: appearances=light,dark languages=en-US"
                                           (or a "screens" array in the JSON config; first match wins)
 
+BASELINE (verify, record; PNG only, no frames)
+  --baseline-directory <dir>              Default: screenshots-baseline
+  --report-directory <dir>                Default: <output>-report
+  (swiftshot.json: "tolerance": {"pixels": n, "max_channel_delta": d}, default exact, or 1 channel
+   step with --mode device; per screen also "tolerance" and "ignore_regions": [[x, y, w, h]] in points)
+
+ACCEPT
+  --from <dir|zip|url>                    A verify report directory, a zip of one, or an http(s) URL of
+                                          the zip (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a
+                                          Bearer token, over https only, to that host only)
+  --only "<id>,<id>"                      Only these screenshot ids (repeatable)
+  --push                                  Commit the baseline ("Update screenshot baseline (…)") and git push
+  --author "Name <email>"                 Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+
 CI
   --device-set <dir>                      Use an isolated CoreSimulator device set (simctl --set); created
                                           from scratch, never touches the machine's own simulators
@@ -123,15 +142,21 @@ CI
 ```
 
 Exit code: 0 when every screenshot was rendered, non-zero otherwise. Errors are listed at the end of the run and in `swiftshot-report.json`.
+`verify` exits 0 (same), 1 (differences), 2 (errors) or 64 (usage error); `accept` 0, 1 (refused) or 64. How to use them: [[Screenshot testing]]; the files: [[Baseline format]].
 
 ## Android
 
 ```
 USAGE
-  swiftshot [run|list|devices|init] [options]
+  swiftshot [run|verify|record|accept|list|devices|init] [options]
 
 COMMANDS
   run       Build, render every preview for every device × language × appearance (default)
+  verify    Render as run does, then compare with the baseline: exit 0 same, 1 differences,
+            2 errors, 64 usage error; the report goes to <output>-report
+  record    Render as run does and write the screenshots into the baseline
+  accept    Apply a verify report to the baseline without rendering: exit 0 applied (or nothing
+            to do), 1 refused (report not from HEAD, push failed), 64 usage or invalid report
   list      Build and print the previews that were found
   devices   List the devices and their screens
   init      Write a swiftshot.json for the project here: modules, languages and Play devices
@@ -175,11 +200,23 @@ OUTPUT
   --round-corners black|transparent     Outside round watch screens (default: black, as Play requires)
   --parallel <n>                        Renderer processes (default: from cores and memory)
 
+BASELINE (verify, record; PNG only, no frames)
+  --baseline-directory <dir>            Default: screenshots-baseline
+  --report-directory <dir>              Default: <output>-report
+
+ACCEPT
+  --from <dir|zip|url>                  A verify report directory, a zip of one, or an http(s) URL of the zip
+                                        (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token,
+                                        over https only, to that host only)
+  --only "<id>,<id>"                    Only these screenshot ids (repeatable)
+  --push                                Commit the baseline ("Update screenshot baseline (…)") and git push
+  --author "Name <email>"               Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+
   --config <file>                       Default: ./swiftshot.json
   -v, --verbose
 ```
 
-The same exit codes as on iOS. `swiftshot devices` lists every device with its size in px and dp
+The same exit codes as on iOS; `verify`, `record` and `accept` as above, see [[Screenshot testing]]. `swiftshot devices` lists every device with its size in px and dp
 and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs. Compose Multiplatform
 flags: [[Compose Multiplatform]]. In a Flutter project `--devices` also takes iPhones and iPads,
 see [[Flutter]].

@@ -1,0 +1,70 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 2,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [
+    {
+      "id": "en-US/Pixel 9-Broken",
+      "message": "IllegalStateException: boom"
+    },
+    {
+      "id": "en-US/Pixel 9-New",
+      "message": "Timed out after 60 s"
+    }
+  ],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "linux-x64",
+  "localBaseline": true,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Broken",
+      "language": "en-US",
+      "message": "IllegalStateException: boom",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Broken",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Home",
+      "status": "unchanged"
+    },
+    {
+      "id": "en-US/Pixel 9-New",
+      "message": "Timed out after 60 s",
+      "status": "error"
+    }
+  ],
+  "status": "error",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

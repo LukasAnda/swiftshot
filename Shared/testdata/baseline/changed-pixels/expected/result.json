@@ -1,0 +1,80 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 1,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "linux-x64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/Pixel 9-Home.png",
+      "boxes": [
+        [
+          5,
+          5,
+          4,
+          18
+        ],
+        [
+          20,
+          40,
+          1,
+          1
+        ],
+        [
+          28,
+          60,
+          6,
+          6
+        ]
+      ],
+      "device": "Pixel 9",
+      "diff": "images/diff/en-US/Pixel 9-Home.png",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "module": ":app",
+      "new": "images/new/en-US/Pixel 9-Home.png",
+      "pixels": 62,
+      "platform": "android",
+      "preview": "Home",
+      "reason": "pixels",
+      "status": "changed"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Settings",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Settings",
+      "status": "unchanged"
+    }
+  ],
+  "status": "failed",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

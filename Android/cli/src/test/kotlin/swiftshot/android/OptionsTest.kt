@@ -452,4 +452,62 @@ class OptionsTest {
         assertEquals(listOf("cs"), Options.parse(listOf("--project-dir", project.path)).languages)
         assertEquals(listOf("en-US"), parse().languages)
     }
+
+    @Test fun baselineDefaultsAndKeys() {
+        val o = parse("verify")
+        assertEquals("verify", o.command)
+        assertEquals(File("screenshots-baseline").absoluteFile, o.baselineDir(flutter = false))
+        assertEquals(File("screenshots-report").absoluteFile, o.reportDir(flutter = false))
+        assertEquals(File(dir, "screenshots-baseline"), o.baselineDir(flutter = true))
+        config("""{"baseline_directory": "golden", "report_directory": "out/report", "output_directory": "shots",
+            "tolerance": {"pixels": 5, "max_channel_delta": 1},
+            "screens": [{"preview": "Clock*", "tolerance": {"max_channel_delta": 2}}, {"preview": "Feed", "ignore_regions": [[0, 0, 16, 4.5]]}]}""")
+        val c = parse("record")
+        assertEquals(File(dir, "golden"), c.baselineDir(flutter = false))
+        assertEquals(File(dir, "out/report"), c.reportDir(flutter = false))
+        assertEquals(Tolerance(5, 1), c.tolerance)
+        assertEquals(Tolerance(0, 2), c.screens[0].tolerance)
+        assertEquals(listOf(listOf(0.0, 0.0, 16.0, 4.5)), c.screens[1].ignoreRegions)
+        assertNull(c.screens[1].tolerance)
+        val flags = parse("verify", "--baseline-directory", "b", "--report-directory", "r")
+        assertEquals(File("b").absoluteFile, flags.baselineDir(flutter = false))
+        assertEquals(File("r").absoluteFile, flags.reportDir(flutter = false))
+        // The report defaults next to the output.
+        config("""{"output_directory": "shots"}""")
+        assertEquals(File(dir, "shots-report"), parse("verify").reportDir(flutter = false))
+    }
+
+    @Test fun toleranceIsValidated() {
+        config("""{"tolerance": {"pixel": 5}}""")
+        assertTrue(assertFailsWith<IllegalArgumentException> { parse("verify") }.message!!.contains("pixel"))
+        config("""{"tolerance": {"pixels": -1}}""")
+        assertFailsWith<IllegalArgumentException> { parse("verify") }
+        config("""{"tolerance": {"max_channel_delta": 1.5}}""")
+        assertFailsWith<IllegalArgumentException> { parse("verify") }
+        config("""{"screens": [{"preview": "X", "tolerance": {"delta": 1}}]}""")
+        assertTrue(assertFailsWith<IllegalArgumentException> { parse("verify") }.message!!.contains("delta"))
+        config("""{"screens": [{"preview": "X", "ignore_regions": [[0, 0, 16]]}]}""")
+        assertFailsWith<IllegalArgumentException> { parse("verify") }
+    }
+
+    @Test fun verifyAndRecordRejectJpegAndFrames() {
+        for (command in listOf("verify", "record")) {
+            val e = assertFailsWith<UsageError> { parse(command, "--format", "jpeg") }
+            assertTrue(e.message!!.contains("PNG"), e.message)
+            assertFailsWith<UsageError> { parse(command, "--frame", "plain") }
+            assertEquals(64, cli(listOf(command, "--project-dir", dir.path, "--format", "jpeg"), Log(false)))
+            assertEquals(64, cli(listOf(command, "--project-dir", dir.path, "--no-such-flag"), Log(false)))
+        }
+        assertEquals("png", parse("verify", "--format", "png").format)
+        // A config's frame is skipped, not an error.
+        config("""{"frame": "plain"}""")
+        assertEquals("none", parse("verify").frame)
+        assertEquals("plain", parse("run").frame)
+    }
+
+    @Test fun commandSkipsEveryBooleanFlag() {
+        for (flag in Options.BOOLEAN_FLAGS) assertEquals("verify", Options.command(listOf(flag, "verify")), flag)
+        assertEquals("record", Options.command(listOf("--output", "x", "--previews=A", "record")))
+        assertEquals("run", Options.command(listOf("--output", "verify")))
+    }
 }

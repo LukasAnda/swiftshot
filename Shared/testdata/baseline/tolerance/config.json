@@ -1,0 +1,14 @@
+{
+  "screens": [
+    {
+      "preview": "clock*",
+      "tolerance": {
+        "max_channel_delta": 2
+      }
+    }
+  ],
+  "tolerance": {
+    "max_channel_delta": 1,
+    "pixels": 5
+  }
+}

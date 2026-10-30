@@ -9,7 +9,13 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    // Fixtures shared with the Swift implementation (Shared/testdata).
+    val testdata = rootProject.file("../Shared/testdata")
+    inputs.dir(testdata)
+    systemProperty("swiftshot.testdata", testdata.absolutePath)
+}
 
 // One self-contained jar: `java -jar swiftshot-android.jar`.
 tasks.jar {

@@ -1,0 +1,26 @@
+{
+  "fingerprints": {
+    "d75a5b53f964": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "images": {
+    "en-US/iPhone 17 Pro-Home": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d75a5b53f964",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Home",
+      "runtime": "26.0",
+      "textSize": "default"
+    }
+  },
+  "schema": 1
+}

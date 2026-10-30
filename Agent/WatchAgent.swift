@@ -166,7 +166,9 @@ extension WatchAgent {
                 dumpLayers(window, suffix: "-\(index)"); index += 1
                 let server = WatchNoBoot.serverCapture
                 guard let image = (server ? swiftshot_watch_server_capture(window, size.width, size.height, device.scale) : swiftshot_watch_capture(window, size.width, size.height, device.scale))?.takeRetainedValue() else {
-                    result.errors.append("\(preview.name) \(device.name): capture failed"); continue
+                    let file = job.fileName(preview: preview.name, device: device.name, appearance: "", textSize: textSize)
+                    result.shotErrors = (result.shotErrors ?? []) + [ShotError(id: job.shotId(file), message: "\(preview.name) \(device.name): capture failed")]
+                    continue
                 }
                 // Shown windows get their own context on the window server's display too: take
                 // this one off it before the next preview.
@@ -176,11 +178,14 @@ extension WatchAgent {
                 try? FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
                 guard let dest = CGImageDestinationCreateWithURL(out as CFURL, "public.png" as CFString, 1, nil) else { continue }
                 CGImageDestinationAddImage(dest, image, nil)
-                guard CGImageDestinationFinalize(dest) else { result.errors.append("\(out.path): write failed"); continue }
+                guard CGImageDestinationFinalize(dest) else {
+                    result.shotErrors = (result.shotErrors ?? []) + [ShotError(id: job.shotId(file), message: "\(out.path): write failed")]
+                    continue
+                }
                 result.shots.append(ShotRecord(
                     preview: preview.name, device: device.name, appearance: "dark",
                     textSize: contentSizeCategory(textSize) == nil ? nil : textSize, language: job.language, runtime: job.runtime,
-                    file: "\(job.language)/\(file)", width: image.width, height: image.height, renderMs: (now() - t0) * 1000))
+                    file: "\(job.language)/\(file)", width: image.width, height: image.height, renderMs: (now() - t0) * 1000, scale: Double(device.scale)))
               }
             }
         }
@@ -242,7 +247,7 @@ extension WatchAgent {
             result.shots.append(ShotRecord(
                 preview: preview.name, device: device.name, appearance: "dark", language: job.language, runtime: job.runtime,
                 file: "\(job.language)/\(file)", width: Int(screen.screenBounds.width * screen.screenScale),
-                height: Int(screen.screenBounds.height * screen.screenScale), renderMs: (now() - t0) * 1000))
+                height: Int(screen.screenBounds.height * screen.screenScale), renderMs: (now() - t0) * 1000, scale: Double(screen.screenScale)))
             index += 1
         }
     }

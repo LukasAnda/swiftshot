@@ -1,0 +1,62 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "flutter": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf"
+      ],
+      "host": "linux-x64",
+      "mode": "headless",
+      "platform": "flutter",
+      "renderers": [
+        "skia"
+      ],
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "platform": "flutter",
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "Pixel 9"
+    ],
+    "fontScales": [
+      1
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [],
+    "platforms": [
+      "flutter"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Profile"
+    ],
+    "runtimes": []
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Profile.png",
+      "fontScale": 1,
+      "height": 96,
+      "id": "en-US/Pixel 9-Profile",
+      "language": "en-US",
+      "millis": 120,
+      "platform": "flutter",
+      "preview": "Profile",
+      "renderer": "skia",
+      "scale": 3,
+      "source": "lib/screens.dart:12",
+      "width": 40
+    }
+  ],
+  "totalSeconds": 1.5
+}

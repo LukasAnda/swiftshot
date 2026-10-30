@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="1" failures="1" errors="0">
+  <testcase classname="flutter.Pixel 9.en-US" name="en-US/Pixel 9-Profile">
+    <failure message="changed: size 40x80 to 40x96"/>
+  </testcase>
+</testsuite>

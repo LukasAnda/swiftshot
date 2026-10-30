@@ -1,0 +1,58 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtimes": {
+        "26.0": "23A343"
+      },
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "iPhone 17 Pro"
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [],
+    "platforms": [
+      "ios"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Home"
+    ],
+    "runtimes": [
+      "26.0"
+    ],
+    "textSizes": [
+      "default"
+    ]
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    }
+  ],
+  "timings": {},
+  "totalSeconds": 1.5
+}

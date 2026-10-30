@@ -1,0 +1,68 @@
+{
+  "fingerprints": {
+    "241d8bd3b005": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    },
+    "d75a5b53f964": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "images": {
+    "en-US/Pixel 9-Home": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "241d8bd3b005",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Home"
+    },
+    "en-US/Pixel 9-Settings": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "241d8bd3b005",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Settings"
+    },
+    "en-US/iPhone 17 Pro-Home": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d75a5b53f964",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Home",
+      "runtime": "26.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro-Settings": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d75a5b53f964",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "26.0",
+      "textSize": "default"
+    }
+  },
+  "schema": 1
+}

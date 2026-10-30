@@ -1,0 +1,119 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtimes": {
+        "26.0": "23A343"
+      },
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "scope": {
+    "appearances": [
+      "dark",
+      "light"
+    ],
+    "devices": [
+      "iPhone 17 Pro"
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [],
+    "platforms": [
+      "ios"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Home",
+      "Terms & Privacy",
+      "Über"
+    ],
+    "runtimes": [
+      "26.0"
+    ],
+    "textSizes": [
+      "AX2",
+      "default"
+    ]
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home-AX2.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home-AX2",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "textSize": "AX2",
+      "width": 40
+    },
+    {
+      "appearance": "dark",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home-dark.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home-dark",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home-light.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home-light",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Terms & Privacy.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Terms & Privacy",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Terms & Privacy",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Über.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Über",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Über",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    }
+  ],
+  "timings": {},
+  "totalSeconds": 1.5
+}

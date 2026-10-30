@@ -23,6 +23,7 @@ Run `swiftshot` in the project folder: an Xcode project renders iOS, a Gradle pr
 - [[Flutter]]: widget previews on iPhones, iPads and Android devices
 - [[Configuration]]: `swiftshot.json` and per-screenshot settings, for every platform
 - [[Command line]]: every command and flag
+- [[Screenshot testing]]: record a baseline, verify against it, accept changes
 - [[CI]]: GitHub Actions and other CI systems
 - [[Device frames]]: Apple bezels, App Store titles and backgrounds, Android Studio's device art
 - [[Migrating|Migrating-from-fastlane]]: from `fastlane snapshot` and `screengrab`, Paparazzi and Roborazzi

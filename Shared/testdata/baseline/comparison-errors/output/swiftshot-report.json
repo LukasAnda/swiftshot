@@ -1,0 +1,174 @@
+{
+  "errors": [
+    {
+      "id": "en-US/Pixel 9-Render And Missing",
+      "message": "IllegalStateException: boom"
+    },
+    {
+      "id": "en-US/Pixel 9-Render And Missing",
+      "message": "second error for the same id: ignored"
+    },
+    {
+      "id": "en-US/Pixel 9-Stray Broken",
+      "message": "Timed out after 60 s"
+    }
+  ],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "platform": "android",
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "Pixel 9"
+    ],
+    "fontScales": [
+      1
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [
+      ":app"
+    ],
+    "platforms": [
+      "android"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Both Missing",
+      "Corrupt",
+      "Missing Baseline",
+      "Missing Output",
+      "Palette Same",
+      "Sixteen Bit",
+      "Stray"
+    ],
+    "runtimes": []
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.BothMissingKt.BothMissingPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Both Missing.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Both Missing",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Both Missing",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.CorruptKt.CorruptPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Corrupt.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Corrupt",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Corrupt",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.MissingBaselineKt.MissingBaselinePreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Missing Baseline.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Missing Baseline",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Missing Baseline",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.MissingOutputKt.MissingOutputPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Missing Output.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Missing Output",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Missing Output",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.PaletteSameKt.PaletteSamePreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Palette Same.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Palette Same",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Palette Same",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.SixteenBitKt.SixteenBitPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Sixteen Bit.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Sixteen Bit",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Sixteen Bit",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.StrayKt.StrayPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Stray.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Stray",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Stray",
+      "scale": 2.625,
+      "width": 40
+    }
+  ],
+  "totalSeconds": 1.5
+}

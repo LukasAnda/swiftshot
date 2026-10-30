@@ -1,0 +1,56 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 0,
+    "removed": 1,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "linux-x64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Home",
+      "status": "unchanged"
+    },
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/Pixel Tablet-Tablet Home.png",
+      "device": "Pixel Tablet",
+      "fontScale": 1,
+      "id": "en-US/Pixel Tablet-Tablet Home",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Tablet Home",
+      "status": "removed"
+    }
+  ],
+  "status": "failed",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}
