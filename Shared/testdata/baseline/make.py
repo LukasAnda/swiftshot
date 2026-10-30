@@ -3,7 +3,8 @@
 
 Run with `python3 -I make.py` from anywhere. Stdlib only, deterministic. It rewrites each case's
 `config.json`, `baseline/`, `output/` and `expected/{result.json,junit.xml,manifest.json}`.
-`expected/images/` is left alone: the engine generates and commits those.
+`expected/images/` is left alone: the engine generates and commits those, and this script checks
+them (baseline/new byte copies, diff images pixel- and byte-equal to `diff_image` below).
 
 The expected values come from a reference implementation of docs/wiki/Baseline-format.md
 below, checked against the numbers each synthetic edit is known to produce.
@@ -353,6 +354,30 @@ def boxes(mask):
                 break
     out = [[x0, y0, x1 - x0, y1 - y0] for x0, y0, x1, y1 in comps]
     return sorted(out, key=lambda r: (r[1], r[0], r[2], r[3]))
+
+
+DIFF_COLOR = (0xFF, 0x2D, 0x55, 255)
+
+
+def diff_image(b, mask, cw, ch):
+    """Canvas-sized, opaque: differing pixels #FF2D55, other baseline pixels at 30 % over white, the rest white."""
+    bw, bh, bp = b
+    px = bytearray(cw * ch * 4)
+    for y in range(ch):
+        for x in range(cw):
+            o = (y * cw + x) * 4
+            if (x, y) in mask:
+                px[o:o + 4] = bytes(DIFF_COLOR)
+            elif x < bw and y < bh:
+                i = (y * bw + x) * 4
+                a = bp[i + 3]
+                for k in range(3):
+                    c1 = (bp[i + k] * a + 255 * (255 - a) + 127) // 255
+                    px[o + k] = (3 * c1 + 7 * 255 + 5) // 10
+                px[o + 3] = 255
+            else:
+                px[o:o + 4] = b"\xff\xff\xff\xff"
+    return [cw, ch, px]
 
 
 def ascii_lower(s):
@@ -865,6 +890,38 @@ def check(c, result):
         assert e.get("boxes") == (sort_boxes(bx) if bx else None), (c["name"], sid, e)
 
 
+def check_images(c, result, d):
+    """expected/images (written by the engine) holds exactly the report's images: byte copies of the
+    inputs, and diff images equal to diff_image() pixel for pixel and byte for byte (encode())."""
+    want = {}
+    for e in result["screenshots"]:
+        sid = e["id"]
+        if "baseline" in e:
+            want[e["baseline"]] = c["baseline_files"][sid]
+        if "new" in e:
+            want[e["new"]] = c["output_files"][sid]
+        if "diff" in e:
+            bi, ni = decode(c["baseline_files"][sid]), decode(c["output_files"][sid])
+            o = next(s for s in c["report"]["screenshots"] if s["id"] == sid)
+            _, delta, regions = tolerance_for(c["config"], o["preview"], c["report"]["fingerprint"][o["platform"]]["mode"])
+            mask = diff_mask(bi, ni, delta, regions, o["scale"])
+            img = diff_image(bi, mask, max(bi[0], ni[0]), max(bi[1], ni[1]))
+            path = os.path.join(d, "expected", e["diff"])
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    got = decode(f.read())
+                assert got[:2] == img[:2] and bytes(got[2]) == bytes(img[2]), (c["name"], sid, "diff pixels")
+            want[e["diff"]] = encode(img)
+    images = os.path.join(d, "expected", "images")
+    have = set()
+    for dirpath, _, files in os.walk(images):
+        have.update(os.path.relpath(os.path.join(dirpath, f), os.path.join(d, "expected")) for f in files)
+    assert have == set(want), (c["name"], "expected/images", sorted(have ^ set(want)))
+    for rel, data in want.items():
+        with open(os.path.join(d, "expected", rel), "rb") as f:
+            assert f.read() == data, (c["name"], rel, "bytes")
+
+
 def write(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
@@ -888,6 +945,7 @@ def main():
         write(os.path.join(d, "expected", "result.json"), pretty(result))
         write(os.path.join(d, "expected", "junit.xml"), junit)
         write(os.path.join(d, "expected", "manifest.json"), pretty(manifest))
+        check_images(c, result, d)
         print("%-28s %s %s" % (c["name"], result["status"], dump(result["counts"], indent=None)))
 
 
