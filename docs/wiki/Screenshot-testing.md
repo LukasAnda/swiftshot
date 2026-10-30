@@ -11,7 +11,9 @@ swiftshot verify                       # render and compare with the baseline
 swiftshot accept --from <report>       # take the changes verify found into the baseline
 ```
 
-They take the same options as `swiftshot run` (devices, languages, `--previews`…).
+`record` and `verify` take the same options as `swiftshot run` (devices, languages, `--previews`…).
+`accept` renders nothing and takes its own: `--from`, `--only`, `--push`, `--author` (see
+[[Command line]]).
 
 1. **Record** once, and commit the `screenshots-baseline` folder.
 2. **Verify** after every change. It renders, compares and prints what changed:
@@ -33,12 +35,12 @@ runs. CI support for this is coming next.
 
 ## Exit codes
 
-| | `verify` | `accept` |
-|---|---|---|
-| 0 | no differences | applied, or nothing to apply |
-| 1 | differences | refused (the report isn't from this commit) |
-| 2 | errors (a screen failed to render, a file is missing) | |
-| 64 | wrong option or config | wrong option, or not a valid report |
+| | `verify` | `record` | `accept` |
+|---|---|---|---|
+| 0 | no differences | recorded | applied, or nothing to apply |
+| 1 | differences | | refused (the report isn't from this commit) |
+| 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | |
+| 64 | wrong option or config | wrong option or config | wrong option, or not a valid report |
 
 ## Where files go
 
