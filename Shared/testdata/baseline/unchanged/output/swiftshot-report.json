@@ -5,7 +5,9 @@
       "host": "macos-arm64",
       "mode": "no-boot",
       "platform": "ios",
-      "runtime": "23A343",
+      "runtimes": {
+        "26.0": "23A343"
+      },
       "swiftshot": "1.0.0-test",
       "xcode": "17A400"
     }

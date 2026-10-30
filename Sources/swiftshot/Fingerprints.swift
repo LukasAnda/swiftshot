@@ -27,12 +27,20 @@ enum Fingerprints {
     /// Fingerprint id: the first 12 hex digits of its hash.
     static func id(_ fp: JSON) -> String { String(CanonicalJson.hash(fp).prefix(12)) }
 
-    /// iOS: the mode (no-boot or device), Xcode's build and the simulator runtimes' builds (sorted, joined when several).
-    static func ios(mode: String, xcode: String?, runtimes: [String], host: String = host, version: String = version()) -> JSON {
+    /// iOS: the mode (no-boot or device), Xcode's build and each runtime's build by version (`26.5`, `watchOS 11.0`).
+    static func ios(mode: String, xcode: String?, runtimes: [String: String], host: String = host, version: String = version()) -> JSON {
         var fp: [String: JSON] = ["platform": .string("ios"), "host": .string(host), "swiftshot": .string(version), "mode": .string(mode)]
         if let xcode { fp["xcode"] = .string(xcode) }
-        let builds = Set(runtimes).sorted(by: utf8Less)
-        if !builds.isEmpty { fp["runtime"] = .string(builds.joined(separator: ", ")) }
+        if !runtimes.isEmpty { fp["runtimes"] = .object(runtimes.mapValues { .string($0) }) }
+        return .object(fp)
+    }
+
+    /// The fingerprint of one image of a run (docs/wiki/Baseline-format.md, Image fingerprint): an iOS run's
+    /// `runtimes` (version → build) become the image's own `runtime` build, looked up by the image's `runtime`.
+    static func forImage(_ run: JSON, _ image: [String: JSON]) -> JSON {
+        guard var fp = run.object else { return run }
+        let runtimes = fp.removeValue(forKey: "runtimes")
+        if let r = image["runtime"]?.string, let build = runtimes?[r], build.string != nil { fp["runtime"] = build }
         return .object(fp)
     }
 

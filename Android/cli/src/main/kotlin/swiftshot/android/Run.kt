@@ -367,13 +367,19 @@ class Runner(private val o: Options, private val log: Log) {
     /** What the iOS renderer rendered for Compose Multiplatform's iOS targets, and what its reports say. */
     class IosPart(val shots: List<Ios.Shot>, val reports: List<Map<*, *>>) {
         /**
-         * The iOS renderer's fingerprint (its mode, Xcode and runtime builds), on this run's host; null when its runs
-         * reported none (none rendered anything).
+         * The iOS renderer's fingerprint (its mode, Xcode and the runtimes' builds), on this run's host, with the
+         * `runtimes` of all its runs (one per iOS module); null when they reported none (none rendered anything).
          */
         fun fingerprint(): Map<String, Any?>? {
-            @Suppress("UNCHECKED_CAST")
-            val own = reports.firstNotNullOfOrNull { (it["fingerprint"] as Map<*, *>?)?.get("ios") as Map<String, Any?>? }
-            return own?.let { LinkedHashMap(it).apply { put("host", Fingerprints.host) } }
+            val all = reports.mapNotNull { (it["fingerprint"] as Map<*, *>?)?.get("ios") as Map<*, *>? }
+            if (all.isEmpty()) return null
+            val fp = LinkedHashMap<String, Any?>()
+            for ((k, v) in all[0]) fp[k.toString()] = v
+            val runtimes = sortedMapOf<String, Any?>(CanonicalJson.utf8)
+            for (f in all) (f["runtimes"] as Map<*, *>?)?.forEach { (k, v) -> runtimes.putIfAbsent(k.toString(), v) }
+            if (runtimes.isNotEmpty()) fp["runtimes"] = runtimes
+            fp["host"] = Fingerprints.host
+            return fp
         }
 
         /** The iOS renderer's scope (merged over its runs), or null when it reports none. */

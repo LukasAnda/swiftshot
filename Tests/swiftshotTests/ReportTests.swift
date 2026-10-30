@@ -26,12 +26,22 @@ final class ReportTests: XCTestCase {
     }
 
     func testFingerprintOfAnIosRun() {
-        let fp = Fingerprints.ios(mode: "no-boot", xcode: "17A400", runtimes: ["23A343"], host: "macos-arm64", version: "1.0.0-test")
-        XCTAssertEqual(fp, .object(["host": .string("macos-arm64"), "mode": .string("no-boot"), "platform": .string("ios"), "runtime": .string("23A343"),
-                                    "swiftshot": .string("1.0.0-test"), "xcode": .string("17A400")]))
-        // Several runtimes: their builds, sorted and joined.
-        XCTAssertEqual(Fingerprints.ios(mode: "device", xcode: nil, runtimes: ["23B5", "23A343", "23A343"], host: "macos-x64", version: "1")["runtime"], .string("23A343, 23B5"))
-        XCTAssertNil(Fingerprints.ios(mode: "device", xcode: nil, runtimes: [], host: "macos-x64", version: "1")["xcode"])
+        let fp = Fingerprints.ios(mode: "no-boot", xcode: "17A400", runtimes: ["26.0": "23A343"], host: "macos-arm64", version: "1.0.0-test")
+        XCTAssertEqual(fp, .object(["host": .string("macos-arm64"), "mode": .string("no-boot"), "platform": .string("ios"),
+                                    "runtimes": .object(["26.0": .string("23A343")]), "swiftshot": .string("1.0.0-test"), "xcode": .string("17A400")]))
+        XCTAssertNil(Fingerprints.ios(mode: "device", xcode: nil, runtimes: [:], host: "macos-x64", version: "1")["xcode"])
+        XCTAssertNil(Fingerprints.ios(mode: "device", xcode: nil, runtimes: [:], host: "macos-x64", version: "1")["runtimes"])
+        // An image's fingerprint: its own runtime's build (watchOS keyed apart), none when the run has no build for it.
+        let run = Fingerprints.ios(mode: "no-boot", xcode: "17A400", runtimes: ["26.0": "23A343", "26.5": "23F77", "watchOS 11.0": "22R349"], host: "macos-arm64", version: "1")
+        XCTAssertEqual(Fingerprints.forImage(run, ["runtime": .string("26.5")]), .object(["host": .string("macos-arm64"), "mode": .string("no-boot"), "platform": .string("ios"),
+                                                                                       "runtime": .string("23F77"), "swiftshot": .string("1"), "xcode": .string("17A400")]))
+        XCTAssertEqual(Fingerprints.forImage(run, ["runtime": .string("watchOS 11.0")])["runtime"], .string("22R349"))
+        XCTAssertNil(Fingerprints.forImage(run, ["runtime": .string("18.0")])["runtime"])
+        XCTAssertNil(Fingerprints.forImage(run, ["runtime": .string("26.0")])["runtimes"])
+        let android: JSON = .object(["platform": .string("android"), "jdk": .string("21")])
+        XCTAssertEqual(Fingerprints.forImage(android, ["runtime": .string("26.0")]), android)
+        XCTAssertEqual(Runner.runtimeKey(.watchos, "11.0"), "watchOS 11.0")
+        XCTAssertEqual(Runner.runtimeKey(.ios, "26.5"), "26.5")
         XCTAssertEqual(Fingerprints.xcodeBuild("Xcode 27.2\nBuild version 27B52\n"), "27B52")
         XCTAssertNil(Fingerprints.xcodeBuild("nothing"))
         XCTAssertEqual(Fingerprints.hostOf(os: "macos", arch: "arm64"), "macos-arm64")
@@ -56,7 +66,7 @@ final class ReportTests: XCTestCase {
     }
 
     func testReportIsCanonicalWithErrorObjects() throws {
-        let fp = Fingerprints.ios(mode: "no-boot", xcode: "17A400", runtimes: ["23A343"], host: "macos-arm64", version: "1.0.0-test")
+        let fp = Fingerprints.ios(mode: "no-boot", xcode: "17A400", runtimes: ["26.0": "23A343"], host: "macos-arm64", version: "1.0.0-test")
         var scope = RunScope(previewFilter: [])
         let shots = [shot("Settings"), shot("Home")]
         for s in shots { scope.add(s) }
@@ -81,7 +91,7 @@ final class ReportTests: XCTestCase {
         try FileManager.default.copyItem(at: png, to: out.appendingPathComponent("en-US/iPhone 17 Pro-Glass.png"))
         var scope = RunScope(previewFilter: [])
         scope.add(shot("Glass"))
-        let fp = Fingerprints.ios(mode: "device", xcode: "17A400", runtimes: ["23A343"], host: "macos-arm64", version: "1.0.0-test")
+        let fp = Fingerprints.ios(mode: "device", xcode: "17A400", runtimes: ["26.0": "23A343"], host: "macos-arm64", version: "1.0.0-test")
         try Report.write(shots: [shot("Glass")], errors: [], scope: scope, fingerprint: ["ios": fp], to: out.path, html: false, timings: [], total: 1)
         XCTAssertEqual(try Baseline.record(output: out, baseline: base, ci: true, log: Console(capture: true)), 0)
         // The next run differs by at most 1 per channel (the device's glass noise).

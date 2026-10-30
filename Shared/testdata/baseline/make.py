@@ -442,6 +442,15 @@ def mismatches(base_fp, run_fp):
     return out
 
 
+def image_fp(run_fp, img):
+    """The fingerprint of one image of a run: an iOS run's `runtimes` (version -> build) become the
+    image's own `runtime` build, looked up by the image's `runtime`; other fingerprints as they are."""
+    fp = {k: v for k, v in run_fp.items() if k != "runtimes"}
+    if "runtimes" in run_fp and img.get("runtime") in run_fp["runtimes"]:
+        fp["runtime"] = run_fp["runtimes"][img["runtime"]]
+    return fp
+
+
 DESCRIPTIVE = ("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime")
 
 
@@ -503,14 +512,14 @@ def verify(case):
             failed.setdefault(err["id"], err["message"])  # first per id wins
     unattributed = [e for e in report["errors"] if "id" not in e]
     stray = {sid for sid in bfiles if sid not in listed}
-    entries, compared_fps, local = [], set(), False
+    entries, compared, local = [], [], False
     for sid in sorted(set(out_imgs) | set(listed) | set(failed) | (stray & set(out_imgs)), key=key_order):
         b = listed.get(sid)
         o = out_imgs.get(sid)
         if o is None and sid not in failed and (not in_scope(b, scope) or unattributed):
             continue
         if b is not None:
-            compared_fps.add(b["fingerprint"])
+            compared.append(b)
             local = local or b["local"]
         e = dict(describe(o) if o else describe(b) if b else {}, id=sid)
         err = (failed.get(sid)
@@ -554,10 +563,10 @@ def verify(case):
         entries.append(e)
 
     mism = set()
-    for f in compared_fps:
-        fp = baseline["fingerprints"][f]
+    for b in compared:
+        fp = baseline["fingerprints"][b["fingerprint"]]
         if fp["platform"] in run_fps:
-            mism.update(mismatches(fp, run_fps[fp["platform"]]))
+            mism.update(mismatches(fp, image_fp(run_fps[fp["platform"]], b)))
     errors = [{"id": e["id"], "message": e["message"]} for e in entries if e["status"] == "error"] + unattributed
     counts = {k: sum(1 for e in entries if e["status"] == k) for k in ("unchanged", "changed", "added", "removed")}
     counts["errors"] = len(errors)
@@ -601,7 +610,7 @@ def verify(case):
 # ---------------------------------------------------------------- fixture building
 
 FP = {
-    "ios": {"host": "macos-arm64", "mode": "no-boot", "platform": "ios", "runtime": "23A343",
+    "ios": {"host": "macos-arm64", "mode": "no-boot", "platform": "ios", "runtimes": {"26.0": "23A343"},
             "swiftshot": VERSION, "xcode": "17A400"},
     "android": {"compose": "1.9.0", "host": "linux-x64", "jdk": "21.0.8", "layoutlib": "16.0.1",
                 "mode": "headless", "platform": "android", "swiftshot": VERSION},
@@ -689,13 +698,18 @@ def png(item):
 
 
 def case(name, baseline, output, config=None, scope=None, requested=None, errors=None, run_fp=None, base_fps=None,
-         local=(), missing_baseline=(), missing_output=(), stray=()):
-    """baseline/output: lists of (meta, image or PNG bytes). run_fp/base_fps: platform -> fingerprint.
-    missing_*: ids listed without a PNG on disk; stray: (id, image) PNGs not in baseline.json."""
+         base_run_fp=None, local=(), missing_baseline=(), missing_output=(), stray=()):
+    """baseline/output: lists of (meta, image or PNG bytes). run_fp: platform -> this run's fingerprint.
+    The baseline images' fingerprints: base_fps (platform -> an image fingerprint), else those the run
+    base_run_fp (default: this run) gave each image. missing_*: ids listed without a PNG on disk;
+    stray: (id, image) PNGs not in baseline.json."""
     plats = sorted({m["platform"] for m, _ in output})
     host = "macos-arm64" if "ios" in plats else "linux-x64"
     run_fp = run_fp or {p: dict(FP[p], host=host) for p in plats}
-    base_fps = base_fps or dict(FP, **run_fp)
+    recorded = dict(FP, **(base_run_fp or run_fp))
+
+    def base_fp(m):
+        return base_fps[m["platform"]] if base_fps else image_fp(recorded[m["platform"]], m)
     metas = [m for m, _ in output]
     plats = sorted({m["platform"] for m, _ in output})
     report = {
@@ -709,9 +723,9 @@ def case(name, baseline, output, config=None, scope=None, requested=None, errors
         report["timings"] = {}
     else:
         report["platform"] = plats[0] if len(plats) == 1 else "android"
-    fps = {fingerprint_id(base_fps[m["platform"]]): base_fps[m["platform"]] for m, _ in baseline}
+    fps = {fingerprint_id(base_fp(m)): base_fp(m) for m, _ in baseline}
     bjson = {"schema": 1, "fingerprints": fps,
-             "images": {m["id"]: baseline_entry(m, base_fps[m["platform"]], m["id"] in local) for m, _ in baseline}}
+             "images": {m["id"]: baseline_entry(m, base_fp(m), m["id"] in local) for m, _ in baseline}}
     bfiles = {m["id"]: png(img) for m, img in baseline if m["id"] not in missing_baseline}
     bfiles.update({sid: png(img) for sid, img in stray})
     ofiles = {m["id"]: png(img) for m, img in output if m["id"] not in missing_output}
@@ -794,7 +808,7 @@ def cases():
 
     # Baseline recorded with other tools. Reported: iOS xcode and runtime, Android host and jdk.
     # Not reported: the swiftshot patch version, and the host for iOS.
-    old_ios = dict(FP["ios"], host="macos-x64", runtime="23A300", swiftshot="1.0.3", xcode="17A324")
+    old_ios = image_fp(dict(FP["ios"], host="macos-x64", runtimes={"26.0": "23A300"}, swiftshot="1.0.3", xcode="17A324"), {"runtime": "26.0"})
     old_android = dict(FP["android"], host="linux-x64", jdk="21.0.5", swiftshot="1.0.3")
     imgs = [(ios("Home"), base(1)), (android("Home"), base(2))]
     out.append(case("fingerprint-mismatch", imgs, imgs, base_fps={"ios": old_ios, "android": old_android}))
@@ -853,14 +867,22 @@ def cases():
     imgs = [(android("Home"), base(1)), (ios("Home"), base(2))]
     out.append(case("scope-scale-runtime",
                     imgs + [(android("Home", font_scale=1.3), base(3)), (ios("Home", runtime="18.0", runtime_suffix=True), base(4))],
-                    imgs))
+                    imgs, base_run_fp={"ios": dict(FP["ios"], runtimes={"18.0": "22A3354", "26.0": "23A343"})}))
 
     # --mode device without a configured tolerance: max_channel_delta 1.
     dev = {"ios": dict(FP["ios"], mode="device")}
     out.append(case("device-mode",
                     [(ios("Glass"), base(1)), (ios("Blur"), base(2))],
                     [(ios("Glass"), shift(copy(base(1)), [0, 0, 40, 10], 1)), (ios("Blur"), shift(copy(base(2)), [0, 0, 3, 1], 2))],
-                    run_fp=dev, base_fps=dev))
+                    run_fp=dev))
+
+    # Images on two runtimes; this run has a newer build of 26.5 only. Each image's fingerprint
+    # holds its own runtime's build, so only the 26.5 images differ.
+    imgs = [(ios(p, runtime=r, runtime_suffix=True), base(i)) for i, (p, r) in enumerate(
+        [("Home", "26.0"), ("Settings", "26.0"), ("Home", "26.5"), ("Settings", "26.5")])]
+    two = dict(FP["ios"], runtimes={"26.0": "23A343", "26.5": "23F77"})
+    out.append(case("multi-runtime", imgs, imgs, run_fp={"ios": dict(two, runtimes={"26.0": "23A343", "26.5": "23F80"})},
+                    base_run_fp={"ios": two}))
     return out
 
 

@@ -29,6 +29,17 @@ object Fingerprints {
     /** The Swiftshot version (`SWIFTSHOT_VERSION_OVERRIDE` overrides it). */
     fun version(): String = System.getenv("SWIFTSHOT_VERSION_OVERRIDE") ?: VERSION
 
+    /**
+     * The fingerprint of one image of a run (docs/wiki/Baseline-format.md, Image fingerprint): an iOS run's
+     * `runtimes` (version → build) become the image's own `runtime` build, looked up by the image's `runtime`.
+     */
+    fun forImage(run: Map<*, *>, image: Map<*, *>): Map<String, Any?> {
+        val fp = LinkedHashMap<String, Any?>()
+        for ((k, v) in run) if (k != "runtimes") fp[k.toString()] = v
+        ((run["runtimes"] as? Map<*, *>)?.get(image["runtime"] as? String) as? String)?.let { fp["runtime"] = it }
+        return fp
+    }
+
     /** Fingerprint id: the first 12 hex digits of its hash. */
     fun id(fp: Map<*, *>): String = CanonicalJson.hash(fp).take(12)
 

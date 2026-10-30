@@ -38,6 +38,8 @@ final class Runner {
     var foundPreviews = Set<String>()
     /// Points-to-pixels of each device a job rendered, for screenshots whose agent didn't say.
     var deviceScales: [String: Double] = [:]
+    /// Watch devices: their screenshots' runtime is "watchOS <version>" (apart from iOS versions).
+    var watchDevices = Set<String>()
     var skipped: [String] = []
     var warned = Set<String>()
     var timings: [(String, Double)] = []
@@ -159,7 +161,9 @@ final class Runner {
     func makeJob(mode: JobMode, language: String, runtime: SimRuntime, devices: [DeviceProfile], controlDir: String? = nil,
                  target: Target? = nil) -> Job {
         let statusBar = Simctl.statusBarLocales(runtime)
-        lock.lock(); for d in devices { deviceScales[d.name] = d.scale }; lock.unlock()
+        lock.lock()
+        for d in devices { deviceScales[d.name] = d.scale; if target?.platform == .watchos { watchDevices.insert(d.name) } }
+        lock.unlock()
         return Job(mode: mode, outputDir: outputDir, language: language, runtime: runtime.version, devices: devices,
             appearances: options.appearances, previewFilter: options.previews, format: options.format,
             settleFrames: options.settleFrames, settleDelay: options.delay, controlDir: controlDir,
@@ -224,7 +228,12 @@ final class Runner {
 
     func collect(_ result: JobResult) {
         lock.lock()
-        shots += result.shots.map { s in var s = s; if s.scale == nil { s.scale = deviceScales[s.device] }; return s }
+        shots += result.shots.map { s in
+            var s = s
+            if s.scale == nil { s.scale = deviceScales[s.device] }
+            if watchDevices.contains(s.device) { s.runtime = Runner.runtimeKey(.watchos, s.runtime) }
+            return s
+        }
         errors += result.errors
         shotErrors += (result.shotErrors ?? []).map { RunError(id: $0.id, message: $0.message) }
         for p in result.previews where options.previews.isEmpty || options.previews.contains(where: { globMatch($0, p) }) { foundPreviews.insert(p) }
@@ -245,11 +254,16 @@ final class Runner {
         return scope
     }
 
+    /// A runtime as reports name it: the iOS version, or "watchOS <version>".
+    static func runtimeKey(_ platform: Platform, _ version: String) -> String { platform == .watchos ? "watchOS \(version)" : version }
+
     /// The run's fingerprint: Xcode's build, the runtimes' builds and the mode (`device` for booted framebuffer
     /// captures, else `no-boot`: virtual rendering gives the same pixels with or without a simulator).
-    func fingerprint(runtimes: [SimRuntime]) async -> [String: JSON] {
+    func fingerprint(targets: [Target]) async -> [String: JSON] {
         let xcode = (try? await sh(["xcodebuild", "-version"], allowFailure: true, stdoutOnly: true)).flatMap(Fingerprints.xcodeBuild)
-        return ["ios": Fingerprints.ios(mode: options.mode == .device ? "device" : "no-boot", xcode: xcode, runtimes: runtimes.compactMap(\.buildversion))]
+        var builds: [String: String] = [:]
+        for t in targets { for r in t.runtimes { if let b = r.buildversion { builds[Runner.runtimeKey(t.platform, r.version)] = b } } }
+        return ["ios": Fingerprints.ios(mode: options.mode == .device ? "device" : "no-boot", xcode: xcode, runtimes: builds)]
     }
 
     // MARK: Commands
@@ -392,9 +406,9 @@ final class Runner {
         }
 
         let allErrors = shotErrors + errors.map { RunError(id: nil, message: $0) }
-        let runtimes = targets.flatMap(\.runtimes)
-        try Report.write(shots: shots, errors: allErrors, scope: scope(devices: allTypes.map(\.name), runtimes: runtimes.map(\.version)),
-                         fingerprint: targets.isEmpty ? [:] : await fingerprint(runtimes: runtimes), to: outputDir, html: options.html, timings: timings,
+        let runtimes = targets.flatMap { t in t.runtimes.map { Runner.runtimeKey(t.platform, $0.version) } }
+        try Report.write(shots: shots, errors: allErrors, scope: scope(devices: allTypes.map(\.name), runtimes: runtimes),
+                         fingerprint: targets.isEmpty ? [:] : await fingerprint(targets: targets), to: outputDir, html: options.html, timings: timings,
                          total: Date().timeIntervalSince(total))
         for s in skipped { Log.warn("Skipped: " + s) }
         for e in allErrors { Log.warn(e.line) }

@@ -1,0 +1,25 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "configHash": "8f36dfee0cfcc981c95ea8bb102eb44823ed953419c97f19da5fd193b520117a",
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtimes": {
+        "26.0": "23A343",
+        "26.5": "23F80"
+      },
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "ids": {
+    "added": [],
+    "changed": [],
+    "removed": []
+  },
+  "schema": 1
+}

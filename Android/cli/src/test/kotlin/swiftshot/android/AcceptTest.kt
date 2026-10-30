@@ -436,4 +436,25 @@ class AcceptTest {
         assertFalse(errors.toString().contains("\tat "), "no stack traces")
         assertEquals("", clean())
     }
+
+    @Test fun acceptedImagesGetTheirOwnRuntimesBuild() {
+        repoWith("multi-runtime")
+        val r = report("multi-runtime")
+        val id = "en-US/iPhone 17 Pro-Settings-iOS26.5"
+        val result = File(r, "result.json")
+        @Suppress("UNCHECKED_CAST")
+        val j = (Json.parse(result.readText()) as Map<String, Any?>).toMutableMap()
+        @Suppress("UNCHECKED_CAST")
+        j["screenshots"] = (j["screenshots"] as List<Map<String, Any?>>).map { if (it["id"] == id) it + ("status" to "changed") else it }
+        result.writeText(CanonicalJson.pretty(j))
+        setManifest(r) { it["ids"] = mapOf("added" to emptyList<String>(), "changed" to listOf(id), "removed" to emptyList<String>()) }
+        File(root, "multi-runtime/output/$id.png").copyTo(File(r, "images/new/$id.png"))
+        assertEquals(0, accept(r))
+        val fps = json(File(baseline, "baseline.json"))["fingerprints"] as Map<*, *>
+        val fp = fps[(images()[id] as Map<*, *>)["fingerprint"]] as Map<*, *>
+        assertEquals("23F80", fp["runtime"])
+        assertFalse(fp.containsKey("runtimes"))
+        // The 26.0 images keep theirs.
+        assertEquals("23A343", (fps[(images()["en-US/iPhone 17 Pro-Home-iOS26.0"] as Map<*, *>)["fingerprint"]] as Map<*, *>)["runtime"])
+    }
 }

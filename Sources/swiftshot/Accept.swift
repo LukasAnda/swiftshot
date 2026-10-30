@@ -284,7 +284,8 @@ enum Accept {
                 var d: ObjCBool = false
                 guard FileManager.default.fileExists(atPath: png.path, isDirectory: &d), !d.boolValue else { throw UsageError("\(label): images/new/\(id).png is missing") }
                 guard let platform = shot["platform"]?.string else { throw UsageError("\(label): \(id) has no platform in result.json") }
-                guard let fp = fingerprint[platform], fp.object != nil else { throw UsageError("\(label): manifest.json has no \(platform) fingerprint for \(id)") }
+                guard let runFp = fingerprint[platform], runFp.object != nil else { throw UsageError("\(label): manifest.json has no \(platform) fingerprint for \(id)") }
+                let fp = Fingerprints.forImage(runFp, shot)
                 var entry = Baseline.describe(shot)
                 entry["local"] = .bool(!ci)
                 entry["fingerprint"] = .string(Fingerprints.id(fp))

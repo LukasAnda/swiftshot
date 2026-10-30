@@ -36,7 +36,7 @@ class BaselineTest {
 
     @Test fun everyFixtureCaseMatchesByteForByte() {
         val all = cases()
-        assertEquals(21, all.size, "fixture cases")
+        assertEquals(22, all.size, "fixture cases")
         val problems = mutableListOf<String>()
         for (case in all) {
             val report = File(tmp, case.name)
@@ -115,6 +115,9 @@ class BaselineTest {
         assertEquals("default", ios["textSize"])
         assertEquals("26.0", ios["runtime"])
         assertEquals("ios", (fps[ios["fingerprint"]] as Map<*, *>)["platform"])
+        // The image fingerprint: its own runtime's build, not the run's runtimes.
+        assertEquals("23A343", (fps[ios["fingerprint"]] as Map<*, *>)["runtime"])
+        assertFalse((fps[ios["fingerprint"]] as Map<*, *>).containsKey("runtimes"))
         val android = images["en-US/Pixel 9-Home"] as Map<*, *>
         assertEquals(":app", android["module"])
         assertEquals(1L, android["fontScale"])
@@ -224,5 +227,27 @@ class BaselineTest {
         )
         assertEquals(listOf(mapOf<String, Any?>("message" to "iOS: the iOS renderer exited with status 3")), FlutterIos.errorsOf(Ios.Rendered(3, emptyList(), mapOf("errors" to emptyList<Any>()))))
         assertEquals(emptyList<Map<String, Any?>>(), FlutterIos.errorsOf(Ios.Rendered(0, emptyList(), emptyMap<String, Any?>())))
+    }
+
+    @Test fun multiRuntimeMismatchIsOnlyForTheChangedRuntime() {
+        val v = verify(case("multi-runtime"))
+        assertEquals(listOf("ios runtime: baseline 23F77, this run 23F80"), v.mismatches)
+        // Recording that run gives each image its own runtime's build.
+        val base = File(tmp, "base-multi")
+        Baseline.record(output("multi-runtime"), base, ci = true, log = Log(false))
+        val json = baselineJson(base)
+        val fps = json["fingerprints"] as Map<*, *>
+        val images = json["images"] as Map<*, *>
+        fun build(id: String) = (fps[(images[id] as Map<*, *>)["fingerprint"]] as Map<*, *>)["runtime"]
+        assertEquals("23A343", build("en-US/iPhone 17 Pro-Home-iOS26.0"))
+        assertEquals("23F80", build("en-US/iPhone 17 Pro-Settings-iOS26.5"))
+    }
+
+    @Test fun imageFingerprintTakesTheImagesRuntime() {
+        val run = mapOf("platform" to "ios", "mode" to "no-boot", "runtimes" to mapOf("26.0" to "23A343", "watchOS 11.0" to "22R349"))
+        assertEquals(mapOf("platform" to "ios", "mode" to "no-boot", "runtime" to "22R349"), Fingerprints.forImage(run, mapOf("runtime" to "watchOS 11.0")))
+        assertEquals(mapOf("platform" to "ios", "mode" to "no-boot"), Fingerprints.forImage(run, mapOf("runtime" to "18.0")))
+        val android = mapOf("platform" to "android", "jdk" to "21")
+        assertEquals(android, Fingerprints.forImage(android, mapOf("runtime" to "26.0")))
     }
 }

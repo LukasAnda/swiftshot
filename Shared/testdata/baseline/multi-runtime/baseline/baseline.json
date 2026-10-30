@@ -1,0 +1,67 @@
+{
+  "fingerprints": {
+    "d69a08e53aff": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23F77",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    },
+    "d75a5b53f964": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "images": {
+    "en-US/iPhone 17 Pro-Home-iOS26.0": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d75a5b53f964",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Home",
+      "runtime": "26.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro-Home-iOS26.5": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d69a08e53aff",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Home",
+      "runtime": "26.5",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro-Settings-iOS26.0": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d75a5b53f964",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "26.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro-Settings-iOS26.5": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d69a08e53aff",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "26.5",
+      "textSize": "default"
+    }
+  },
+  "schema": 1
+}

@@ -27,7 +27,7 @@ final class BaselineTests: XCTestCase {
 
     func testEveryFixtureCaseMatchesByteForByte() throws {
         let all = fixtureCases()
-        XCTAssertEqual(all.count, 21, "fixture cases")
+        XCTAssertEqual(all.count, 22, "fixture cases")
         var problems: [String] = []
         var passed: [String] = []
         for c in all {
@@ -112,6 +112,9 @@ final class BaselineTests: XCTestCase {
         XCTAssertEqual(ios["textSize"], .string("default"))
         XCTAssertEqual(ios["runtime"], .string("26.0"))
         XCTAssertEqual(fps[ios["fingerprint"]!.string!]!["platform"], .string("ios"))
+        // The image fingerprint: its own runtime's build, not the run's runtimes.
+        XCTAssertEqual(fps[ios["fingerprint"]!.string!]!["runtime"], .string("23A343"))
+        XCTAssertNil(fps[ios["fingerprint"]!.string!]!["runtimes"])
         let android = images["en-US/Pixel 9-Home"]!
         XCTAssertEqual(android["module"], .string(":app"))
         XCTAssertEqual(android["fontScale"], .int(1))
@@ -154,6 +157,17 @@ final class BaselineTests: XCTestCase {
         let before = files(base).mapValues(bytes)
         XCTAssertEqual(try Baseline.record(output: try output("build-error"), baseline: base, ci: true, log: Console(capture: true)), 2)
         XCTAssertEqual(files(base).mapValues(bytes), before)
+    }
+
+    func testMultiRuntimeMismatchIsOnlyForTheChangedRuntime() throws {
+        let v = try verify(fixture("multi-runtime"))
+        XCTAssertEqual(v.mismatches, ["ios runtime: baseline 23F77, this run 23F80"])
+        let base = tmp.appendingPathComponent("base-multi")
+        _ = try Baseline.record(output: try output("multi-runtime"), baseline: base, ci: true, log: Console(capture: true))
+        let json = try baselineJson(base)
+        func build(_ id: String) -> JSON? { json["fingerprints"]![json["images"]![id]!["fingerprint"]!.string!]!["runtime"] }
+        XCTAssertEqual(build("en-US/iPhone 17 Pro-Home-iOS26.0"), .string("23A343"))
+        XCTAssertEqual(build("en-US/iPhone 17 Pro-Settings-iOS26.5"), .string("23F80"))
     }
 
     func testConfigHashIsTheNormalizedConfigs() throws {

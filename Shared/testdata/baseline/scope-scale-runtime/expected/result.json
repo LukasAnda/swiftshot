@@ -24,12 +24,16 @@
       "host": "macos-arm64",
       "mode": "no-boot",
       "platform": "ios",
-      "runtime": "23A343",
+      "runtimes": {
+        "26.0": "23A343"
+      },
       "swiftshot": "1.0.0-test",
       "xcode": "17A400"
     }
   },
-  "fingerprintMismatch": [],
+  "fingerprintMismatch": [
+    "android host: baseline linux-x64, this run macos-arm64"
+  ],
   "host": "macos-arm64",
   "localBaseline": false,
   "schema": 1,

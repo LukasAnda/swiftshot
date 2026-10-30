@@ -21,6 +21,11 @@ and the JVM CLI) follow this page exactly and are tested against the fixtures in
   images/diff/<id>.png                changed
 ```
 
+Relative `baseline_directory` and `report_directory` resolve against the current directory on the
+Mac (iOS; flags and swiftshot.json alike, as `output_directory`). On the JVM side a flag resolves
+against the current directory (Flutter projects: `--project-dir`) and a swiftshot.json value against
+the folder of that file.
+
 **Screenshot id**: the PNG's path relative to the output directory, `/`-separated, without `.png`,
 e.g. `de-DE/iPhone 17 Pro-Welcome-dark`. File names are the ones `run` writes today (appearance,
 text size, font scale, iOS runtime parts included).
@@ -119,12 +124,21 @@ directory is not listed.
 | `host` | all | `macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64` |
 | `swiftshot` | all | version |
 | `mode` | all | `no-boot`, `device` (iOS); `headless` (Android, desktop, Flutter); `exact-ios` (Flutter) |
-| `xcode`, `runtime` | ios | build numbers (`17A400`, `23A343`) |
+| `xcode` | ios | Xcode's build (`17A400`) |
+| `runtimes` | ios, run only | each simulator runtime the run used, version → build (`{"26.5": "23F77"}`) |
+| `runtime` | ios, image only | the build of the image's own runtime (`23F77`) |
 | `layoutlib`, `compose`, `jdk` | android | versions from the resolved classpath |
 | `skiko`, `compose`, `jdk` | desktop | versions from the resolved classpath |
 | `flutter`, `renderer`, `fonts` | flutter | version; `impeller`, `skia` or `exact-ios`; sorted font file names |
 
-Values are strings, `fonts` an array of strings. One run, one host: all platform fingerprints of a
+Values are strings, `fonts` an array of strings, `runtimes` an object of strings.
+
+**Image fingerprint**: what produced one image. For a run's iOS fingerprint: the same without
+`runtimes`, plus `runtime` = `runtimes[<the image's runtime>]` (left out when the run has no build for
+it). Every other fingerprint is the run's as it is. baseline.json stores image fingerprints, so an
+image keeps the build of its own runtime, whatever other runtimes the run used. watchOS runtimes
+are keyed `watchOS <version>` (`"watchOS 11.0": "22R349"`), and a watch screenshot's `runtime` is
+the same string, so iOS and watchOS versions never meet. One run, one host: all platform fingerprints of a
 run carry the same `host` (a run with iOS is on macOS). **Fingerprint id**: the first 12 hex digits of the
 fingerprint's hash.
 
@@ -149,7 +163,9 @@ is a difference (the other shown as `none`).
 }
 ```
 
-- Every image references one entry of `fingerprints`; unreferenced fingerprints are dropped on write.
+- Every image references one entry of `fingerprints` (an image fingerprint, see Fingerprint);
+  unreferenced fingerprints are dropped on write. `record` and `accept` store the image fingerprint
+  of the run's (`accept`: the manifest's) fingerprint for the image's platform and `runtime`.
 - iOS images have `textSize` (`"default"` when none) and `runtime`; Android and desktop `module`
   and `fontScale`; Flutter `fontScale`.
 - `local`: `true` when the image was rendered outside CI (`record` on a developer machine;
@@ -239,8 +255,9 @@ sample c and alpha a (0–255), in integers:
 **Errors**: `errors` holds `{"id", "message"}` for every `error` entry (sorted by id), then the
 report's errors without `id` as `{"message"}`, in report order.
 
-**Fingerprint mismatch**: for every distinct baseline fingerprint referenced by the `images` entry
-of a listed id (any status, `error` included), compare it with the run's fingerprint for its platform (none: skipped).
+**Fingerprint mismatch**: for every listed id with an `images` entry (any status, `error` included),
+compare that entry's fingerprint with the image fingerprint this run gives it: the run's fingerprint
+for its platform (none: skipped) with `runtimes` replaced by the build of the entry's `runtime`.
 Each pixel-relevant difference is a message `<platform> <field>: baseline <value>, this run <value>`
 (arrays joined with `, `, absent = `none`); duplicates dropped, sorted. `verify` prints these
 first; they never change the status.

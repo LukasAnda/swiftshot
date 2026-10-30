@@ -251,7 +251,7 @@ object Accept {
                 val png = File(dir, "images/new/$id.png")
                 if (!png.isFile) usage("$label: images/new/$id.png is missing")
                 val platform = shot["platform"] as? String ?: usage("$label: $id has no platform in result.json")
-                val fp = fingerprint[platform] as? Map<*, *> ?: usage("$label: manifest.json has no $platform fingerprint for $id")
+                val fp = (fingerprint[platform] as? Map<*, *>)?.let { Fingerprints.forImage(it, shot) } ?: usage("$label: manifest.json has no $platform fingerprint for $id")
                 val entry: Map<String, Any?> = Baseline.describe(shot) + ("local" to !ci) + ("fingerprint" to Fingerprints.id(fp))
                 changes += Change(id, kind, label, png, entry, fp)
             }

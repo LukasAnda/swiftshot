@@ -182,7 +182,7 @@ object Baseline {
         BaselineReport.clear(report)
         val pool = Executors.newFixedThreadPool(maxOf(1, minOf(Runtime.getRuntime().availableProcessors(), 4)))
         val pending = ArrayList<Future<Map<String, Any?>>>()
-        val compared = LinkedHashSet<String>()
+        val compared = ArrayList<Map<*, *>>()
         var local = false
         try {
             for (id in ids) {
@@ -190,7 +190,7 @@ object Baseline {
                 val o = run.shots[id]
                 if (o == null && id !in run.failed && (!inScope(b!!, run.scope) || run.unattributed.isNotEmpty())) continue
                 if (b != null) {
-                    (b["fingerprint"] as String?)?.let(compared::add)
+                    compared += b
                     if (b["local"] == true) local = true
                 }
                 val e = LinkedHashMap<String, Any?>((o ?: b)?.let(::describe) ?: emptyMap())
@@ -216,8 +216,10 @@ object Baseline {
                 }
             }
             val entries = pending.map { it.get() }
-            val mismatches = compared.mapNotNull { stored.fingerprints[it] as Map<*, *>? }.flatMap { fp ->
-                (run.fingerprint[fp["platform"] as String?] as Map<*, *>?)?.let { Fingerprints.mismatches(fp, it) }.orEmpty()
+            // Each image against the fingerprint this run gives it (its own runtime's build).
+            val mismatches = compared.flatMap { b ->
+                val fp = stored.fingerprints[b["fingerprint"] as String?] as Map<*, *>? ?: return@flatMap emptyList()
+                (run.fingerprint[fp["platform"] as String?] as Map<*, *>?)?.let { Fingerprints.mismatches(fp, Fingerprints.forImage(it, b)) }.orEmpty()
             }.distinct().sortedWith(CanonicalJson.utf8)
             val errors = entries.filter { it["status"] == "error" }.map { linkedMapOf("id" to it["id"], "message" to it["message"]) } + run.unattributed
             val listed = entries.map { it["id"] as String }.toSet()
@@ -297,7 +299,7 @@ object Baseline {
             val png = File(output, "$id.png")
             if (!png.isFile) { missing += id; continue }
             val platform = o["platform"] as String?
-            val fp = (run.fingerprint[platform] as Map<*, *>?) ?: mapOf("platform" to platform)
+            val fp = (run.fingerprint[platform] as Map<*, *>?)?.let { Fingerprints.forImage(it, o) } ?: mapOf("platform" to platform)
             val fid = Fingerprints.id(fp)
             fingerprints[fid] = fp
             images[id] = describe(o).apply { put("fingerprint", fid); put("local", !ci) }

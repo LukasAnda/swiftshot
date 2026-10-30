@@ -252,13 +252,13 @@ enum Baseline {
 
         var slots: [[String: JSON]?] = []
         var jobs: [(Int, () throws -> [String: JSON])] = []
-        var compared: [String] = []
+        var compared: [[String: JSON]] = []
         var local = false
         for id in ids {
             let b = stored.images[id], o = run.shots[id]
             if o == nil && run.failed[id] == nil && (!inScope(b!, run.scope) || !run.unattributed.isEmpty) { continue }
             if let b {
-                if let f = b["fingerprint"]?.string, !compared.contains(f) { compared.append(f) }
+                compared.append(b)
                 if b["local"] == .bool(true) { local = true }
             }
             var e = (o ?? b).map(describe) ?? [:]
@@ -302,9 +302,12 @@ enum Baseline {
         if let failure { throw failure }
         let entries = slots.map { $0! }
         var mismatches: [String] = []
-        for f in compared {
-            guard let fp = stored.fingerprints[f], fp.object != nil, let platform = fp["platform"]?.string, let mine = run.fingerprint[platform], mine.object != nil else { continue }
-            for m in Fingerprints.mismatches(baseline: fp, run: mine) where !mismatches.contains(m) { mismatches.append(m) }
+        // Each image against the fingerprint this run gives it (its own runtime's build).
+        var seen = Set<String>()
+        for b in compared {
+            guard let f = b["fingerprint"]?.string, let fp = stored.fingerprints[f], fp.object != nil, let platform = fp["platform"]?.string,
+                  let mine = run.fingerprint[platform], mine.object != nil else { continue }
+            for m in Fingerprints.mismatches(baseline: fp, run: Fingerprints.forImage(mine, b)) where seen.insert(m).inserted { mismatches.append(m) }
         }
         mismatches.sort(by: utf8Less)
         let errors: [JSON] = entries.filter { $0["status"] == .string("error") }.map { .object(["id": $0["id"]!, "message": $0["message"]!]) } + run.unattributed
@@ -392,7 +395,7 @@ enum Baseline {
             var isDir: ObjCBool = false
             guard FileManager.default.fileExists(atPath: png.path, isDirectory: &isDir), !isDir.boolValue else { missing.append(id); continue }
             let platform = o["platform"] ?? .null
-            let fp = platform.string.flatMap { run.fingerprint[$0] }.flatMap { $0.object != nil ? $0 : nil } ?? .object(["platform": platform])
+            let fp = platform.string.flatMap { run.fingerprint[$0] }.flatMap { $0.object != nil ? Fingerprints.forImage($0, o) : nil } ?? .object(["platform": platform])
             let fid = Fingerprints.id(fp)
             fingerprints[fid] = fp
             var entry = describe(o)

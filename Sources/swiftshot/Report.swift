@@ -89,7 +89,7 @@ enum Report {
         var body = ""
         for (language, group) in Dictionary(grouping: sorted, by: \.language).sorted(by: { $0.key < $1.key }) {
             body += "<h2>\(esc(language))</h2>\n"
-            for (key, row) in Dictionary(grouping: group, by: { "\($0.device) · iOS \($0.runtime)" }).sorted(by: { $0.key < $1.key }) {
+            for (key, row) in Dictionary(grouping: group, by: { "\($0.device) · \($0.runtime.hasPrefix("watchOS") ? "" : "iOS ")\($0.runtime)" }).sorted(by: { $0.key < $1.key }) {
                 body += "<h3>\(esc(key))</h3><div class=row>\n"
                 func url(_ path: String) -> String {
                     path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
