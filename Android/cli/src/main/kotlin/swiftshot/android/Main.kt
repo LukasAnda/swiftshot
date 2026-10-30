@@ -12,8 +12,8 @@ fun main(args: Array<String>) {
     exitProcess(cli(args.toList(), log))
 }
 
-/** The exit status of a command line. verify and record: 0/1/2 as the baseline format says, 64 for usage errors. */
-fun cli(args: List<String>, log: Log): Int {
+/** The exit status of a command line. verify and record: 0/1/2 as the baseline format says, 64 for usage errors. [render] is the run (tests replace it). */
+fun cli(args: List<String>, log: Log, render: (Options, Boolean) -> Unit = { o, flutter -> if (flutter) Flutter(o, log).run() else Runner(o, log).run() }): Int {
     if (Options.command(args) in setOf("verify", "record", "accept")) {
         val o = try { Options.parse(args) } catch (e: Exception) {
             if (e !is CliError && e !is IllegalArgumentException && e !is IllegalStateException) throw e
@@ -23,13 +23,13 @@ fun cli(args: List<String>, log: Log): Int {
         if (o.command == "accept") return Accept.run(o.from, o.only, o.push, o.author, o.baselineDir(isFlutter(o)), log)
         return try {
             o.notes.forEach(log::warn)
-            baselineCommand(o, log)
+            baselineCommand(o, log, render)
         } catch (e: CliError) {
             log.error(e.message ?: "failed"); 2
         } catch (e: IllegalArgumentException) {
             log.error(e.message ?: "invalid option"); 64
-        } catch (e: IllegalStateException) {
-            log.error(e.message ?: "failed"); 2
+        } catch (e: Exception) {
+            log.error(describe(e)); 2
         }
     }
     return try {
@@ -61,21 +61,32 @@ private fun isFlutter(o: Options) = !File(o.projectDir, "gradlew").isFile && Flu
  * baseline or the recording into it. A run that fails as a whole (a build error) is a report with one error
  * without id: verify then exits 2 and reports no removals.
  */
-private fun baselineCommand(o: Options, log: Log): Int {
+private fun baselineCommand(o: Options, log: Log, render: (Options, Boolean) -> Unit): Int {
     val flutter = isFlutter(o)
     val output = o.outputDir(flutter)
     File(output, "swiftshot-report.json").delete()
     try {
-        if (flutter) Flutter(o, log).run() else Runner(o, log).run()
-    } catch (e: CliError) {
-        log.error(e.message ?: "failed")
-        RunReport.writeFailure(output, if (flutter) "flutter" else "android", e.message ?: "the run failed", log.seconds)
+        render(o, flutter)
+    } catch (e: Exception) {
+        if (e is InterruptedException) throw e
+        log.error(describe(e))
+        RunReport.writeFailure(output, if (flutter) "flutter" else "android", describe(e), log.seconds)
     }
     if (!File(output, "swiftshot-report.json").isFile) RunReport.writeFailure(output, if (flutter) "flutter" else "android", "the run wrote no report", log.seconds)
     val baseline = o.baselineDir(flutter)
-    return if (o.command == "record") Baseline.record(output, baseline, BaselineEnv.ci(), log)
-    else Baseline.verify(output, baseline, o.reportDir(flutter), CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir)), log)
+    if (o.command == "record") return Baseline.record(output, baseline, BaselineEnv.ci(), log)
+    val report = o.reportDir(flutter)
+    return try {
+        Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir)), log)
+    } catch (e: Exception) {
+        // No result: nothing of an earlier verify may stay behind to be read as this one's.
+        BaselineReport.clear(report)
+        throw e
+    }
 }
+
+/** An exception's message; one we didn't expect also says what it was. */
+private fun describe(e: Exception): String = if (e is CliError || e is IllegalArgumentException) e.message ?: "failed" else e.toString()
 
 private fun devices() {
     for ((type, list) in Devices.all.groupBy { it.type }) {

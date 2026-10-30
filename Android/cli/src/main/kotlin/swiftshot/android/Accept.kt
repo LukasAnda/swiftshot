@@ -60,6 +60,8 @@ object Accept {
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             log.error("accept was interrupted; the baseline may be partly updated (git status shows what changed)"); 1
+        } catch (e: Exception) {
+            log.error("$e (the baseline may be partly updated; git status shows what changed)"); 1
         } finally {
             temps.forEach { it.deleteRecursively() }
         }

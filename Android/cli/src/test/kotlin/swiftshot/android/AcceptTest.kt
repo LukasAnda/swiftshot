@@ -348,6 +348,12 @@ class AcceptTest {
         }
     }
 
+    @Test fun unexpectedExceptionIsARefusal() {
+        repoWith("changed-pixels")
+        val log = object : Log(false) { override fun ok(s: String) = throw IllegalStateException("broken terminal") }
+        assertEquals(1, Accept.run(listOf(report("changed-pixels").path), null, false, null, baseline, log, token = null, gitEnv = gitEnv))
+    }
+
     @Test fun acceptOptions() {
         val dir = File(tmp, "project").apply { mkdirs() }
         val o = Options.parse(listOf("accept", "--project-dir", dir.path, "--from", "a", "--from", "b.zip", "--only", "x,y", "--only", "z", "--push", "--author", "A <a@b.c>"))

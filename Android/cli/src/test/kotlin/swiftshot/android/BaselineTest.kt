@@ -243,6 +243,33 @@ class BaselineTest {
         assertEquals("23F80", build("en-US/iPhone 17 Pro-Settings-iOS26.5"))
     }
 
+    /** A report directory holding an earlier verify's files; the command line of a verify into it. */
+    private fun staleRun(command: String = "verify"): Pair<File, List<String>> {
+        val report = File(tmp, "report").apply { mkdirs() }
+        for (f in listOf("result.json", "manifest.json", "junit.xml")) File(report, f).writeText("stale")
+        return report to listOf(command, "--project-dir", tmp.path, "--output", File(tmp, "out").path, "--baseline-directory", File(tmp, "base").path,
+            "--report-directory", report.path)
+    }
+
+    @Test fun unexpectedRunExceptionIsAFreshFailureReport() {
+        val (report, args) = staleRun()
+        assertEquals(2, cli(args, Log(false)) { _, _ -> throw RuntimeException("boom") })
+        val r = result(report)
+        assertEquals("error", r["status"])
+        assertTrue((r["errors"] as List<*>).single().toString().contains("boom"), r.toString())
+        assertFalse("stale" in File(report, "junit.xml").readText())
+        assertFalse("stale" in File(report, "manifest.json").readText())
+    }
+
+    @Test fun unexpectedComparisonExceptionExits2WithoutStaleReport() {
+        val (report, args) = staleRun()
+        val out = File(tmp, "out")
+        assertEquals(2, cli(args, Log(false)) { _, _ -> out.mkdirs(); File(out, "swiftshot-report.json").writeText("""{"screenshots": "x"}""") })
+        for (f in listOf("result.json", "manifest.json", "junit.xml")) assertFalse(File(report, f).exists(), f)
+        // record: the same exception is exit 2 too.
+        assertEquals(2, cli(staleRun("record").second, Log(false)) { _, _ -> out.mkdirs(); File(out, "swiftshot-report.json").writeText("""{"screenshots": "x"}""") })
+    }
+
     @Test fun imageFingerprintTakesTheImagesRuntime() {
         val run = mapOf("platform" to "ios", "mode" to "no-boot", "runtimes" to mapOf("26.0" to "23A343", "watchOS 11.0" to "22R349"))
         assertEquals(mapOf("platform" to "ios", "mode" to "no-boot", "runtime" to "22R349"), Fingerprints.forImage(run, mapOf("runtime" to "watchOS 11.0")))
