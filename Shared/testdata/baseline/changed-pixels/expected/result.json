@@ -52,6 +52,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Home",
       "language": "en-US",
+      "module": ":app",
       "new": "images/new/en-US/Pixel 9-Home.png",
       "pixels": 62,
       "platform": "android",
@@ -65,6 +66,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Settings",
       "language": "en-US",
+      "module": ":app",
       "platform": "android",
       "preview": "Settings",
       "status": "unchanged"

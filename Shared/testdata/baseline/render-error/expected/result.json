@@ -4,12 +4,19 @@
   "counts": {
     "added": 0,
     "changed": 0,
-    "errors": 1,
+    "errors": 2,
     "removed": 0,
     "unchanged": 1
   },
   "errors": [
-    "Broken · Pixel 9 · en-US: IllegalStateException: boom"
+    {
+      "id": "en-US/Pixel 9-Broken",
+      "message": "IllegalStateException: boom"
+    },
+    {
+      "id": "en-US/Pixel 9-New",
+      "message": "Timed out after 60 s"
+    }
   ],
   "fingerprint": {
     "android": {
@@ -30,11 +37,29 @@
       "appearance": "light",
       "device": "Pixel 9",
       "fontScale": 1,
+      "id": "en-US/Pixel 9-Broken",
+      "language": "en-US",
+      "message": "IllegalStateException: boom",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Broken",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
       "id": "en-US/Pixel 9-Home",
       "language": "en-US",
+      "module": ":app",
       "platform": "android",
       "preview": "Home",
       "status": "unchanged"
+    },
+    {
+      "id": "en-US/Pixel 9-New",
+      "message": "Timed out after 60 s",
+      "status": "error"
     }
   ],
   "status": "error",

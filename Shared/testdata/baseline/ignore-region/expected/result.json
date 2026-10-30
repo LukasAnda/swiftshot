@@ -30,6 +30,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Feed-dark",
       "language": "en-US",
+      "module": ":app",
       "platform": "android",
       "preview": "Feed",
       "status": "unchanged"
@@ -50,6 +51,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Feed-light",
       "language": "en-US",
+      "module": ":app",
       "new": "images/new/en-US/Pixel 9-Feed-light.png",
       "pixels": 32,
       "platform": "android",

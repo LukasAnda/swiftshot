@@ -20,6 +20,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 BRANCH = "feature/x"
 VERSION = "1.0.0-test"
+CI = False
 W, H = 40, 80
 
 
@@ -287,7 +288,7 @@ def mismatches(base_fp, run_fp):
     return out
 
 
-DESCRIPTIVE = ("platform", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime")
+DESCRIPTIVE = ("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime")
 
 
 def describe(meta):
@@ -299,19 +300,12 @@ def describe(meta):
 
 def in_scope(img, scope):
     for field, key in (("platform", "platforms"), ("device", "devices"), ("language", "languages"),
-                       ("appearance", "appearances"), ("fontScale", "fontScales"), ("textSize", "textSizes")):
+                       ("appearance", "appearances"), ("fontScale", "fontScales"), ("textSize", "textSizes"),
+                       ("module", "modules"), ("runtime", "runtimes")):
         if field in img and img[field] not in scope.get(key, []):
             return False
     globs = scope.get("previewFilter", [])
     return not globs or any(glob(g, img["preview"]) for g in globs)
-
-
-def scale_label(d):
-    if "fontScale" in d and d["fontScale"] != 1:
-        return " " + num(d["fontScale"]) + "x"
-    if "textSize" in d and d["textSize"] != "default":
-        return " " + d["textSize"]
-    return ""
 
 
 def xml_attr(s):
@@ -340,12 +334,18 @@ def verify(case):
     run_fps = report["fingerprint"]
     scope = report["scope"]
     out_imgs = {s["id"]: s for s in report["screenshots"]}
+    failed = {e["id"]: e["message"] for e in report["errors"] if "id" in e}
+    unattributed = [e for e in report["errors"] if "id" not in e]
     entries, compared_fps, local = [], set(), False
-    for sid in sorted(set(out_imgs) | set(baseline["images"]), key=key_order):
+    for sid in sorted(set(out_imgs) | set(baseline["images"]) | set(failed), key=key_order):
         b = baseline["images"].get(sid)
         o = out_imgs.get(sid)
+        if sid in failed:
+            e = dict(describe(b) if b else {}, id=sid, status="error", message=failed[sid])
+            entries.append(e)
+            continue
         if b is not None:
-            if not in_scope(b, scope) and o is None:
+            if o is None and (not in_scope(b, scope) or unattributed):
                 continue
             compared_fps.add(b["fingerprint"])
             local = local or b["local"]
@@ -384,7 +384,7 @@ def verify(case):
         fp = baseline["fingerprints"][f]
         if fp["platform"] in run_fps:
             mism.update(mismatches(fp, run_fps[fp["platform"]]))
-    errors = list(report["errors"])
+    errors = [{"id": e["id"], "message": e["message"]} for e in entries if e["status"] == "error"] + unattributed
     counts = {k: sum(1 for e in entries if e["status"] == k) for k in ("unchanged", "changed", "added", "removed")}
     counts["errors"] = len(errors)
     status = "error" if errors else "failed" if counts["changed"] + counts["added"] + counts["removed"] else "passed"
@@ -394,16 +394,19 @@ def verify(case):
         "screenshots": entries, "errors": errors,
     }
     manifest = {
-        "schema": 1, "commit": COMMIT, "branch": BRANCH, "configHash": sha(compact(normalized(config))),
+        "schema": 1, "commit": COMMIT, "branch": BRANCH, "ci": CI, "configHash": sha(compact(normalized(config))),
         "fingerprint": run_fps,
         "ids": {k: [e["id"] for e in entries if e["status"] == k] for k in ("changed", "added", "removed")},
     }
     failures = counts["changed"] + counts["added"] + counts["removed"]
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
-             '<testsuite name="swiftshot" tests="%d" failures="%d" errors="%d">' % (len(entries) + len(errors), failures, len(errors))]
+             '<testsuite name="swiftshot" tests="%d" failures="%d" errors="%d">' % (len(entries) + len(unattributed), failures, len(errors))]
     for e in entries:
-        attrs = 'classname="%s" name="%s"' % (xml_attr("%s.%s.%s" % (e["platform"], e["device"], e["language"])),
-                                              xml_attr("%s %s%s" % (e["preview"], e["appearance"], scale_label(e))))
+        classname = "%s.%s.%s" % (e["platform"], e["device"], e["language"]) if "platform" in e else "swiftshot"
+        attrs = 'classname="%s" name="%s"' % (xml_attr(classname), xml_attr(e["id"]))
+        if e["status"] == "error":
+            lines += ["  <testcase %s>" % attrs, '    <error message="%s"/>' % xml_attr(e["message"]), "  </testcase>"]
+            continue
         if e["status"] == "changed":
             msg = ("changed: size %dx%d to %dx%d" % tuple(e["baselineSize"] + e["newSize"]) if e["reason"] == "size"
                    else "changed: %d pixels" % e["pixels"])
@@ -413,9 +416,9 @@ def verify(case):
             lines.append("  <testcase %s/>" % attrs)
             continue
         lines += ["  <testcase %s>" % attrs, '    <failure message="%s"/>' % xml_attr(msg), "  </testcase>"]
-    for i, err in enumerate(errors, 1):
+    for i, err in enumerate(unattributed, 1):
         lines += ['  <testcase classname="swiftshot" name="error %d">' % i,
-                  '    <error message="%s"/>' % xml_attr(err), "  </testcase>"]
+                  '    <error message="%s"/>' % xml_attr(err["message"]), "  </testcase>"]
     lines.append("</testsuite>")
     return result, "\n".join(lines) + "\n", manifest
 
@@ -442,15 +445,16 @@ def ios(preview, appearance="light", device="iPhone 17 Pro", language="en-US", t
     return m
 
 
-def android(preview, appearance="light", device="Pixel 9", language="en-US", font_scale=1, platform="android", suffix=False):
+def android(preview, appearance="light", device="Pixel 9", language="en-US", font_scale=1, platform="android", suffix=False, module=":app"):
     name = "%s-%s" % (device, preview) + ("-" + appearance if suffix else "") + ("-%sx" % num(font_scale) if font_scale != 1 else "")
-    return {"platform": platform, "device": device, "language": language, "appearance": appearance,
+    return {"platform": platform, "module": module, "device": device, "language": language, "appearance": appearance,
             "preview": preview, "fontScale": font_scale, "id": "%s/%s" % (language, name), "scale": 2.625}
 
 
 def flutter(preview, **kw):
     m = android(preview, **kw)
     m["platform"] = "flutter"
+    del m["module"]
     m["scale"] = 3
     return m
 
@@ -466,7 +470,6 @@ def report_entry(m, img):
     else:
         e["millis"] = 120
     if m["platform"] == "android":
-        e["module"] = ":app"
         e["composable"] = "com.example.ui.%sKt.%sPreview" % (m["preview"].replace(" ", ""), m["preview"].replace(" ", ""))
     if m["platform"] == "flutter":
         e["source"] = "lib/screens.dart:12"
@@ -481,6 +484,8 @@ def scope_of(metas, platforms=None, preview_filter=None, **extra):
         "appearances": sorted({m["appearance"] for m in metas}),
         "previews": sorted({m["preview"] for m in metas}),
         "previewFilter": preview_filter or [],
+        "modules": sorted({m["module"] for m in metas if "module" in m}),
+        "runtimes": sorted({m["runtime"] for m in metas if "runtime" in m}),
     }
     if any(m["platform"] == "ios" for m in metas):
         s["textSizes"] = sorted({m.get("textSize", "default") for m in metas})
@@ -606,9 +611,19 @@ def cases():
     imgs = [(ios("Home"), base(1)), (ios("Settings"), base(2))]
     out.append(case("local-baseline", imgs, imgs, local={imgs[1][0]["id"]}))
 
-    # A render error: status error (exit 2), a JUnit <error>, counts.errors.
+    # Render errors with ids: status error (exit 2), never removed, also for a shot with no
+    # baseline image (JUnit classname "swiftshot" then).
     imgs = [(android("Home"), base(1))]
-    out.append(case("render-error", imgs, imgs, errors=["Broken · Pixel 9 · en-US: IllegalStateException: boom"]))
+    out.append(case("render-error", imgs + [(android("Broken"), base(2))], imgs,
+                    errors=[{"id": "en-US/Pixel 9-Broken", "message": "IllegalStateException: boom"},
+                            {"id": "en-US/Pixel 9-New", "message": "Timed out after 60 s"}]))
+
+    # An error without an id (the run can't tell which shots it lost): no removals at all.
+    out.append(case("build-error", imgs + [(android("Legacy"), base(2))], imgs,
+                    errors=[{"message": ":feature: compilation failed"}]))
+
+    # A --modules :app run: :feature's images are out of scope; :app's missing one is removed.
+    out.append(case("module-filter", imgs + [(android("Legacy"), base(2)), (android("Detail", module=":feature"), base(3))], imgs))
 
     # --mode device without a configured tolerance: max_channel_delta 1.
     dev = {"ios": dict(FP["ios"], mode="device")}

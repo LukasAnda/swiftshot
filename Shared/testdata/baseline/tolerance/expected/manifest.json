@@ -1,5 +1,6 @@
 {
   "branch": "feature/x",
+  "ci": false,
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "configHash": "e4d8bfa0e7b91a426e1f1d90f374f4b6a1e7a51eb6341ea6d953476ff8eb7d23",
   "fingerprint": {

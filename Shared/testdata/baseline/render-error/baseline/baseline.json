@@ -11,6 +11,17 @@
     }
   },
   "images": {
+    "en-US/Pixel 9-Broken": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "241d8bd3b005",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Broken"
+    },
     "en-US/Pixel 9-Home": {
       "appearance": "light",
       "device": "Pixel 9",
@@ -18,6 +29,7 @@
       "fontScale": 1,
       "language": "en-US",
       "local": false,
+      "module": ":app",
       "platform": "android",
       "preview": "Home"
     }

@@ -21,6 +21,7 @@
     "languages": [
       "en-US"
     ],
+    "modules": [],
     "platforms": [
       "ios"
     ],
@@ -29,6 +30,9 @@
       "Home",
       "Terms & Privacy",
       "Über"
+    ],
+    "runtimes": [
+      "26.0"
     ],
     "textSizes": [
       "AX2",

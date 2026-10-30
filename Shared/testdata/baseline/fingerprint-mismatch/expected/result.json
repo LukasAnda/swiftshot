@@ -43,6 +43,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Home",
       "language": "en-US",
+      "module": ":app",
       "platform": "android",
       "preview": "Home",
       "status": "unchanged"

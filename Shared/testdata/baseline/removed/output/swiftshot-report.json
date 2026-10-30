@@ -25,13 +25,17 @@
     "languages": [
       "en-US"
     ],
+    "modules": [
+      ":app"
+    ],
     "platforms": [
       "android"
     ],
     "previewFilter": [],
     "previews": [
       "Home"
-    ]
+    ],
+    "runtimes": []
   },
   "screenshots": [
     {

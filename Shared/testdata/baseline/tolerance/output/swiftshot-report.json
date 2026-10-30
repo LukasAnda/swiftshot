@@ -25,6 +25,9 @@
     "languages": [
       "en-US"
     ],
+    "modules": [
+      ":app"
+    ],
     "platforms": [
       "android"
     ],
@@ -34,7 +37,8 @@
       "Clock Large",
       "Home",
       "Settings"
-    ]
+    ],
+    "runtimes": []
   },
   "screenshots": [
     {

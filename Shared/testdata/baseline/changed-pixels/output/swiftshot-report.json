@@ -25,6 +25,9 @@
     "languages": [
       "en-US"
     ],
+    "modules": [
+      ":app"
+    ],
     "platforms": [
       "android"
     ],
@@ -32,7 +35,8 @@
     "previews": [
       "Home",
       "Settings"
-    ]
+    ],
+    "runtimes": []
   },
   "screenshots": [
     {

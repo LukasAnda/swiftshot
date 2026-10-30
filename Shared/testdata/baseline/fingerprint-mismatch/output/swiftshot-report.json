@@ -34,6 +34,9 @@
     "languages": [
       "en-US"
     ],
+    "modules": [
+      ":app"
+    ],
     "platforms": [
       "android",
       "ios"
@@ -41,6 +44,9 @@
     "previewFilter": [],
     "previews": [
       "Home"
+    ],
+    "runtimes": [
+      "26.0"
     ],
     "textSizes": [
       "default"

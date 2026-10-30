@@ -26,6 +26,7 @@
       "fontScale": 1,
       "language": "en-US",
       "local": false,
+      "module": ":app",
       "platform": "android",
       "preview": "Home"
     },
@@ -36,6 +37,7 @@
       "fontScale": 1,
       "language": "en-US",
       "local": false,
+      "module": ":app",
       "platform": "android",
       "preview": "Settings"
     },

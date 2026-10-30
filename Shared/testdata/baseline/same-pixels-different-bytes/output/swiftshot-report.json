@@ -20,12 +20,16 @@
     "languages": [
       "en-US"
     ],
+    "modules": [],
     "platforms": [
       "ios"
     ],
     "previewFilter": [],
     "previews": [
       "Home"
+    ],
+    "runtimes": [
+      "26.0"
     ],
     "textSizes": [
       "default"

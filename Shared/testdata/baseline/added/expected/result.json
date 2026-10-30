@@ -30,6 +30,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Home",
       "language": "en-US",
+      "module": ":app",
       "platform": "android",
       "preview": "Home",
       "status": "unchanged"
@@ -40,6 +41,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Onboarding",
       "language": "en-US",
+      "module": ":app",
       "new": "images/new/en-US/Pixel 9-Onboarding.png",
       "platform": "android",
       "preview": "Onboarding",

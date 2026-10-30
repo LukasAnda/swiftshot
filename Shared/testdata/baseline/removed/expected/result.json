@@ -30,6 +30,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Home",
       "language": "en-US",
+      "module": ":app",
       "platform": "android",
       "preview": "Home",
       "status": "unchanged"
@@ -41,6 +42,7 @@
       "fontScale": 1,
       "id": "en-US/Pixel 9-Legacy",
       "language": "en-US",
+      "module": ":app",
       "platform": "android",
       "preview": "Legacy",
       "status": "removed"

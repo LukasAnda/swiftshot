@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="swiftshot" tests="4" failures="2" errors="0">
-  <testcase classname="android.Pixel 9.en-US" name="Clock light"/>
-  <testcase classname="android.Pixel 9.en-US" name="Clock Large light">
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Clock"/>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Clock Large">
     <failure message="changed: 2 pixels"/>
   </testcase>
-  <testcase classname="android.Pixel 9.en-US" name="Home light"/>
-  <testcase classname="android.Pixel 9.en-US" name="Settings light">
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Home"/>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Settings">
     <failure message="changed: 6 pixels"/>
   </testcase>
 </testsuite>

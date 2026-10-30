@@ -28,13 +28,15 @@
     "languages": [
       "en-US"
     ],
+    "modules": [],
     "platforms": [
       "flutter"
     ],
     "previewFilter": [],
     "previews": [
       "Profile"
-    ]
+    ],
+    "runtimes": []
   },
   "screenshots": [
     {

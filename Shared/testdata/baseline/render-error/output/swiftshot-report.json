@@ -1,6 +1,13 @@
 {
   "errors": [
-    "Broken · Pixel 9 · en-US: IllegalStateException: boom"
+    {
+      "id": "en-US/Pixel 9-Broken",
+      "message": "IllegalStateException: boom"
+    },
+    {
+      "id": "en-US/Pixel 9-New",
+      "message": "Timed out after 60 s"
+    }
   ],
   "fingerprint": {
     "android": {
@@ -27,13 +34,17 @@
     "languages": [
       "en-US"
     ],
+    "modules": [
+      ":app"
+    ],
     "platforms": [
       "android"
     ],
     "previewFilter": [],
     "previews": [
       "Home"
-    ]
+    ],
+    "runtimes": []
   },
   "screenshots": [
     {

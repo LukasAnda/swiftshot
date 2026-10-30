@@ -56,15 +56,16 @@ Examples below are abbreviated and not in the sorted key order the files use.
 interlace 0, filter type 0 on every row, chunks `IHDR`, one `IDAT`, `IEND` and nothing else. The
 `IDAT` is one zlib stream: deflate level 6, window 15, memory level 8, default strategy, as zlib's
 `compress2(…, 6)` and Java's `new Deflater(6)` + `finish()` write it (verified identical with zlib
-1.2.12).
+1.2.12). Implementations must use zlib (madler) with these defaults, not zlib-ng.
 
 **Decoding** (for comparison): bit depth 8, colour type 6 (RGBA) or 2 (RGB, alpha 255), any filter,
 interlace 0; all other chunks ignored. Samples are used as stored: no colour management, no
-premultiplication. Any other PNG is an error `<id>: unsupported PNG`.
+premultiplication. Any other PNG is the error `unsupported PNG` for that id.
 
-**Determinism**: `commit`, `branch`, `version` come from `SWIFTSHOT_COMMIT`, `SWIFTSHOT_BRANCH`
-and `SWIFTSHOT_VERSION_OVERRIDE` when set (tests set them: `0123456789abcdef0123456789abcdef01234567`,
-`feature/x`, `1.0.0-test`). Otherwise from git/CI and the binary; unknown is `null`.
+**Determinism**: `commit`, `branch`, `version` and `ci` come from `SWIFTSHOT_COMMIT`,
+`SWIFTSHOT_BRANCH`, `SWIFTSHOT_VERSION_OVERRIDE` and `SWIFTSHOT_CI` (`true`/`false`) when set (tests
+set them: `0123456789abcdef0123456789abcdef01234567`, `feature/x`, `1.0.0-test`, `false`).
+Otherwise from git/CI detection and the binary; an unknown commit or branch is `null`.
 
 ## swiftshot-report.json additions
 
@@ -73,17 +74,23 @@ The run report keeps its current keys and gains:
 - `fingerprint`: platform → fingerprint (below), one per platform the run rendered.
 - `scope`: what the run covered.
   ```json
-  {"platforms": ["ios"], "devices": ["iPhone 17 Pro"], "languages": ["en-US"],
-   "appearances": ["light", "dark"], "textSizes": ["default"], "fontScales": [1, 1.3],
-   "previews": ["Home", "Settings"], "previewFilter": ["Home*"]}
+  {"platforms": ["android", "ios"], "modules": [":app"], "runtimes": ["26.0"],
+   "devices": ["iPhone 17 Pro", "Pixel 9"], "languages": ["en-US"], "appearances": ["dark", "light"],
+   "textSizes": ["default"], "fontScales": [1, 1.3], "previews": ["Home", "Settings"],
+   "previewFilter": ["Home*"]}
   ```
-  `textSizes` when iOS was rendered (`"default"` = the device's own), `fontScales` when Android,
-  desktop or Flutter was. `previews`: the preview names the run found after filters (informational).
+  `modules`: the Gradle paths rendered (Android, desktop), `runtimes`: the iOS runtime versions
+  rendered; both always present, `[]` when they don't apply. `textSizes` when iOS was rendered
+  (`"default"` = the device's own), `fontScales` when Android, desktop or Flutter was. `previews`:
+  the preview names the run found after filters (informational).
   `previewFilter`: the `--previews` globs, `[]` when none. All lists sorted (`fontScales` by value).
 - Per screenshot: `id`, `platform` (`ios`, `android`, `desktop`, `flutter`) and `scale` (pixels per
   point/dp, e.g. `3`, `2.625`). Existing per-screenshot keys used here: `preview`, `device`,
-  `language`, `appearance`, `fontScale` (Android, desktop, Flutter), `textSize` (iOS, absent =
-  `"default"`), `runtime` (iOS).
+  `language`, `appearance`, `module` (Android, desktop), `fontScale` (Android, desktop, Flutter),
+  `textSize` (iOS, absent = `"default"`), `runtime` (iOS).
+- `errors` become objects: `{"id": "<id>", "message": "…"}`, the id being the one the failed shot
+  would have had. An error the run can't tie to a shot (e.g. a module that doesn't compile) has
+  no `id`.
 
 The verify inputs are the report's `screenshots`, `errors`, `scope` and `fingerprint`; the output
 directory is not listed.
@@ -116,20 +123,23 @@ fingerprint's hash.
   "images": {
     "en-US/iPhone 17 Pro-Home": {"fingerprint": "d2d5c0db8687", "platform": "ios", "device": "iPhone 17 Pro",
       "language": "en-US", "appearance": "light", "preview": "Home", "textSize": "default", "runtime": "26.0", "local": false},
-    "en-US/Pixel 9-Home": {"fingerprint": "7d572793275d", "platform": "android", "device": "Pixel 9",
-      "language": "en-US", "appearance": "light", "preview": "Home", "fontScale": 1, "local": false}
+    "en-US/Pixel 9-Home": {"fingerprint": "7d572793275d", "platform": "android", "module": ":app",
+      "device": "Pixel 9", "language": "en-US", "appearance": "light", "preview": "Home", "fontScale": 1,
+      "local": false}
   }
 }
 ```
 
 - Every image references one entry of `fingerprints`; unreferenced fingerprints are dropped on write.
-- iOS images have `textSize` (`"default"` when none) and `runtime`; the others `fontScale`.
-- `local`: `true` when the image was rendered outside CI (`record` on a developer machine).
+- iOS images have `textSize` (`"default"` when none) and `runtime`; Android and desktop `module`
+  and `fontScale`; Flutter `fontScale`.
+- `local`: `true` when the image was rendered outside CI (`record` on a developer machine;
+  `accept` writes `local = !ci` from the manifest).
 
-The baseline set is `images`. An image that is compared or removed but has no PNG is an error
-`<id>: baseline image missing`; a PNG under the baseline directory that is not in `images` is an
-error `<id>: baseline image not in baseline.json`. A report screenshot without its PNG is an error
-`<id>: output image missing`.
+The baseline set is `images`. Comparison errors, each for one id: `baseline image missing` (an
+image that would be compared or removed has no PNG), `baseline image not in baseline.json` (a PNG
+under the baseline directory), `output image missing` (a report screenshot without its PNG),
+`unsupported PNG`.
 
 ## Comparison config
 
@@ -161,22 +171,25 @@ with other keys only appear as `{"preview": …}`. The `mode` default above is n
 
 ## Status
 
-For every id in the output (report `screenshots`) or the baseline (`images`):
+For every id in the output (report `screenshots`), the baseline (`images`) or an error:
 
 | | condition |
 |---|---|
+| `error` | the id has a render error (report `errors`) or a comparison error; never `removed` |
 | `added` | in the output, not in the baseline |
 | `removed` | in the baseline and in scope, not in the output |
 | `unchanged` | both, and the PNG bytes are equal, or the comparison passes |
 | `changed` | both, and the comparison fails |
 
-Baseline images that are not in scope and not in the output are left out entirely (not listed,
-not counted, no fingerprint check).
+Baseline images not in the output and either out of scope or in a run with an error without
+`id` are left out entirely (not listed, not counted, no fingerprint check): such a run can't tell
+which shots it lost, so it reports no removals.
 
 **In scope**: `platform` ∈ `platforms`, `device` ∈ `devices`, `language` ∈ `languages`,
-`appearance` ∈ `appearances`, `textSize` ∈ `textSizes` (if the image has one), `fontScale` ∈
-`fontScales` (if the image has one, compared as numbers), and `previewFilter` is empty or one of
-its globs matches `preview`. A list missing from the scope matches nothing.
+`appearance` ∈ `appearances`; `module` ∈ `modules`, `runtime` ∈ `runtimes`, `textSize` ∈
+`textSizes`, `fontScale` ∈ `fontScales` (compared as numbers), each if the image has that key; and
+`previewFilter` is empty or one of its globs matches `preview`. A list missing from the scope
+matches nothing.
 
 **Comparison** (bytes differ): decode both. Canvas = max width × max height. A canvas pixel
 differs when it lies outside either image, or the channel rule says so; then ignore regions are
@@ -198,8 +211,9 @@ pixel inside the baseline is the baseline at 30 % over white; the rest is white.
 sample c and alpha a (0–255), in integers:
 `c1 = (c·a + 255·(255−a) + 127) / 255`, `out = (3·c1 + 7·255 + 5) / 10` (`/` truncates), alpha 255.
 
-**Errors** (`errors`, in this order): the report's `errors` as given, then comparison errors
-sorted. An id with an error (missing or undecodable image) is left out of `screenshots`.
+**Errors**: an id with a render error and a comparison error keeps the render error. `errors`
+holds `{"id", "message"}` for every `error` entry (sorted by id), then the report's errors without
+`id` as `{"message"}`, in report order.
 
 **Fingerprint mismatch**: for every distinct baseline fingerprint referenced by a listed baseline
 image (unchanged, changed or removed), compare it with the run's fingerprint for its platform (none: skipped).
@@ -227,29 +241,34 @@ first; they never change the status.
      "boxes": [[5, 5, 4, 18], [20, 40, 1, 1], [28, 60, 6, 6]],
      "baseline": "images/baseline/en-US/Pixel 9-Home.png", "new": "images/new/en-US/Pixel 9-Home.png",
      "diff": "images/diff/en-US/Pixel 9-Home.png",
-     "platform": "android", "device": "Pixel 9", "language": "en-US", "appearance": "light",
-     "preview": "Home", "fontScale": 1}
+     "platform": "android", "module": ":app", "device": "Pixel 9", "language": "en-US",
+     "appearance": "light", "preview": "Home", "fontScale": 1},
+    {"id": "en-US/Pixel 9-Broken", "status": "error", "message": "IllegalStateException: boom", …}
   ],
-  "errors": []
+  "errors": [{"id": "en-US/Pixel 9-Broken", "message": "IllegalStateException: boom"}]
 }
 ```
 
 - `status`: `error` if `errors` is not empty, else `failed` if any changed/added/removed, else
   `passed`. Exit code 2, 1, 0.
-- `counts.errors` = length of `errors`.
+- `counts.errors` = length of `errors` (`error` entries plus errors without id).
 - `fingerprint`: the run's, as in the report.
 - `screenshots`: every listed id, sorted by id. Each has `platform`, `device`, `language`,
-  `appearance`, `preview`, `fontScale` or `textSize` (`"default"` when none), and `runtime` (iOS),
-  from the report (from `baseline.json` for removed). Present only when they apply: `reason`,
+  `appearance`, `preview`, `fontScale` or `textSize` (`"default"` when none), `module` (Android,
+  desktop) and `runtime` (iOS), from the report (from `baseline.json` for removed and error; an
+  `error` id with no baseline image has only `id`, `status`, `message`). Present only when they
+  apply: `message` (error), `reason`,
   `pixels`, `boxes`, `baselineSize`, `newSize`, and the image paths (relative to the report
   directory, not URL-encoded): `baseline` (changed, removed), `new` (changed, added), `diff` (changed).
 
 ## manifest.json
 
-In the report directory; `accept` checks it against the branch.
+In the report directory; `accept` checks it against the branch. `ci`: whether the verify run was
+on CI; `accept` writes `local = !ci` into the images it applies. `accept` only touches the ids
+listed here, so a baseline image of an `error` id is never deleted.
 
 ```json
-{"schema": 1, "commit": "…", "branch": "feature/x", "configHash": "8f36…",
+{"schema": 1, "commit": "…", "branch": "feature/x", "ci": true, "configHash": "8f36…",
  "fingerprint": {"android": {…}}, "ids": {"added": [], "changed": ["en-US/Pixel 9-Home"], "removed": []}}
 ```
 
@@ -257,23 +276,27 @@ In the report directory; `accept` checks it against the branch.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="swiftshot" tests="3" failures="1" errors="1">
-  <testcase classname="android.Pixel 9.en-US" name="Home light">
+<testsuite name="swiftshot" tests="4" failures="1" errors="2">
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Broken">
+    <error message="IllegalStateException: boom"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Home">
     <failure message="changed: 62 pixels"/>
   </testcase>
-  <testcase classname="android.Pixel 9.en-US" name="Settings light 1.3x"/>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Settings-1.3x"/>
   <testcase classname="swiftshot" name="error 1">
-    <error message="Broken · Pixel 9 · en-US: boom"/>
+    <error message=":feature: compilation failed"/>
   </testcase>
 </testsuite>
 ```
 
-- One `<testcase>` per `screenshots` entry, same order, then one per error (`name="error <n>"`,
-  from 1).
-- `classname="<platform>.<device>.<language>"`, `name="<preview> <appearance>[ <scale>]"`;
-  scale is `<fontScale>x` when not 1 (number as in JSON), or the `textSize` when not `default`.
-- Failure messages: `changed: <pixels> pixels`, `changed: size <w>x<h> to <w>x<h>`, `added`,
-  `removed`. Unchanged entries are self-closing.
-- `tests` = entries + errors, `failures` = changed + added + removed, `errors` = errors.
+- One `<testcase>` per `screenshots` entry, same order, then one per error without id
+  (`name="error <n>"`, from 1).
+- `classname="<platform>.<device>.<language>"` (`swiftshot` for an `error` id without those
+  fields), `name="<id>"`.
+- `<failure message=…/>`: `changed: <pixels> pixels`, `changed: size <w>x<h> to <w>x<h>`, `added`,
+  `removed`. `<error message="<message>"/>` for errors. Unchanged entries are self-closing.
+- `tests` = entries + errors without id, `failures` = changed + added + removed, `errors` =
+  `counts.errors`.
 - Attribute escaping: `&` `<` `>` `"` as `&amp;` `&lt;` `&gt;` `&quot;`; TAB LF CR as `&#9;`
   `&#10;` `&#13;`; other characters below U+0020 dropped. 2-space indent, LF line ends, final `\n`.
