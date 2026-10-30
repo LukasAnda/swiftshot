@@ -184,7 +184,7 @@ enum Baseline {
         return out
     }
 
-    static let descriptive = ["platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime"]
+    static let descriptive = ["platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime", "renderer"]
 
     static func describe(_ meta: [String: JSON]) -> [String: JSON] {
         var d: [String: JSON] = [:]
@@ -267,13 +267,14 @@ enum Baseline {
 
         var slots: [[String: JSON]?] = []
         var jobs: [(Int, () throws -> [String: JSON])] = []
-        var compared: [[String: JSON]] = []
+        /// Each listed baseline entry, with the image as this run made it (its screenshot), else the entry.
+        var compared: [(image: [String: JSON], entry: [String: JSON])] = []
         var local = false
         for id in ids {
             let b = stored.images[id], o = run.shots[id]
             if o == nil && run.failed[id] == nil && (!inScope(b!, run.scope) || !run.unattributed.isEmpty) { continue }
             if let b {
-                compared.append(b)
+                compared.append((o ?? b, b))
                 if b["local"] == .bool(true) { local = true }
             }
             var e = (o ?? b).map(describe) ?? [:]
@@ -317,12 +318,12 @@ enum Baseline {
         if let failure { throw failure }
         let entries = slots.map { $0! }
         var mismatches: [String] = []
-        // Each image against the fingerprint this run gives it (its own runtime's build).
+        // Each image against the fingerprint this run gives it (its own runtime's build, its own renderer).
         var seen = Set<String>()
-        for b in compared {
+        for (image, b) in compared {
             guard let f = b["fingerprint"]?.string, let fp = stored.fingerprints[f], fp.object != nil, let platform = fp["platform"]?.string,
                   let mine = run.fingerprint[platform], mine.object != nil else { continue }
-            for m in Fingerprints.mismatches(baseline: fp, run: Fingerprints.forImage(mine, b)) where seen.insert(m).inserted { mismatches.append(m) }
+            for m in Fingerprints.mismatches(baseline: fp, run: Fingerprints.forImage(mine, image)) where seen.insert(m).inserted { mismatches.append(m) }
         }
         mismatches.sort(by: utf8Less)
         let errors: [JSON] = entries.filter { $0["status"] == .string("error") }.map { .object(["id": $0["id"]!, "message": $0["message"]!]) } + run.unattributed

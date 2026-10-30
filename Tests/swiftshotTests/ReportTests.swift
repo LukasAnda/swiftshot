@@ -25,6 +25,13 @@ final class ReportTests: XCTestCase {
         XCTAssertEqual(Report.shotJSON(shot("Mini", scale: 2.88))["scale"], .double(2.88))
     }
 
+    func testFlutterImageFingerprintTakesTheImagesRenderer() {
+        let run: JSON = .object(["platform": .string("flutter"), "mode": .string("headless"), "renderers": .array([.string("exact-ios"), .string("impeller")])])
+        XCTAssertEqual(Fingerprints.forImage(run, ["renderer": .string("exact-ios")]), .object(["platform": .string("flutter"), "mode": .string("exact-ios"), "renderer": .string("exact-ios")]))
+        XCTAssertEqual(Fingerprints.forImage(run, ["renderer": .string("impeller")]), .object(["platform": .string("flutter"), "mode": .string("headless"), "renderer": .string("impeller")]))
+        XCTAssertEqual(Fingerprints.forImage(run, [:]), .object(["platform": .string("flutter"), "mode": .string("headless")]))
+    }
+
     func testFingerprintOfAnIosRun() {
         let fp = Fingerprints.ios(mode: "no-boot", xcode: "17A400", runtimes: ["26.0": "23A343"], host: "macos-arm64", version: "1.0.0-test")
         XCTAssertEqual(fp, .object(["host": .string("macos-arm64"), "mode": .string("no-boot"), "platform": .string("ios"),

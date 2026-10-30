@@ -27,7 +27,7 @@ final class BaselineTests: XCTestCase {
 
     func testEveryFixtureCaseMatchesByteForByte() throws {
         let all = fixtureCases()
-        XCTAssertEqual(all.count, 22, "fixture cases")
+        XCTAssertEqual(all.count, 23, "fixture cases")
         var problems: [String] = []
         var passed: [String] = []
         for c in all {
@@ -240,6 +240,28 @@ final class BaselineTests: XCTestCase {
         func build(_ id: String) -> JSON? { json["fingerprints"]![json["images"]![id]!["fingerprint"]!.string!]!["runtime"] }
         XCTAssertEqual(build("en-US/iPhone 17 Pro-Home-iOS26.0"), .string("23A343"))
         XCTAssertEqual(build("en-US/iPhone 17 Pro-Settings-iOS26.5"), .string("23F80"))
+    }
+
+    func testFlutterRendererIsPerImage() throws {
+        XCTAssertEqual(try verify(fixture("flutter-renderers")).mismatches,
+                       ["flutter mode: baseline exact-ios, this run headless", "flutter renderer: baseline exact-ios, this run impeller"])
+        // The run that recorded that baseline: iPhones on Flutter's iOS engine, Pixels on Impeller. record gives each image its own renderer.
+        let out = try output("flutter-renderers")
+        let f = out.appendingPathComponent("swiftshot-report.json")
+        var r = try readJSON(f).object!
+        r["screenshots"] = .array(r["screenshots"]!.array!.map { s in
+            var o = s.object!
+            if o["device"] == .string("iPhone 17 Pro") { o["renderer"] = .string("exact-ios") }
+            return .object(o)
+        })
+        var fp = r["fingerprint"]!["flutter"]!.object!
+        fp["renderers"] = .array([.string("exact-ios"), .string("impeller")])
+        r["fingerprint"] = .object(["flutter": .object(fp)])
+        try Data(JSON.object(r).pretty().utf8).write(to: f)
+        let base = tmp.appendingPathComponent("base-flutter")
+        XCTAssertEqual(try Baseline.record(output: out, baseline: base, ci: true, log: Console(capture: true)), 0)
+        XCTAssertEqual(try String(contentsOf: base.appendingPathComponent("baseline.json"), encoding: .utf8),
+                       try String(contentsOf: fixture("flutter-renderers").appendingPathComponent("baseline/baseline.json"), encoding: .utf8))
     }
 
     func testConfigHashIsTheNormalizedConfigs() throws {

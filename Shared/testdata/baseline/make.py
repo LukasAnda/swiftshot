@@ -444,14 +444,18 @@ def mismatches(base_fp, run_fp):
 
 def image_fp(run_fp, img):
     """The fingerprint of one image of a run: an iOS run's `runtimes` (version -> build) become the
-    image's own `runtime` build, looked up by the image's `runtime`; other fingerprints as they are."""
-    fp = {k: v for k, v in run_fp.items() if k != "runtimes"}
+    image's own `runtime` build, looked up by the image's `runtime`; a Flutter run's `renderers`
+    become the image's own `renderer`, and its `mode` follows it; other fingerprints as they are."""
+    fp = {k: v for k, v in run_fp.items() if k not in ("runtimes", "renderers")}
     if "runtimes" in run_fp and img.get("runtime") in run_fp["runtimes"]:
         fp["runtime"] = run_fp["runtimes"][img["runtime"]]
+    if "renderers" in run_fp and "renderer" in img:
+        fp["renderer"] = img["renderer"]
+        fp["mode"] = "exact-ios" if img["renderer"] == "exact-ios" else "headless"
     return fp
 
 
-DESCRIPTIVE = ("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime")
+DESCRIPTIVE = ("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime", "renderer")
 
 
 def describe(meta):
@@ -519,7 +523,7 @@ def verify(case):
         if o is None and sid not in failed and (not in_scope(b, scope) or unattributed):
             continue
         if b is not None:
-            compared.append(b)
+            compared.append((o or b, b))
             local = local or b["local"]
         e = dict(describe(o) if o else describe(b) if b else {}, id=sid)
         err = (failed.get(sid)
@@ -563,10 +567,10 @@ def verify(case):
         entries.append(e)
 
     mism = set()
-    for b in compared:
+    for img, b in compared:  # the image as this run made it (its screenshot), else as the baseline lists it
         fp = baseline["fingerprints"][b["fingerprint"]]
         if fp["platform"] in run_fps:
-            mism.update(mismatches(fp, image_fp(run_fps[fp["platform"]], b)))
+            mism.update(mismatches(fp, image_fp(run_fps[fp["platform"]], img)))
     errors = [{"id": e["id"], "message": e["message"]} for e in entries if e["status"] == "error"] + unattributed
     counts = {k: sum(1 for e in entries if e["status"] == k) for k in ("unchanged", "changed", "added", "removed")}
     counts["errors"] = len(errors)
@@ -615,7 +619,7 @@ FP = {
     "android": {"compose": "1.9.0", "host": "linux-x64", "jdk": "21.0.8", "layoutlib": "16.0.1",
                 "mode": "headless", "platform": "android", "swiftshot": VERSION},
     "flutter": {"flutter": "3.38.0", "fonts": ["MaterialIcons-Regular.otf", "Roboto-Regular.ttf"],
-                "host": "linux-x64", "mode": "headless", "platform": "flutter", "renderer": "skia",
+                "host": "linux-x64", "mode": "headless", "platform": "flutter", "renderers": ["skia"],
                 "swiftshot": VERSION},
 }
 
@@ -636,11 +640,12 @@ def android(preview, appearance="light", device="Pixel 9", language="en-US", fon
             "preview": preview, "fontScale": font_scale, "id": "%s/%s" % (language, name), "scale": 2.625}
 
 
-def flutter(preview, **kw):
+def flutter(preview, renderer="skia", scale=3, **kw):
     m = android(preview, **kw)
     m["platform"] = "flutter"
     del m["module"]
-    m["scale"] = 3
+    m["scale"] = scale
+    m["renderer"] = renderer
     return m
 
 
@@ -883,6 +888,18 @@ def cases():
     two = dict(FP["ios"], runtimes={"26.0": "23A343", "26.5": "23F77"})
     out.append(case("multi-runtime", imgs, imgs, run_fp={"ios": dict(two, runtimes={"26.0": "23A343", "26.5": "23F80"})},
                     base_run_fp={"ios": two}))
+
+    # A Flutter run on iPhones (Flutter's iOS engine) and Pixels (Impeller); this time the iOS engine
+    # was unavailable and the iPhones fell back to Impeller. Only the iPhone image's renderer (and
+    # mode) differ: the Pixel image keeps its own.
+    def fl(device, renderer):
+        return flutter("Home", renderer=renderer, device=device, scale=3 if device.startswith("iPhone") else 2.625)
+    mac = dict(FP["flutter"], host="macos-arm64", fonts=["MaterialIcons-Regular.otf", "Roboto-Regular.ttf", "SF-Pro.ttf"])
+    out.append(case("flutter-renderers",
+                    [(fl("iPhone 17 Pro", "exact-ios"), base(1)), (fl("Pixel 9", "impeller"), base(2))],
+                    [(fl("iPhone 17 Pro", "impeller"), base(1)), (fl("Pixel 9", "impeller"), base(2))],
+                    run_fp={"flutter": dict(mac, renderers=["impeller"])},
+                    base_run_fp={"flutter": dict(mac, renderers=["exact-ios", "impeller"])}))
     return out
 
 

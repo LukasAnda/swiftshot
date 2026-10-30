@@ -36,7 +36,7 @@ class BaselineTest {
 
     @Test fun everyFixtureCaseMatchesByteForByte() {
         val all = cases()
-        assertEquals(22, all.size, "fixture cases")
+        assertEquals(23, all.size, "fixture cases")
         val problems = mutableListOf<String>()
         for (case in all) {
             val report = File(tmp, case.name)
@@ -311,6 +311,29 @@ class BaselineTest {
         for (f in listOf("result.json", "manifest.json", "junit.xml")) assertFalse(File(report, f).exists(), f)
         // record: the same exception is exit 2 too.
         assertEquals(2, cli(staleRun("record").second, Log(false)) { _, _ -> out.mkdirs(); File(out, "swiftshot-report.json").writeText("""{"screenshots": "x"}""") })
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    @Test fun flutterRendererIsPerImage() {
+        assertEquals(listOf("flutter mode: baseline exact-ios, this run headless", "flutter renderer: baseline exact-ios, this run impeller"),
+            verify(case("flutter-renderers")).mismatches)
+        // The run that recorded that baseline: iPhones on Flutter's iOS engine, Pixels on Impeller. record gives each image its own renderer.
+        val out = output("flutter-renderers")
+        val f = File(out, "swiftshot-report.json")
+        val r = (Json.parse(f.readText()) as Map<String, Any?>).toMutableMap()
+        r["screenshots"] = (r["screenshots"] as List<Map<String, Any?>>).map { if (it["device"] == "iPhone 17 Pro") it + ("renderer" to "exact-ios") else it }
+        r["fingerprint"] = mapOf("flutter" to ((r["fingerprint"] as Map<String, Map<String, Any?>>).getValue("flutter") + ("renderers" to listOf("exact-ios", "impeller"))))
+        f.writeText(CanonicalJson.pretty(r))
+        val base = File(tmp, "base-flutter")
+        assertEquals(0, Baseline.record(out, base, ci = true, log = Log(false)))
+        assertEquals(File(case("flutter-renderers"), "baseline/baseline.json").readText(), File(base, "baseline.json").readText())
+    }
+
+    @Test fun flutterImageFingerprintTakesTheImagesRenderer() {
+        val run = mapOf("platform" to "flutter", "mode" to "headless", "renderers" to listOf("exact-ios", "impeller"))
+        assertEquals(mapOf("platform" to "flutter", "mode" to "exact-ios", "renderer" to "exact-ios"), Fingerprints.forImage(run, mapOf("renderer" to "exact-ios")))
+        assertEquals(mapOf("platform" to "flutter", "mode" to "headless", "renderer" to "impeller"), Fingerprints.forImage(run, mapOf("renderer" to "impeller")))
+        assertEquals(mapOf("platform" to "flutter", "mode" to "headless"), Fingerprints.forImage(run, emptyMap<String, Any?>()))
     }
 
     @Test fun imageFingerprintTakesTheImagesRuntime() {

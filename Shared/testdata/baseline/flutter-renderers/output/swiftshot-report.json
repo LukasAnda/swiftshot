@@ -1,0 +1,80 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "flutter": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf",
+        "SF-Pro.ttf"
+      ],
+      "host": "macos-arm64",
+      "mode": "headless",
+      "platform": "flutter",
+      "renderers": [
+        "impeller"
+      ],
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "platform": "flutter",
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "Pixel 9",
+      "iPhone 17 Pro"
+    ],
+    "fontScales": [
+      1
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "modules": [],
+    "platforms": [
+      "flutter"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Home"
+    ],
+    "runtimes": []
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Home.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "millis": 120,
+      "platform": "flutter",
+      "preview": "Home",
+      "renderer": "impeller",
+      "scale": 2.625,
+      "source": "lib/screens.dart:12",
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Home.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Home",
+      "language": "en-US",
+      "millis": 120,
+      "platform": "flutter",
+      "preview": "Home",
+      "renderer": "impeller",
+      "scale": 3,
+      "source": "lib/screens.dart:12",
+      "width": 40
+    }
+  ],
+  "totalSeconds": 1.5
+}

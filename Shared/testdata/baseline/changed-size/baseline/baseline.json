@@ -22,7 +22,8 @@
       "language": "en-US",
       "local": false,
       "platform": "flutter",
-      "preview": "Profile"
+      "preview": "Profile",
+      "renderer": "skia"
     }
   },
   "schema": 1

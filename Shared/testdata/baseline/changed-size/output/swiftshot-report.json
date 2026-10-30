@@ -10,7 +10,9 @@
       "host": "linux-x64",
       "mode": "headless",
       "platform": "flutter",
-      "renderer": "skia",
+      "renderers": [
+        "skia"
+      ],
       "swiftshot": "1.0.0-test"
     }
   },
@@ -50,6 +52,7 @@
       "millis": 120,
       "platform": "flutter",
       "preview": "Profile",
+      "renderer": "skia",
       "scale": 3,
       "source": "lib/screens.dart:12",
       "width": 40

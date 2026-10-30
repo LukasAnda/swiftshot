@@ -119,7 +119,8 @@ The run report keeps its current keys and gains:
 - Per screenshot: `id`, `platform` (`ios`, `android`, `desktop`, `flutter`) and `scale` (pixels per
   point/dp, e.g. `3`, `2.625`). Existing per-screenshot keys used here: `preview`, `device`,
   `language`, `appearance`, `module` (Android, desktop), `fontScale` (Android, desktop, Flutter),
-  `textSize` (iOS, absent = `"default"`), `runtime` (iOS).
+  `textSize` (iOS, absent = `"default"`), `runtime` (iOS). New: `renderer` (Flutter: `impeller`,
+  `skia` or `exact-ios`, what rendered this screenshot).
 - `errors` become objects: `{"id": "<id>", "message": "…"}`, the id being the one the failed shot
   would have had. An error the run can't tie to a shot (e.g. a module that doesn't compile) has
   no `id`. Several errors for one id: the first in report order counts, the rest are ignored.
@@ -134,20 +135,25 @@ directory is not listed.
 | `platform` | all | `ios`, `android`, `desktop`, `flutter` |
 | `host` | all | `macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64` |
 | `swiftshot` | all | version |
-| `mode` | all | `no-boot`, `device` (iOS); `headless` (Android, desktop, Flutter); `exact-ios` (Flutter) |
+| `mode` | all | `no-boot`, `device` (iOS); `headless` (Android, desktop, Flutter); `exact-ios` (Flutter, when the iOS engine rendered every image) |
 | `xcode` | ios | Xcode's build (`17A400`) |
 | `runtimes` | ios, run only | each simulator runtime the run used, version → build (`{"26.5": "23F77"}`) |
 | `runtime` | ios, image only | the build of the image's own runtime (`23F77`) |
 | `layoutlib`, `compose`, `jdk` | android | versions from the resolved classpath |
 | `skiko`, `compose`, `jdk` | desktop | versions from the resolved classpath |
-| `flutter`, `renderer`, `fonts` | flutter | version; `impeller`, `skia` or `exact-ios`; sorted font file names |
+| `flutter`, `fonts` | flutter | version; sorted font file names |
+| `renderers` | flutter, run only | the renderers the run used, sorted (`impeller`, `skia`, `exact-ios`) |
+| `renderer` | flutter, image only | the image's own renderer |
 
-Values are strings, `fonts` an array of strings, `runtimes` an object of strings.
+Values are strings, `fonts` and `renderers` arrays of strings, `runtimes` an object of strings.
 
 **Image fingerprint**: what produced one image. For a run's iOS fingerprint: the same without
 `runtimes`, plus `runtime` = `runtimes[<the image's runtime>]` (left out when the run has no build for
-it). Every other fingerprint is the run's as it is. baseline.json stores image fingerprints, so an
-image keeps the build of its own runtime, whatever other runtimes the run used. watchOS runtimes
+it). For a run's Flutter fingerprint: the same without `renderers`, plus `renderer` = the image's
+`renderer` and `mode` = `exact-ios` when that is `exact-ios`, else `headless` (both left as they are
+when the image has no `renderer`). Every other fingerprint is the run's as it is. baseline.json stores image fingerprints, so an
+image keeps the build of its own runtime and its own renderer, whatever else the run used (an
+iPhone that fell back from Flutter's iOS engine to Impeller is a mismatch for that image only). watchOS runtimes
 are keyed `watchOS <version>` (`"watchOS 11.0": "22R349"`), and a watch screenshot's `runtime` is
 the same string, so iOS and watchOS versions never meet. One run, one host: all platform fingerprints of a
 run carry the same `host` (a run with iOS is on macOS). **Fingerprint id**: the first 12 hex digits of the
@@ -155,7 +161,7 @@ fingerprint's hash.
 
 **Pixel-relevant**: every field, except `swiftshot` compares only its first two `.`-separated parts
 (`1.0.3` = `1.0.0-test`), and `host` is ignored when this run's renderer is the exact iOS one: the
-run's fingerprint has `platform` `ios` or `renderer` `exact-ios`. A field present on one side only
+image fingerprint has `platform` `ios` or `renderer` `exact-ios`. A field present on one side only
 is a difference (the other shown as `none`).
 
 ## baseline.json
@@ -178,7 +184,7 @@ is a difference (the other shown as `none`).
   unreferenced fingerprints are dropped on write. `record` and `accept` store the image fingerprint
   of the run's (`accept`: the manifest's) fingerprint for the image's platform and `runtime`.
 - iOS images have `textSize` (`"default"` when none) and `runtime`; Android and desktop `module`
-  and `fontScale`; Flutter `fontScale`.
+  and `fontScale`; Flutter `fontScale` and `renderer`.
 - `local`: `true` when the image was rendered outside CI (`record` on a developer machine;
   `accept` writes `local = !ci` from the manifest).
 
@@ -268,7 +274,8 @@ report's errors without `id` as `{"message"}`, in report order.
 
 **Fingerprint mismatch**: for every listed id with an `images` entry (any status, `error` included),
 compare that entry's fingerprint with the image fingerprint this run gives it: the run's fingerprint
-for its platform (none: skipped) with `runtimes` replaced by the build of the entry's `runtime`.
+for its platform (none: skipped) made an image fingerprint (see Fingerprint) for this run's
+screenshot of that id, or for the entry itself when the run has none (removed, error).
 Each pixel-relevant difference is a message `<platform> <field>: baseline <value>, this run <value>`
 (arrays joined with `, `, absent = `none`); duplicates dropped, sorted. `verify` prints these
 first; they never change the status.

@@ -31,12 +31,17 @@ object Fingerprints {
 
     /**
      * The fingerprint of one image of a run (docs/wiki/Baseline-format.md, Image fingerprint): an iOS run's
-     * `runtimes` (version → build) become the image's own `runtime` build, looked up by the image's `runtime`.
+     * `runtimes` (version → build) become the image's own `runtime` build, looked up by the image's `runtime`;
+     * a Flutter run's `renderers` become the image's own `renderer`, and `mode` follows it.
      */
     fun forImage(run: Map<*, *>, image: Map<*, *>): Map<String, Any?> {
         val fp = LinkedHashMap<String, Any?>()
-        for ((k, v) in run) if (k != "runtimes") fp[k.toString()] = v
+        for ((k, v) in run) if (k != "runtimes" && k != "renderers") fp[k.toString()] = v
         ((run["runtimes"] as? Map<*, *>)?.get(image["runtime"] as? String) as? String)?.let { fp["runtime"] = it }
+        if (run.containsKey("renderers")) (image["renderer"] as? String)?.let {
+            fp["renderer"] = it
+            fp["mode"] = if (it == "exact-ios") "exact-ios" else "headless"
+        }
         return fp
     }
 
@@ -70,11 +75,11 @@ object Fingerprints {
         return fp
     }
 
-    /** Flutter: the SDK's version, the renderer (`impeller`, `skia` or `exact-ios`) and the font files used. */
-    fun flutter(sdk: File, renderer: String, fonts: Collection<String>, host: String = this.host): Map<String, Any?> {
-        val fp = base("flutter", host, if (renderer == "exact-ios") "exact-ios" else "headless")
+    /** Flutter: the SDK's version, the renderers the run used (`impeller`, `skia`, `exact-ios`; each image says its own) and the font files used. */
+    fun flutter(sdk: File, renderers: Collection<String>, fonts: Collection<String>, host: String = this.host): Map<String, Any?> {
+        val fp = base("flutter", host, if (renderers.isNotEmpty() && renderers.all { it == "exact-ios" }) "exact-ios" else "headless")
         flutterVersion(sdk)?.let { fp["flutter"] = it }
-        fp["renderer"] = renderer
+        fp["renderers"] = renderers.distinct().sortedWith(CanonicalJson.utf8)
         fp["fonts"] = fonts.map { File(it).name }.distinct().sortedWith(CanonicalJson.utf8)
         return fp
     }

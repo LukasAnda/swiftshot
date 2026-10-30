@@ -36,11 +36,16 @@ enum Fingerprints {
     }
 
     /// The fingerprint of one image of a run (docs/wiki/Baseline-format.md, Image fingerprint): an iOS run's
-    /// `runtimes` (version → build) become the image's own `runtime` build, looked up by the image's `runtime`.
+    /// `runtimes` (version → build) become the image's own `runtime` build, looked up by the image's `runtime`;
+    /// a Flutter run's `renderers` become the image's own `renderer`, and `mode` follows it.
     static func forImage(_ run: JSON, _ image: [String: JSON]) -> JSON {
         guard var fp = run.object else { return run }
         let runtimes = fp.removeValue(forKey: "runtimes")
         if let r = image["runtime"]?.string, let build = runtimes?[r], build.string != nil { fp["runtime"] = build }
+        if fp.removeValue(forKey: "renderers") != nil, let renderer = image["renderer"]?.string {
+            fp["renderer"] = .string(renderer)
+            fp["mode"] = .string(renderer == "exact-ios" ? "exact-ios" : "headless")
+        }
         return .object(fp)
     }
 

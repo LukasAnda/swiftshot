@@ -16,8 +16,6 @@ class Flutter(private val o: Options, private val log: Log) {
     val output: File = o.outputDir(flutter = true)
     /** The font files the tester processes were given (the fingerprint's `fonts`). */
     private val fontFiles = LinkedHashSet<String>()
-    /** The headless renderer the last pass used: impeller, else skia. */
-    private var headlessRenderer = "impeller"
 
     fun run(): Int {
         val pubspec = File(root, "pubspec.yaml").readText()
@@ -65,16 +63,16 @@ class Flutter(private val o: Options, private val log: Log) {
         fun results() = languages.flatMap { lang ->
             File(dir, "${file(lang)}.results.jsonl").takeIf { it.isFile }?.readLines().orEmpty().filter { it.isNotBlank() }.map { Json.parse(it) as Map<*, *> }
         }
-        /** One headless pass over the generated jobs: Impeller, else Skia; its results. */
+        /** One headless pass over the generated jobs: Impeller, else Skia; its results, each with the renderer that made it. */
         fun headless(): Pair<Int, List<Map<*, *>>> {
             var (status, out) = test(impeller = true)
-            headlessRenderer = "impeller"
+            var renderer = "impeller"
             if (results().isEmpty() && status != 0) {
                 log.warn("flutter test could not render with Impeller here; rendering with Skia")
                 test(impeller = false).let { status = it.first; out = it.second }
-                headlessRenderer = "skia"
+                renderer = "skia"
             }
-            val results = results()
+            val results = results().map { LinkedHashMap<Any?, Any?>(it).apply { put("renderer", renderer) } }
             for (r in results.filter { it["ok"] == true && it["warning"] != null }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["warning"]} (${r["script"]}:${r["line"]})")
             for (r in results.filter { it["ok"] != true }) log.warn("${r["preview"]} · ${r["device"]} · ${r["language"]}: ${r["error"]} (${r["script"]}:${r["line"]})")
             if (status != 0 && results.isEmpty()) throw CliError("flutter test failed:\n${out.lines().filter { it.isNotBlank() }.takeLast(40).joinToString("\n")}")
@@ -103,7 +101,8 @@ class Flutter(private val o: Options, private val log: Log) {
                 log.ok("${rendered.size} iOS screenshots in ${"%.1f".format(Locale.ROOT, (System.nanoTime() - t1) / 1e9)}s (Flutter's iOS engine, no simulator booted)")
                 shots = ok.filter { (it["device"] as String) !in iosDevices } + rendered.map { s ->
                     mapOf("ok" to true, "file" to File(output, s.file).path, "preview" to s.preview, "device" to s.device, "language" to s.language,
-                        "appearance" to s.appearance, "fontScale" to 1.0, "size" to "${s.width}x${s.height}", "millis" to 0, "script" to null, "line" to null)
+                        "appearance" to s.appearance, "fontScale" to 1.0, "size" to "${s.width}x${s.height}", "millis" to 0, "script" to null, "line" to null,
+                        "renderer" to "exact-ios")
                 }
             } else {
                 // The iOS engine couldn't render: iPhones and iPads headless after all.
@@ -127,9 +126,8 @@ class Flutter(private val o: Options, private val log: Log) {
             }
         }
         if (o.frame == "plain") frame(shots, devices, manifest)
-        // One fingerprint for the run: the exact iOS engine only when it rendered every device.
-        val renderer = if (iosExact && devices.all { it["platform"] == "ios" }) "exact-ios" else headlessRenderer
-        report(shots, results.filter { it["ok"] != true }, devices, manifest, Fingerprints.flutter(sdk, renderer, fontFiles), iosErrors)
+        // The run's renderers; each screenshot names its own (an iPhone may have fallen back to headless).
+        report(shots, results.filter { it["ok"] != true }, devices, manifest, Fingerprints.flutter(sdk, shots.map { it["renderer"] as String }, fontFiles), iosErrors)
         log.ok("${shots.size} screenshots in ${"%.1f".format(Locale.ROOT, log.seconds)}s → $output")
         return if (shots.isNotEmpty() && ok.size == results.size && iosErrors.isEmpty()) 0 else 1
     }
@@ -276,13 +274,7 @@ class Flutter(private val o: Options, private val log: Log) {
     private fun report(ok: List<Map<*, *>>, failed: List<Map<*, *>>, devices: List<Map<String, Any?>>, manifest: List<Map<*, *>>, fingerprint: Map<String, Any?>,
                        iosErrors: List<Map<String, Any?>> = emptyList()) {
         val ratios = devices.associate { (it["name"] as String) to (it["ratio"] as Number?)?.toDouble() }
-        val shots = ok.map { r ->
-            val (w, h) = (r["size"] as String).split('x').map { it.toInt() }
-            val file = File(r["file"] as String)
-            linkedMapOf<String, Any?>("file" to file.relativeTo(output).invariantSeparatorsPath, "id" to RunReport.id(output, file), "preview" to r["preview"], "device" to r["device"],
-                "language" to r["language"], "appearance" to r["appearance"], "fontScale" to r["fontScale"], "width" to w, "height" to h,
-                "millis" to r["millis"], "platform" to "flutter", "source" to "${r["script"]}:${r["line"]}").apply { ratios[r["device"]]?.let { put("scale", it) } }
-        }.sortedWith(compareBy(CanonicalJson.utf8) { it["id"] as String })
+        val shots = ok.map { reportShot(it, output, ratios[it["device"]]) }.sortedWith(compareBy(CanonicalJson.utf8) { it["id"] as String })
         val errors = failed.sortedWith(compareBy({ it["language"].toString() }, { it["device"].toString() }, { it["preview"].toString() })).map { r ->
             val id = (r["file"] as String?)?.let { RunReport.idOrNull(output, File(it)) }
             val message = r["error"]?.toString() ?: "failed"
@@ -310,6 +302,15 @@ class Flutter(private val o: Options, private val log: Log) {
     }
 
     companion object {
+        /** One rendered result as a swiftshot-report.json screenshot (with its `renderer`). */
+        internal fun reportShot(r: Map<*, *>, output: File, scale: Double?): Map<String, Any?> {
+            val (w, h) = (r["size"] as String).split('x').map { it.toInt() }
+            val file = File(r["file"] as String)
+            return linkedMapOf<String, Any?>("file" to file.relativeTo(output).invariantSeparatorsPath, "id" to RunReport.id(output, file), "preview" to r["preview"], "device" to r["device"],
+                "language" to r["language"], "appearance" to r["appearance"], "fontScale" to r["fontScale"], "width" to w, "height" to h,
+                "millis" to r["millis"], "platform" to "flutter", "renderer" to r["renderer"], "source" to "${r["script"]}:${r["line"]}").apply { scale?.let { put("scale", it) } }
+        }
+
         /** A Flutter app or package: pubspec.yaml depending on the Flutter SDK. */
         fun isProject(dir: File): Boolean {
             val pubspec = File(dir, "pubspec.yaml").takeIf { it.isFile }?.readText() ?: return false

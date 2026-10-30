@@ -13,7 +13,9 @@
       "host": "linux-x64",
       "mode": "headless",
       "platform": "flutter",
-      "renderer": "skia",
+      "renderers": [
+        "skia"
+      ],
       "swiftshot": "1.0.0-test"
     }
   },

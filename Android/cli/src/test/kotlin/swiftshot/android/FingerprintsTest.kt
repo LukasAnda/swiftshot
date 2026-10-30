@@ -5,6 +5,7 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class FingerprintsTest {
@@ -52,10 +53,15 @@ class FingerprintsTest {
         File(dir, "bin/cache").mkdirs()
         File(dir, "bin/cache/flutter.version.json").writeText("""{"frameworkVersion": "3.38.0", "channel": "stable"}""")
         assertEquals("3.38.0", Fingerprints.flutterVersion(dir))
-        val fp = Fingerprints.flutter(dir, "skia", listOf("/a/Roboto-Regular.ttf", "/b/MaterialIcons-Regular.otf", "/a/Roboto-Regular.ttf"), "linux-x64")
+        val fp = Fingerprints.flutter(dir, listOf("skia"), listOf("/a/Roboto-Regular.ttf", "/b/MaterialIcons-Regular.otf", "/a/Roboto-Regular.ttf"), "linux-x64")
         assertEquals(listOf("MaterialIcons-Regular.otf", "Roboto-Regular.ttf"), fp["fonts"])
         assertEquals("headless", fp["mode"])
-        assertEquals("exact-ios", Fingerprints.flutter(dir, "exact-ios", emptyList(), "macos-arm64")["mode"])
+        assertEquals(listOf("skia"), fp["renderers"])
+        assertFalse(fp.containsKey("renderer"))
+        assertEquals("exact-ios", Fingerprints.flutter(dir, listOf("exact-ios"), emptyList(), "macos-arm64")["mode"])
+        val mixed = Fingerprints.flutter(dir, listOf("impeller", "exact-ios", "impeller"), emptyList(), "macos-arm64")
+        assertEquals("headless", mixed["mode"])
+        assertEquals(listOf("exact-ios", "impeller"), mixed["renderers"])
     }
 
     @Test fun canonicalJson() {

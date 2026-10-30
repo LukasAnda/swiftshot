@@ -1,0 +1,64 @@
+{
+  "branch": "feature/x",
+  "ci": false,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 2
+  },
+  "errors": [],
+  "fingerprint": {
+    "flutter": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf",
+        "SF-Pro.ttf"
+      ],
+      "host": "macos-arm64",
+      "mode": "headless",
+      "platform": "flutter",
+      "renderers": [
+        "impeller"
+      ],
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [
+    "flutter mode: baseline exact-ios, this run headless",
+    "flutter renderer: baseline exact-ios, this run impeller"
+  ],
+  "host": "macos-arm64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "platform": "flutter",
+      "preview": "Home",
+      "renderer": "impeller",
+      "status": "unchanged"
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fontScale": 1,
+      "id": "en-US/iPhone 17 Pro-Home",
+      "language": "en-US",
+      "platform": "flutter",
+      "preview": "Home",
+      "renderer": "impeller",
+      "status": "unchanged"
+    }
+  ],
+  "status": "passed",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

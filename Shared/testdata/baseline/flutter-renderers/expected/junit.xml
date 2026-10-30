@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="2" failures="0" errors="0">
+  <testcase classname="flutter.Pixel 9.en-US" name="en-US/Pixel 9-Home"/>
+  <testcase classname="flutter.iPhone 17 Pro.en-US" name="en-US/iPhone 17 Pro-Home"/>
+</testsuite>

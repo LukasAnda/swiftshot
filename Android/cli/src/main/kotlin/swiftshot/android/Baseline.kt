@@ -135,7 +135,7 @@ object Baseline {
     fun validId(id: String): Boolean = !(id.isEmpty() || id.startsWith("/") || '\\' in id || '\u0000' in id || Regex("^[A-Za-z]:").containsMatchIn(id) ||
         id.split('/').any { it.isEmpty() || it == "." || it == ".." })
 
-    private val DESCRIPTIVE = listOf("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime")
+    private val DESCRIPTIVE = listOf("platform", "module", "device", "language", "appearance", "preview", "fontScale", "textSize", "runtime", "renderer")
 
     internal fun describe(meta: Map<*, *>): MutableMap<String, Any?> {
         val d = LinkedHashMap<String, Any?>()
@@ -199,7 +199,8 @@ object Baseline {
         BaselineReport.clear(report)
         val pool = Executors.newFixedThreadPool(maxOf(1, minOf(Runtime.getRuntime().availableProcessors(), 4)))
         val pending = ArrayList<Future<Map<String, Any?>>>()
-        val compared = ArrayList<Map<*, *>>()
+        /** Each listed baseline entry, with the image as this run made it (its screenshot), else the entry. */
+        val compared = ArrayList<Pair<Map<*, *>, Map<*, *>>>()
         var local = false
         try {
             for (id in ids) {
@@ -207,7 +208,7 @@ object Baseline {
                 val o = run.shots[id]
                 if (o == null && id !in run.failed && (!inScope(b!!, run.scope) || run.unattributed.isNotEmpty())) continue
                 if (b != null) {
-                    compared += b
+                    compared += (o ?: b) to b
                     if (b["local"] == true) local = true
                 }
                 val e = LinkedHashMap<String, Any?>((o ?: b)?.let(::describe) ?: emptyMap())
@@ -233,10 +234,10 @@ object Baseline {
                 }
             }
             val entries = pending.map { it.get() }
-            // Each image against the fingerprint this run gives it (its own runtime's build).
-            val mismatches = compared.flatMap { b ->
+            // Each image against the fingerprint this run gives it (its own runtime's build, its own renderer).
+            val mismatches = compared.flatMap { (image, b) ->
                 val fp = stored.fingerprints[b["fingerprint"] as String?] as Map<*, *>? ?: return@flatMap emptyList()
-                (run.fingerprint[fp["platform"] as String?] as Map<*, *>?)?.let { Fingerprints.mismatches(fp, Fingerprints.forImage(it, b)) }.orEmpty()
+                (run.fingerprint[fp["platform"] as String?] as Map<*, *>?)?.let { Fingerprints.mismatches(fp, Fingerprints.forImage(it, image)) }.orEmpty()
             }.distinct().sortedWith(CanonicalJson.utf8)
             val errors = entries.filter { it["status"] == "error" }.map { linkedMapOf("id" to it["id"], "message" to it["message"]) } + run.unattributed
             val listed = entries.map { it["id"] as String }.toSet()
