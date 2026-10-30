@@ -2,9 +2,9 @@ package swiftshot.android
 
 import java.io.File
 
-/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, timings.json, and the console summary. */
+/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, timings.json, and the console summary. */
 object BaselineReport {
-    private val files = listOf("result.json", "manifest.json", "junit.xml", "timings.json")
+    private val files = listOf("result.json", "manifest.json", "junit.xml", "summary.md", "timings.json")
 
     /** Removes what an earlier verify wrote there (only its own files: the directory may be the user's). */
     fun clear(report: File) {
@@ -23,6 +23,7 @@ object BaselineReport {
         File(report, "result.json").writeText(CanonicalJson.pretty(result(v)))
         File(report, "manifest.json").writeText(CanonicalJson.pretty(manifest(v)))
         File(report, "junit.xml").writeText(junit(v))
+        File(report, "summary.md").writeText(Summary.markdown(v, v.env.ci))
     }
 
     /** `null` outside a CI, else what the report says about it. */

@@ -2,6 +2,7 @@ package swiftshot.android
 
 import swiftshot.android.shared.Json
 import java.io.File
+import java.io.PrintStream
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -181,7 +182,10 @@ object Baseline {
     }
 
     /** Compares the run in [output] with [baseline], writes the report directory and says what it found; the exit code. */
-    fun verify(output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log): Int {
+    fun verify(
+        output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log,
+        processEnv: Map<String, String> = emptyMap(), out: PrintStream = System.out,
+    ): Int {
         val start = System.nanoTime()
         val v = evaluate(output, baseline, report, config, env)
         env.ci?.warnings?.forEach(log::warn)
@@ -192,6 +196,7 @@ object Baseline {
             "ok" -> log.ok(line)
             else -> log.plain(line)
         }
+        NativeOutput.write(v, env.ci, report, processEnv, out, log)
         return v.exitCode
     }
 

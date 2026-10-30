@@ -1,8 +1,8 @@
 import Foundation
 
-/// The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, timings.json, and the console summary.
+/// The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, timings.json, and the console summary.
 enum BaselineReport {
-    static let files = ["result.json", "manifest.json", "junit.xml", "timings.json"]
+    static let files = ["result.json", "manifest.json", "junit.xml", "summary.md", "timings.json"]
 
     /// Removes what an earlier verify wrote there (only its own files: the directory may be the user's).
     static func clear(_ report: URL) throws {
@@ -17,6 +17,7 @@ enum BaselineReport {
         try Data(result(v).pretty().utf8).write(to: report.appendingPathComponent("result.json"))
         try Data(manifest(v).pretty().utf8).write(to: report.appendingPathComponent("manifest.json"))
         try Data(junit(v).utf8).write(to: report.appendingPathComponent("junit.xml"))
+        try Data(Summary.markdown(v, ci: v.env.ci).utf8).write(to: report.appendingPathComponent("summary.md"))
     }
 
     /// timings.json: how long the comparison took (not deterministic, so not part of result.json).

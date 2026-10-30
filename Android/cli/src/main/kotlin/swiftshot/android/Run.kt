@@ -12,7 +12,7 @@ open class Log(val verbose: Boolean) {
     private fun c(code: String, s: String) = if (tty) "\u001b[${code}m$s\u001b[0m" else s
     fun step(s: String) = System.err.println("${c("2", t())} ${c("36", "▸")} $s")
     open fun ok(s: String) = System.err.println("${c("2", t())} ${c("32", "✔")} $s")
-    fun warn(s: String) = System.err.println("${c("2", t())} ${c("33", "!")} $s")
+    open fun warn(s: String) = System.err.println("${c("2", t())} ${c("33", "!")} $s")
     /** A line under the last step, indented to its text. */
     fun plain(s: String) = System.err.println("          $s")
     fun error(s: String) = System.err.println("${c("31", "error:")} $s")

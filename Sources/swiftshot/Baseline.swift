@@ -246,7 +246,8 @@ enum Baseline {
     }
 
     /// Compares the run in `output` with `baseline`, writes the report directory and says what it found; the exit code.
-    static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console) throws -> Int32 {
+    static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console,
+                       processEnv: [String: String] = [:], out: (String) -> Void = { print($0) }) throws -> Int32 {
         let start = Date()
         let v = try evaluate(output: output, baseline: baseline, report: report, config: config, env: env)
         for w in env.ci?.warnings ?? [] { log.warn(w) }
@@ -259,6 +260,7 @@ enum Baseline {
             default: log.plain(line)
             }
         }
+        NativeOutput.write(v, ci: env.ci, reportDir: report, env: processEnv, out: out, log: log)
         return v.exitCode
     }
 

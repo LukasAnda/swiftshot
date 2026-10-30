@@ -40,14 +40,14 @@ final class BaselineTests: XCTestCase {
 
     func testEveryFixtureCaseMatchesByteForByte() throws {
         let all = fixtureCases()
-        XCTAssertEqual(all.count, 25, "fixture cases")
+        XCTAssertEqual(all.count, 26, "fixture cases")
         var problems: [String] = []
         var passed: [String] = []
         for c in all {
             let report = tmp.appendingPathComponent(c.lastPathComponent)
             let v = try verify(c, report: report)
             var ok = true
-            for name in ["result.json", "junit.xml", "manifest.json"] {
+            for name in ["result.json", "junit.xml", "manifest.json", "summary.md"] {
                 let want = try String(contentsOf: c.appendingPathComponent("expected/\(name)"), encoding: .utf8)
                 let got = try? String(contentsOf: report.appendingPathComponent(name), encoding: .utf8)
                 if got != want { ok = false; problems.append("\(c.lastPathComponent)/\(name) differs:\n--- want\n\(want)--- got\n\(got ?? "nil")") }

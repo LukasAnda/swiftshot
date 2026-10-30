@@ -14,6 +14,7 @@ and the JVM CLI) follow this page exactly and are tested against the fixtures in
 <report_directory>/                   default <output_directory>-report
   result.json
   junit.xml
+  summary.md
   index.html
   manifest.json
   timings.json                        {"compareSeconds": 0.25}: how long the comparison took
@@ -476,3 +477,70 @@ directory or be a symbolic link, at most 2 GB extracted.
   `counts.errors`.
 - Attribute escaping: `&` `<` `>` `"` as `&amp;` `&lt;` `&gt;` `&quot;`; TAB LF CR as `&#9;`
   `&#10;` `&#13;`; other characters below U+0020 dropped. 2-space indent, LF line ends, final `\n`.
+
+## summary.md
+
+The report in a few lines of Markdown: the CI's summary page, and the pull request comment (the same
+text). UTF-8, `\n` line ends, one final `\n`. Blocks are separated by one blank line.
+
+```
+<!-- swiftshot -->
+### Screenshots differ from the baseline
+
+1 changed · 1 added · 0 removed · 0 errors · 3 unchanged
+
+> **Note:** Baseline rendered differently: android host: baseline linux-x64, this run macos-arm64
+
+| Status | Screenshot |
+|---|---|
+| changed | `en-US/Pixel 9-Home` |
+| added | `en-US/Pixel 9-New` |
+
+[Full report](https://github.com/acme/app/actions/runs/9876543210)
+
+Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.
+```
+
+- Heading by `status`: `passed` "Screenshots match the baseline", `failed` "Screenshots differ from
+  the baseline", `error` "Screenshot run had errors".
+- Counts line: all five counts, in the order above, separated by ` · ` (U+00B7).
+- Note block: one `> **Note:** ` line per `fingerprintMismatch` entry (`Baseline rendered differently:
+  <entry>`), then, when `localBaseline`, `Some baseline images were recorded outside CI (local);
+  record or accept them on CI`. Omitted when empty.
+- Table: one row per `error`, `changed`, `added` or `removed` entry, in that status order, then by id
+  in UTF-8 byte order; at most 200 rows, then `| | …and <n> more |`. In an id, `|` is written `\|`
+  and a backtick `'`. Omitted when there are no rows. Errors without id have no row (see the counts).
+- `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table.
+- Accept hint, `failed` only, last. By `ci.provider`; `null` or unknown gets the last text:
+  - `github`: Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.
+  - `gitlab`: Run the manual `swiftshot-accept` job in this pipeline to accept the changes.
+  - `bitbucket`: Run the manual `Accept screenshots` step in this pipeline to accept the changes.
+  - `bitrise`: Run the `swiftshot-accept` workflow on this branch to accept the changes.
+  - `codemagic`: Start the `swiftshot-accept` workflow on this branch to accept the changes.
+  - `circleci`: Approve the `accept-screenshots` job in this workflow to accept the changes.
+  - `azure`: Approve the `Accept screenshots` stage in this run to accept the changes.
+  - `jenkins`: Approve the `Accept screenshots` stage in this build to accept the changes.
+  - otherwise: Accept the changes with `swiftshot accept --from <this report>`.
+- Size: the text stays within 60,000 UTF-8 bytes (GitHub allows 65,536 characters). If it is larger,
+  rows are dropped from the end until it fits; the "…and <n> more" count includes them.
+
+## Native CI output
+
+After `verify` has written the report, it adds what the detected CI (`ci.provider`) reads. `verify`
+takes the process environment as given; with `SWIFTSHOT_CI=false` nothing is written. Each part needs
+its variable; a write that fails is one warning and never changes the exit code.
+
+- `github`: appends `summary.md` to the file `GITHUB_STEP_SUMMARY`. Prints to stdout, for the first
+  10 table rows, `::error title=<status> screenshot::<id>`, and for an `error` row
+  `::error title=Render error::<id>: <message>`. Values escape `%` `\r` `\n` as `%25` `%0D` `%0A`, a
+  title also `:` `,` as `%3A` `%2C`.
+- `azure`: prints `##vso[results.publish type=JUnit;mergeResults=false;runTitle=swiftshot;resultFiles=<absolute junit.xml>]`
+  and `##vso[task.uploadsummary]<absolute summary.md>`; when `status` is not `passed` also
+  `##vso[task.logissue type=error]Screenshots: <counts line>`.
+- `bitbucket`: copies `junit.xml` to `$BITBUCKET_CLONE_DIR/test-results/swiftshot/junit.xml`.
+- `bitrise`: with `BITRISE_TEST_RESULT_DIR`, writes `swiftshot/junit.xml` and `swiftshot/test-info.json`
+  (`{"test-name":"swiftshot"}`) there; with `BITRISE_DEPLOY_DIR`, writes `swiftshot-report.zip` there:
+  the report directory's files at the zip's root (what `accept --from` reads), entries sorted by name,
+  every timestamp 1980-01-01 00:00.
+- `gitlab`, `codemagic`, `circleci`, `jenkins`: nothing; their recipes point at `junit.xml` and the
+  report directory.

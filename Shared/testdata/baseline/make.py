@@ -2,7 +2,7 @@
 """Regenerates the baseline-comparison fixtures (inputs and expected JSON/JUnit).
 
 Run with `python3 -I make.py` from anywhere. Stdlib only, deterministic. It rewrites each case's
-`config.json`, `baseline/`, `output/` and `expected/{result.json,junit.xml,manifest.json}`.
+`config.json`, `baseline/`, `output/` and `expected/{result.json,junit.xml,manifest.json,summary.md}`.
 `expected/images/` is left alone: the engine generates and commits those, and this script checks
 them (baseline/new byte copies, diff images pixel- and byte-equal to `diff_image` below).
 
@@ -616,7 +616,62 @@ def verify(case):
         lines += ['  <testcase classname="swiftshot" name="error %d">' % i,
                   '    <error message="%s"/>' % xml_attr(err["message"]), "  </testcase>"]
     lines.append("</testsuite>")
-    return result, "\n".join(lines) + "\n", manifest
+    return result, "\n".join(lines) + "\n", manifest, summary_md(result)
+
+
+# ---------------------------------------------------------------- summary.md
+
+MARKER = "<!-- swiftshot -->"
+HEADINGS = {"passed": "Screenshots match the baseline", "failed": "Screenshots differ from the baseline", "error": "Screenshot run had errors"}
+HINTS = {
+    "github": "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> \u2026` for some.",
+    "gitlab": "Run the manual `swiftshot-accept` job in this pipeline to accept the changes.",
+    "bitbucket": "Run the manual `Accept screenshots` step in this pipeline to accept the changes.",
+    "bitrise": "Run the `swiftshot-accept` workflow on this branch to accept the changes.",
+    "codemagic": "Start the `swiftshot-accept` workflow on this branch to accept the changes.",
+    "circleci": "Approve the `accept-screenshots` job in this workflow to accept the changes.",
+    "azure": "Approve the `Accept screenshots` stage in this run to accept the changes.",
+    "jenkins": "Approve the `Accept screenshots` stage in this build to accept the changes.",
+}
+GENERIC_HINT = "Accept the changes with `swiftshot accept --from <this report>`."
+ROW_ORDER = ("error", "changed", "added", "removed")
+MAX_ROWS, MAX_BYTES = 200, 60000
+
+
+def summary_md(result):
+    """Reference for docs/wiki/Baseline-format.md "summary.md"."""
+    c = result["counts"]
+    ci = result["ci"]
+    status = result["status"]
+    notes = ["> **Note:** Baseline rendered differently: %s" % m for m in result["fingerprintMismatch"]]
+    if result["localBaseline"]:
+        notes.append("> **Note:** Some baseline images were recorded outside CI (local); record or accept them on CI")
+    rows = sorted(((ROW_ORDER.index(e["status"]), key_order(e["id"]), e["status"], e["id"])
+                   for e in result["screenshots"] if e["status"] in ROW_ORDER))
+    tail = []
+    if ci and ci["buildUrl"]:
+        tail.append("[Full report](%s)" % ci["buildUrl"])
+    if status == "failed":
+        tail.append(HINTS.get(ci["provider"] if ci else None, GENERIC_HINT))
+
+    def build(shown):
+        blocks = ["%s\n### %s" % (MARKER, HEADINGS[status]),
+                  "%d changed \u00b7 %d added \u00b7 %d removed \u00b7 %d errors \u00b7 %d unchanged" % (
+                      c["changed"], c["added"], c["removed"], c["errors"], c["unchanged"])]
+        if notes:
+            blocks.append("\n".join(notes))
+        if rows:
+            lines = ["| Status | Screenshot |", "|---|---|"]
+            lines += ["| %s | `%s` |" % (r[2], r[3].replace("|", "\\|").replace("`", "'")) for r in rows[:shown]]
+            if shown < len(rows):
+                lines.append("| | \u2026and %d more |" % (len(rows) - shown))
+            blocks.append("\n".join(lines))
+        blocks += tail
+        return "\n\n".join(blocks) + "\n"
+    shown = min(MAX_ROWS, len(rows))
+    while len(build(shown).encode("utf-8")) > MAX_BYTES and shown > 0:
+        shown -= 1
+    return build(shown)
 
 
 # ---------------------------------------------------------------- CI detection
@@ -1045,6 +1100,11 @@ def cases():
         "GITHUB_SHA": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081", "GITHUB_REF": "refs/pull/7/merge", "GITHUB_REF_NAME": "7/merge",
         "GITHUB_HEAD_REF": "feature/x", "GITHUB_BASE_REF": "main", "GITHUB_REPOSITORY": "acme/app",
         "GITHUB_SERVER_URL": "https://github.com", "GITHUB_RUN_ID": "9876543210"}))
+    # 300 added 1x1 images with ~300-byte ids: the table's 200 rows exceed 60,000 bytes, so the byte cap and
+    # "...and N more" both apply. An id is `en-US/<device>-<P*100>/<Q*100><index>`: a path component stays
+    # under the file systems' 255 bytes.
+    tiny = base(1, 1, 1)
+    out.append(case("summary-truncation", [], [(android("P" * 100 + "/" + "Q" * 100 + "%03d" % i, device="D" * 100), tiny) for i in range(300)]))
     return out
 
 
@@ -1128,11 +1188,12 @@ def main():
             write(os.path.join(d, "env.json"), pretty(c["env"]))
         for rel, text in c["input_files"].items():
             write(os.path.join(d, rel), text)
-        result, junit, manifest = verify(c)
+        result, junit, manifest, summary = verify(c)
         check(c, result)
         write(os.path.join(d, "expected", "result.json"), pretty(result))
         write(os.path.join(d, "expected", "junit.xml"), junit)
         write(os.path.join(d, "expected", "manifest.json"), pretty(manifest))
+        write(os.path.join(d, "expected", "summary.md"), summary)
         check_images(c, result, d)
         print("%-28s %s %s" % (c["name"], result["status"], dump(result["counts"], indent=None)))
     print("ci fixtures: %d" % check_ci_fixtures())

@@ -76,8 +76,9 @@ private fun baselineCommand(o: Options, log: Log, render: (Options, Boolean) -> 
     val baseline = o.baselineDir(flutter)
     if (o.command == "record") return Baseline.record(output, baseline, Ci.detect(System.getenv()).isCi, log)
     val report = o.reportDir(flutter)
+    val processEnv = System.getenv()
     return try {
-        Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir), System.getenv()), log)
+        Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir), processEnv), log, processEnv)
     } catch (e: Exception) {
         // No result: nothing of an earlier verify may stay behind to be read as this one's.
         BaselineReport.clear(report)

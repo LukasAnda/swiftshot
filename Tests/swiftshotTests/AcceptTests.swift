@@ -292,6 +292,17 @@ final class AcceptTests: XCTestCase {
         XCTAssertEqual(bytes(fixtures.appendingPathComponent("changed-pixels/output/en-US/Pixel 9-Home.png")), bytes(baseline.appendingPathComponent("en-US/Pixel 9-Home.png")))
     }
 
+    func testBitriseZipIsAcceptable() throws {
+        try repoWith("changed-pixels")
+        let r = try report("changed-pixels")
+        let ci = Ci(provider: "bitrise", commit: nil, branch: nil, pullRequest: nil, fork: nil, buildUrl: nil, repository: nil, isCi: true)
+        let v = Verification(entries: [], errors: [], unattributed: [], fingerprint: [:], mismatches: [], localBaseline: false, strays: 0,
+                             env: BaselineEnv(git: GitInfo(commit: nil, branch: nil), version: "1.0.0-test", ci: ci), configHash: "hash")
+        NativeOutput.write(v, ci: ci, reportDir: r, env: ["BITRISE_DEPLOY_DIR": tmp.appendingPathComponent("deploy").path], out: { _ in }, log: console)
+        XCTAssertEqual(accept(tmp.appendingPathComponent("deploy/swiftshot-report.zip")), 0, errors)
+        XCTAssertEqual(bytes(fixtures.appendingPathComponent("changed-pixels/output/en-US/Pixel 9-Home.png")), bytes(baseline.appendingPathComponent("en-US/Pixel 9-Home.png")))
+    }
+
     func testAcceptsAZipWithOneTopLevelDirectory() throws {
         try repoWith("changed-pixels")
         XCTAssertEqual(accept(try zip(try report("changed-pixels"), tmp.appendingPathComponent("report.zip"), prefix: "screenshots-report/")), 0, errors)

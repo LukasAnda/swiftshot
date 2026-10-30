@@ -45,12 +45,12 @@ class BaselineTest {
 
     @Test fun everyFixtureCaseMatchesByteForByte() {
         val all = cases()
-        assertEquals(25, all.size, "fixture cases")
+        assertEquals(26, all.size, "fixture cases")
         val problems = mutableListOf<String>()
         for (case in all) {
             val report = File(tmp, case.name)
             val v = verify(case, report)
-            for (name in listOf("result.json", "junit.xml", "manifest.json")) {
+            for (name in listOf("result.json", "junit.xml", "manifest.json", "summary.md")) {
                 val want = File(case, "expected/$name").readText()
                 val got = File(report, name).takeIf { it.isFile }?.readText()
                 if (got != want) problems += "${case.name}/$name differs:\n--- want\n$want--- got\n$got"

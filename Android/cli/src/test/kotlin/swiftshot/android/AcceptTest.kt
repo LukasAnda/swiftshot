@@ -333,6 +333,16 @@ class AcceptTest {
         assertTrue(bytes(File(root, "changed-pixels/output/en-US/Pixel 9-Home.png")).contentEquals(bytes(File(baseline, "en-US/Pixel 9-Home.png"))))
     }
 
+    @Test fun bitriseZipIsAcceptable() {
+        repoWith("changed-pixels")
+        val r = report("changed-pixels")
+        val ci = Ci("bitrise", null, null, null, null, null, null, true)
+        val v = Verification(emptyList(), emptyList(), emptyList(), emptyMap(), emptyList(), false, 0, BaselineEnv(GitInfo(null, null), "1.0.0-test", ci), "hash")
+        NativeOutput.write(v, ci, r, mapOf("BITRISE_DEPLOY_DIR" to File(tmp, "deploy").path), PrintStream(errors, true), Log(false))
+        assertEquals(0, accept(File(tmp, "deploy/swiftshot-report.zip")))
+        assertTrue(bytes(File(root, "changed-pixels/output/en-US/Pixel 9-Home.png")).contentEquals(bytes(File(baseline, "en-US/Pixel 9-Home.png"))))
+    }
+
     @Test fun acceptsAZipWithOneTopLevelDirectory() {
         repoWith("changed-pixels")
         assertEquals(0, accept(zip(report("changed-pixels"), File(tmp, "report.zip"), prefix = "screenshots-report/")))
