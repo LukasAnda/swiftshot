@@ -14,7 +14,8 @@ enum Command {
         switch options.command {
         case "accept":
             return Accept.run(from: options.from, only: options.only, push: options.push, author: options.author,
-                              baseline: URL(fileURLWithPath: options.baselineDirectory), log: Console())
+                              baseline: URL(fileURLWithPath: options.baselineDirectory), log: Console(),
+                              branch: options.branch, env: ProcessInfo.processInfo.environment)
         case "verify", "record":
             return await baseline(options)
         default:

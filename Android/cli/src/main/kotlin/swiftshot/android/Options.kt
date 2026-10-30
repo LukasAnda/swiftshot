@@ -82,6 +82,8 @@ class Options {
     var only: Set<String>? = null
     var push = false
     var author: String? = null
+    /** accept --push: the branch to push to (default: the upstream, or the CI's branch on a detached checkout). */
+    var branch: String? = null
     /** Whether `--frame` was passed (a config's frame is skipped by verify/record, a flag is an error). */
     private var frameFlag = false
     /** Where relative output, baseline and report paths from flags resolve: Flutter runs resolve them in the project. */
@@ -168,11 +170,13 @@ class Options {
 
             ACCEPT
               --from <dir|zip|url>                  A verify report directory, a zip of one, or an http(s) URL of the zip
-                                                    (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token,
-                                                    over https only, to that host only)
+                                                    (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as the host's
+                                                    auth header, over https only, to that host only)
               --only "<id>,<id>"                    Only these screenshot ids (repeatable)
               --push                                Commit the baseline ("Update screenshot baseline (…)") and git push
               --author "Name <email>"               Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+              --branch <name>                       With --push: push HEAD to this branch (default: the upstream, or
+                                                    the CI's branch when HEAD is detached)
 
               --config <file>                       Default: ./swiftshot.json
               -v, --verbose
@@ -248,6 +252,7 @@ class Options {
                 "--only" -> o.only = o.only.orEmpty() + list(v)
                 "--push" -> o.push = true
                 "--author" -> o.author = v!!
+                "--branch" -> o.branch = v!!
                 "--config", "--project-dir" -> Unit
                 else -> error("Unknown option $k. `swiftshot --help` lists them.")
             }
@@ -380,7 +385,7 @@ class Options {
         if (command in setOf("frame", "calibrate", "emit-table")) throw CliError("`swiftshot $command` is part of the iOS tool and needs a Mac with Xcode.")
         require(command in setOf("run", "verify", "record", "list", "devices", "init", "auto-setup", "emit-devices", "accept")) { "Unknown command \"$command\"" }
         if (command == "accept") { if (from.isEmpty()) throw UsageError("accept needs --from <report directory, .zip or URL>") }
-        else require(from.isEmpty() && only == null && !push && author == null) { "--from, --only, --push and --author are for accept" }
+        else require(from.isEmpty() && only == null && !push && author == null && branch == null) { "--from, --only, --push, --author and --branch are for accept" }
         if (command == "verify" || command == "record") {
             if (format != "png") throw UsageError("$command compares plain PNG screenshots; --format $format can't be used with it (drop --format, or use run).")
             if (frameFlag && frame != "none") throw UsageError("$command compares plain screenshots; device frames aren't written (drop --frame, or use run).")

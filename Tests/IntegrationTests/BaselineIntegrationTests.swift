@@ -26,13 +26,13 @@ final class BaselineIntegrationTests: XCTestCase {
 
     /// Runs a program in the project copy; its exit code and output (also appended to a log the CI job follows).
     @discardableResult
-    func exec(_ program: String, _ args: [String], log: String) throws -> (code: Int32, output: String) {
+    func exec(_ program: String, _ args: [String], log: String, env extra: [String: String] = [:]) throws -> (code: Int32, output: String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: program)
         p.arguments = args
         p.currentDirectoryURL = project
         // Real git: accept checks the report's commit against HEAD.
-        p.environment = Self.env.filter { $0.key != "SWIFTSHOT_COMMIT" && $0.key != "SWIFTSHOT_BRANCH" }
+        p.environment = Self.env.filter { $0.key != "SWIFTSHOT_COMMIT" && $0.key != "SWIFTSHOT_BRANCH" }.merging(extra) { $1 }
         let logURL = Self.work.appendingPathComponent("\(log).log")
         if !FileManager.default.fileExists(atPath: logURL.path) { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
         let handle = try FileHandle(forWritingTo: logURL)
@@ -46,9 +46,11 @@ final class BaselineIntegrationTests: XCTestCase {
         return (p.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 
-    func git(_ args: String...) throws {
+    @discardableResult
+    func git(_ args: String...) throws -> String {
         let r = try exec("/usr/bin/git", ["-c", "user.name=swiftshot-test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"] + args, log: "git")
         XCTAssertEqual(r.code, 0, "git \(args.joined(separator: " ")): \(r.output)")
+        return r.output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// One device, language and appearance keep it quick; the comparison covers Welcome and Settings.
@@ -138,6 +140,55 @@ final class BaselineIntegrationTests: XCTestCase {
         XCTAssertEqual(r.code, 1, "accept of a stale report:\n\(r.output)")
         XCTAssertTrue(r.output.contains("commit"), "the refusal names the commit")
         XCTAssertEqual(try baselineFiles(), before, "the refused accept changed the baseline")
+    }
+
+    /// accept on a pull request's CI checkout, from a prepared report (nothing is rendered; the report's commit is the
+    /// head sha, as verify records it on GitHub's merge checkout): a merge checkout refuses it, the detached head
+    /// pushes to the pull request's branch, and the bare remote has the accept commit there.
+    func testAcceptPushesFromADetachedPullRequestCheckout() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: Self.work)
+        try fm.createDirectory(at: project, withIntermediateDirectories: true)
+        let fixture = Self.root.appendingPathComponent("Shared/testdata/baseline/changed-pixels")
+        try fm.copyItem(at: fixture.appendingPathComponent("baseline"), to: baseline)
+        try "app\n".write(to: project.appendingPathComponent("README"), atomically: true, encoding: .utf8)
+        try git("init", "-q", "-b", "main")
+        try git("add", "-A"); try git("commit", "-q", "-m", "Baseline")
+        let bare = Self.work.appendingPathComponent("remote.git")
+        try git("init", "-q", "--bare", "-b", "main", bare.path)
+        try git("remote", "add", "origin", bare.path)
+        try git("push", "-q", "origin", "main")
+        // The pull request, and the merge commit GitHub checks out for it.
+        try git("checkout", "-q", "-b", "feature/pr")
+        try "change\n".write(to: project.appendingPathComponent("README"), atomically: true, encoding: .utf8)
+        try git("commit", "-q", "-am", "Change")
+        let prHead = try git("rev-parse", "HEAD")
+        try git("checkout", "-q", "--detach", "main")
+        try git("merge", "-q", "--no-ff", "-m", "Merge", "feature/pr")
+
+        let report = Self.work.appendingPathComponent("report")
+        try fm.copyItem(at: fixture.appendingPathComponent("expected"), to: report)
+        let manifestURL = report.appendingPathComponent("manifest.json")
+        var manifest = try json(manifestURL)
+        manifest["commit"] = prHead
+        try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]).write(to: manifestURL)
+        let event = Self.work.appendingPathComponent("event.json")
+        try JSONSerialization.data(withJSONObject: ["pull_request": ["number": 7, "head": ["sha": prHead, "ref": "feature/pr", "repo": ["full_name": "acme/app"]],
+                                                                      "base": ["repo": ["full_name": "acme/app"]]]]).write(to: event)
+        let ci = ["SWIFTSHOT_CI": "true", "GITHUB_ACTIONS": "true", "GITHUB_EVENT_PATH": event.path, "GITHUB_REPOSITORY": "acme/app",
+                  "GITHUB_HEAD_REF": "feature/pr", "GITHUB_SHA": try git("rev-parse", "HEAD")]
+
+        var r = try exec(Self.tool, ["accept", "--from", report.path, "--push"], log: "accept-merge", env: ci)
+        XCTAssertEqual(r.code, 1, "the merge checkout is not the report's commit:\n\(r.output)")
+
+        try git("checkout", "-q", "--detach", prHead)
+        r = try exec(Self.tool, ["accept", "--from", report.path, "--push"], log: "accept-pr", env: ci)
+        XCTAssertEqual(r.code, 0, "accept:\n\(r.output)")
+        let pushed = try git("--git-dir", bare.path, "rev-parse", "feature/pr")
+        XCTAssertEqual(pushed, try git("rev-parse", "HEAD"))
+        XCTAssertEqual(try git("rev-parse", "HEAD^"), prHead)
+        XCTAssertEqual(try git("--git-dir", bare.path, "rev-parse", "main"), try git("rev-parse", "main"), "main is untouched")
+        XCTAssertEqual(try git("log", "-1", "--format=%(trailers:key=Swiftshot-Accept,valueonly)"), prHead)
     }
 
     private func baselineFiles() throws -> [String: Data] {

@@ -421,11 +421,21 @@ listed here, so a baseline image of an `error` id is never deleted.
 
 ## accept
 
-`swiftshot accept --from <report> [--from <report>…] [--only <ids>] [--push] [--author "Name <email>"]`
+`swiftshot accept --from <report> [--from <report>…] [--only <ids>] [--push] [--branch <name>] [--author "Name <email>"]`
 renders nothing. `--from` is a report directory, a zip of one (the report at its root or in its only
-top-level directory), or an `http(s)` URL of such a zip (sent `Authorization: Bearer
-$SWIFTSHOT_ARTIFACT_TOKEN` when set, only to that host and only over `https`: a token with an `http`
-URL is a usage error, except to `localhost`, `127.0.0.1` or `::1`). Zips: no entry may leave the target
+top-level directory), or an `http(s)` URL of such a zip (sent with `$SWIFTSHOT_ARTIFACT_TOKEN` when
+set, only to that host and only over `https`: a token with an `http` URL is a usage error, except to
+`localhost`, `127.0.0.1` or `::1`). The header, first that applies:
+
+- `SWIFTSHOT_ARTIFACT_HEADER`, `Name: value` with `{token}` in the value.
+- `api.github.com` or the host of `GITHUB_API_URL`: `Authorization: Bearer <t>`.
+- `gitlab.com` or the host of `CI_API_V4_URL`: `JOB-TOKEN: <t>` when `<t>` is `CI_JOB_TOKEN`, else `PRIVATE-TOKEN: <t>`.
+- `circleci.com`: `Circle-Token: <t>`.
+- `dev.azure.com`, `*.visualstudio.com`: `Authorization: Basic base64(":" + <t>)`.
+- a `<t>` with a `:` (Jenkins `user:apitoken`): `Authorization: Basic base64(<t>)`.
+- otherwise `Authorization: Bearer <t>`.
+
+Bitrise and Codemagic give pre-signed URLs; pass those without a token. Zips: no entry may leave the target
 directory or be a symbolic link, at most 2 GB extracted.
 
 - For each `changed` and `added` id of `manifest.json`: `images/new/<id>.png` is copied into the
@@ -446,7 +456,20 @@ directory or be a symbolic link, at most 2 GB extracted.
   directory stay uncommitted), subject `Update screenshot baseline (3
   changed, 1 added)` (non-zero parts of changed, added, removed), a `Swiftshot-Accept: <commit>`
   trailer per report commit, author and committer `swiftshot <swiftshot@users.noreply.github.com>`
-  unless `--author`; then `git push` to the branch's upstream, else `origin HEAD`, never forced.
+  unless `--author`; then `git push`, never forced, to the first that applies:
+  1. `--branch <name>`: `<remote> HEAD:refs/heads/<name>` (`<remote>` is the upstream's, else `origin`).
+  2. The current branch's upstream.
+  3. HEAD detached (a CI checkout): `origin HEAD:refs/heads/<branch>`, `<branch>` being
+     `SWIFTSHOT_BRANCH`, else the CI's branch (`ci.branch`).
+  4. Else `origin HEAD`.
+
+  With HEAD detached and no branch known, exit 1: `HEAD is detached and no branch is known; pass
+  --branch <the pull request branch>`. When the CI says the pull request comes from a fork (`ci.fork`
+  is true), exit 1 before anything is written: `This pull request comes from a fork; download the
+  report and run swiftshot accept --from <report> in the fork`. With `SWIFTSHOT_HOST_TOKEN` set and an
+  `https` push remote (see "Git host" for the header) the push is `git -c http.extraHeader=… push`:
+  the header is on that command only, never in the git config, and the token, its base64 form and the
+  header are replaced with `***` in git's output and in the refusal message.
   Nothing to apply, or none of those files changed: no commit.
 
 ## junit.xml

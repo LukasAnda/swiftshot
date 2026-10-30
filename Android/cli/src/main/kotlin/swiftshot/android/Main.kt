@@ -20,7 +20,7 @@ fun cli(args: List<String>, log: Log, render: (Options, Boolean) -> Unit = { o, 
             log.error(e.message ?: "invalid option"); return 64
         }
         // accept renders nothing; its exit codes are its own (0 applied, 1 refused, 64 usage).
-        if (o.command == "accept") return Accept.run(o.from, o.only, o.push, o.author, o.baselineDir(isFlutter(o)), log)
+        if (o.command == "accept") return Accept.run(o.from, o.only, o.push, o.author, o.baselineDir(isFlutter(o)), log, o.branch, System.getenv())
         return try {
             o.notes.forEach(log::warn)
             baselineCommand(o, log, render)

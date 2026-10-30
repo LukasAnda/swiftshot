@@ -71,11 +71,12 @@ class AcceptTest {
     private fun images() = json(File(baseline, "baseline.json"))["images"] as Map<*, *>
     private fun bytes(f: File) = f.readBytes()
 
-    private fun accept(vararg from: File, only: Set<String>? = null, push: Boolean = false, author: String? = null, token: String? = null, urls: List<String> = emptyList()): Int {
+    private fun accept(vararg from: File, only: Set<String>? = null, push: Boolean = false, author: String? = null, token: String? = null, urls: List<String> = emptyList(), env: Map<String, String> = emptyMap(), branch: String? = null, extraGit: Map<String, String> = emptyMap()): Int {
         val old = System.err
         System.setErr(PrintStream(errors, true))
         try {
-            return Accept.run(from.map { it.path } + urls, only, push, author, baseline, Log(false), token = token, gitEnv = gitEnv)
+            return Accept.run(from.map { it.path } + urls, only, push, author, baseline, Log(false), branch = branch,
+                env = env + (token?.let { mapOf("SWIFTSHOT_ARTIFACT_TOKEN" to it) } ?: emptyMap()), gitEnv = gitEnv + extraGit)
         } finally {
             System.setErr(old)
             old.print(errors.toString())
@@ -428,7 +429,7 @@ class AcceptTest {
     @Test fun unexpectedExceptionIsARefusal() {
         repoWith("changed-pixels")
         val log = object : Log(false) { override fun ok(s: String) = throw IllegalStateException("broken terminal") }
-        assertEquals(1, Accept.run(listOf(report("changed-pixels").path), null, false, null, baseline, log, token = null, gitEnv = gitEnv))
+        assertEquals(1, Accept.run(listOf(report("changed-pixels").path), null, false, null, baseline, log, gitEnv = gitEnv))
     }
 
     @Test fun acceptOptions() {
@@ -439,6 +440,7 @@ class AcceptTest {
         assertEquals(setOf("x", "y", "z"), o.only)
         assertTrue(o.push)
         assertEquals("A <a@b.c>", o.author)
+        assertEquals("pr", Options.parse(listOf("accept", "--project-dir", dir.path, "--from", "a", "--branch", "pr")).branch)
         assertEquals(64, cli(listOf("accept", "--project-dir", dir.path), Log(false)))
         assertFailsWith<IllegalArgumentException> { Options.parse(listOf("run", "--project-dir", dir.path, "--push")) }
     }
@@ -465,6 +467,140 @@ class AcceptTest {
         // Accepting it again with the baseline still dirty: nothing of accept's changed, so no commit.
         assertEquals(0, accept(report("changed-pixels", commit = verified, name = "again"), push = true))
         assertEquals(1, git(repo, "rev-list", "--count", "$verified..HEAD").toInt())
+    }
+
+    // CI checkouts
+
+    private val ciEnv = mapOf("GITLAB_CI" to "true", "CI_COMMIT_BRANCH" to "feature/x")
+    private val bare get() = File(tmp, "remote.git")
+
+    @Test fun pushFromDetachedUsesCiBranch() {
+        repoWith("changed-pixels")
+        remote()
+        git(repo, "checkout", "-q", "--detach")
+        assertEquals(0, accept(report("changed-pixels"), push = true, env = ciEnv))
+        assertEquals(head(), git(bare, "rev-parse", "feature/x"))
+        assertFalse(git(bare, "rev-parse", "main") == head())
+    }
+
+    @Test fun pushFromDetachedWithoutBranchRefuses() {
+        repoWith("changed-pixels")
+        remote()
+        git(repo, "checkout", "-q", "--detach")
+        assertEquals(1, accept(report("changed-pixels"), push = true))
+        assertContains(errors.toString(), "HEAD is detached and no branch is known; pass --branch <the pull request branch>")
+        assertEquals("", clean())
+    }
+
+    @Test fun branchFlagWins() {
+        repoWith("changed-pixels")
+        remote()
+        val verified = head()
+        assertEquals(0, accept(report("changed-pixels"), push = true, branch = "pr/1", env = ciEnv))
+        assertEquals(head(), git(bare, "rev-parse", "pr/1"))
+        assertEquals(verified, git(bare, "rev-parse", "main"))
+        assertEquals(1, accept(report("changed-pixels", commit = verified, name = "x"), push = true, branch = "pr/1", env = mapOf("GITLAB_CI" to "true", "CI_MERGE_REQUEST_SOURCE_PROJECT_ID" to "2", "CI_MERGE_REQUEST_PROJECT_ID" to "1")))
+    }
+
+    @Test fun forkRefusesPush() {
+        repoWith("changed-pixels")
+        remote()
+        val fork = ciEnv + mapOf("CI_MERGE_REQUEST_SOURCE_PROJECT_ID" to "2", "CI_MERGE_REQUEST_PROJECT_ID" to "1")
+        assertEquals(1, accept(report("changed-pixels"), push = true, env = fork))
+        assertContains(errors.toString(), "This pull request comes from a fork; download the report and run swiftshot accept --from <report> in the fork")
+        assertEquals("", clean())
+        assertEquals(0, accept(report("changed-pixels", name = "again"), env = fork))
+    }
+
+    @Test fun pushFailureHidesToken() {
+        repoWith("changed-pixels")
+        val seen = mutableListOf<String?>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { ex ->
+            seen += ex.requestHeaders.getFirst("Authorization")
+            ex.sendResponseHeaders(403, -1); ex.close()
+        }
+        server.start()
+        try {
+            git(repo, "remote", "add", "origin", "http://127.0.0.1:${server.address.port}/owner/repo.git")
+            val token = "tok-s3cret"
+            val b64 = java.util.Base64.getEncoder().encodeToString("x-access-token:$token".toByteArray())
+            // With redaction off, git traces the request headers, extraHeader included.
+            assertEquals(1, accept(report("changed-pixels"), push = true, extraGit = mapOf("GIT_TRACE_CURL" to "1", "GIT_TRACE_REDACT" to "0"),
+                env = mapOf("SWIFTSHOT_GIT_HOST" to "github", "SWIFTSHOT_HOST_TOKEN" to token)))
+            assertTrue(seen.isNotEmpty() && seen.all { it == "Basic $b64" }, "the header reached the server: $seen")
+            val out = errors.toString()
+            assertContains(out, "git push origin HEAD failed")
+            for (secret in listOf(token, b64)) assertFalse(secret in out, "output has $secret")
+            assertContains(out, "***")
+            assertFalse(token in File(repo, ".git/config").readText())
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test fun artifactAuthHeaderPerHost() {
+        fun h(url: String, token: String = "t", env: Map<String, String> = emptyMap()) = Accept.artifactHeader(java.net.URI(url), token, env).let { "${it.first}: ${it.second}" }
+        val basic = { s: String -> "Basic " + java.util.Base64.getEncoder().encodeToString(s.toByteArray()) }
+        assertEquals("Authorization: Bearer t", h("https://api.github.com/repos/o/r/actions/artifacts/1/zip"))
+        assertEquals("Authorization: Bearer t", h("https://ghe.example.com/api/v3/x", env = mapOf("GITHUB_API_URL" to "https://ghe.example.com/api/v3")))
+        assertEquals("PRIVATE-TOKEN: t", h("https://gitlab.com/api/v4/projects/1/jobs/2/artifacts"))
+        assertEquals("JOB-TOKEN: t", h("https://gitlab.com/api/v4/projects/1/jobs/2/artifacts", env = mapOf("CI_JOB_TOKEN" to "t")))
+        assertEquals("PRIVATE-TOKEN: t", h("https://gitlab.com/x", env = mapOf("CI_JOB_TOKEN" to "other")))
+        assertEquals("JOB-TOKEN: t", h("https://git.corp/api/v4/x", env = mapOf("CI_API_V4_URL" to "https://git.corp/api/v4", "CI_JOB_TOKEN" to "t")))
+        assertEquals("Circle-Token: t", h("https://circleci.com/api/v2/project/gh/o/r/1/artifacts"))
+        assertEquals(basic(":t").let { "Authorization: $it" }, h("https://dev.azure.com/org/p/_apis/x"))
+        assertEquals("Authorization: ${basic(":t")}", h("https://org.visualstudio.com/p/_apis/x"))
+        assertEquals("Authorization: ${basic("user:apitoken")}", h("https://jenkins.corp/job/x/artifact/r.zip", token = "user:apitoken"))
+        assertEquals("Authorization: Bearer t", h("https://example.com/r.zip"))
+        // The host wins over a colon in the token.
+        assertEquals("PRIVATE-TOKEN: a:b", h("https://gitlab.com/x", token = "a:b"))
+    }
+
+    @Test fun artifactAuthHeaderReachesTheServer() {
+        repoWith("changed-pixels")
+        val data = zip(report("changed-pixels"), File(tmp, "report.zip")).readBytes()
+        val seen = mutableListOf<Map<String, String?>>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { ex ->
+            seen += mapOf("Authorization" to ex.requestHeaders.getFirst("Authorization"), "PRIVATE-TOKEN" to ex.requestHeaders.getFirst("PRIVATE-TOKEN"), "JOB-TOKEN" to ex.requestHeaders.getFirst("JOB-TOKEN"))
+            ex.sendResponseHeaders(200, data.size.toLong()); ex.responseBody.use { it.write(data) }
+        }
+        server.start()
+        val url = listOf("http://127.0.0.1:${server.address.port}/a.zip")
+        try {
+            assertEquals(0, accept(token = "secret", urls = url, env = mapOf("GITHUB_API_URL" to "http://127.0.0.1:${server.address.port}")))
+            assertEquals("Bearer secret", seen.last()["Authorization"])
+            git(repo, "checkout", "-q", "--", ".")
+            assertEquals(0, accept(token = "secret", urls = url, env = mapOf("CI_API_V4_URL" to "http://127.0.0.1:${server.address.port}/api/v4", "CI_JOB_TOKEN" to "secret")))
+            assertEquals(mapOf("Authorization" to null, "PRIVATE-TOKEN" to null, "JOB-TOKEN" to "secret"), seen.last())
+            git(repo, "checkout", "-q", "--", ".")
+            assertEquals(0, accept(token = "secret", urls = url, env = mapOf("CI_API_V4_URL" to "http://127.0.0.1:${server.address.port}/api/v4")))
+            assertEquals("secret", seen.last()["PRIVATE-TOKEN"])
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test fun artifactHeaderOverride() {
+        repoWith("changed-pixels")
+        val data = zip(report("changed-pixels"), File(tmp, "report.zip")).readBytes()
+        val seen = mutableListOf<List<String?>>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { ex ->
+            seen += listOf(ex.requestHeaders.getFirst("X-Api-Key"), ex.requestHeaders.getFirst("Authorization"))
+            ex.sendResponseHeaders(200, data.size.toLong()); ex.responseBody.use { it.write(data) }
+        }
+        server.start()
+        try {
+            val env = mapOf("SWIFTSHOT_ARTIFACT_HEADER" to "X-Api-Key: key-{token}", "GITHUB_API_URL" to "http://127.0.0.1:${server.address.port}")
+            assertEquals(0, accept(token = "secret", urls = listOf("http://127.0.0.1:${server.address.port}/a.zip"), env = env))
+            assertEquals(listOf<List<String?>>(listOf("key-secret", null)), seen)
+            assertEquals(64, accept(token = "secret", urls = listOf("http://127.0.0.1:${server.address.port}/a.zip"), env = mapOf("SWIFTSHOT_ARTIFACT_HEADER" to "no colon")))
+            assertFalse("secret" in errors.toString())
+        } finally {
+            server.stop(0)
+        }
     }
 
     @Test fun pushWithARemovedImageGitNeverTracked() {

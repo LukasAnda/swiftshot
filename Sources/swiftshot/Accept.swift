@@ -36,12 +36,11 @@ enum Accept {
     }
 
     static func run(from: [String], only: Set<String>?, push: Bool, author: String?, baseline: URL, log: Console,
-                    token: String? = ProcessInfo.processInfo.environment["SWIFTSHOT_ARTIFACT_TOKEN"].flatMap { $0.isEmpty ? nil : $0 },
-                    gitEnv: [String: String] = [:]) -> Int32 {
+                    branch: String? = nil, env: [String: String] = [:], gitEnv: [String: String] = [:]) -> Int32 {
         var temps: [URL] = []
         defer { for t in temps { try? FileManager.default.removeItem(at: t) } }
         do {
-            return try apply(from: from, only: only, push: push, author: author, baseline: baseline.standardizedFileURL, log: log, token: token, gitEnv: gitEnv, temps: &temps)
+            return try apply(from: from, only: only, push: push, author: author, baseline: baseline.standardizedFileURL, log: log, branch: branch, env: env, gitEnv: gitEnv, temps: &temps)
         } catch let e as UsageError {
             log.error(e.description); return 64
         } catch let e as Refused {
@@ -51,8 +50,10 @@ enum Accept {
         }
     }
 
-    private static func apply(from: [String], only: Set<String>?, push: Bool, author: String?, baseline: URL, log: Console, token: String?,
-                              gitEnv: [String: String], temps: inout [URL]) throws -> Int32 {
+    private static func apply(from: [String], only: Set<String>?, push: Bool, author: String?, baseline: URL, log: Console, branch: String?,
+                              env: [String: String], gitEnv: [String: String], temps: inout [URL]) throws -> Int32 {
+        func v(_ k: String) -> String? { env[k].flatMap { $0.isEmpty ? nil : $0 } }
+        let token = v("SWIFTSHOT_ARTIFACT_TOKEN")
         if from.isEmpty { throw UsageError("accept needs --from <report directory, .zip or URL>") }
         let identity = try parseAuthor(author ?? defaultAuthor)
         var start = baseline
@@ -63,7 +64,15 @@ enum Accept {
         let git = Git(dir: URL(fileURLWithPath: top), env: gitEnv)
         guard let head = git.out("rev-parse", "HEAD") else { throw UsageError("The repository at \(top) has no commits") }
 
-        let reports = try from.map { try load($0, token: token, temps: &temps) }
+        // Refuse before downloading or writing anything: a fork's branch can't be pushed to, and a detached HEAD needs a name.
+        let ci = Ci.detect(env)
+        var target: [String] = []
+        if push {
+            if ci.fork == true { throw Refused(description: "This pull request comes from a fork; download the report and run swiftshot accept --from <report> in the fork") }
+            target = try pushTarget(git, branch: branch, ciBranch: v("SWIFTSHOT_BRANCH") ?? ci.branch)
+        }
+
+        let reports = try from.map { try load($0, token: token, env: env, temps: &temps) }
         var changes: [String: [Change]] = [:]
         for c in reports.flatMap(\.changes) { changes[c.id, default: []].append(c) }
         if let only {
@@ -113,14 +122,49 @@ enum Accept {
                          "--author", "\(identity.name) <\(identity.email)>", "-m", summary, "-m", trailers,
                          "--pathspec-from-file=-", "--pathspec-file-nul", input: staged.map { ":(literal)" + $0 }.joined(separator: "\0"))
         let commit = git.out("rev-parse", "HEAD") ?? "?"
-        let branch = git.out("symbolic-ref", "--short", "-q", "HEAD")
-        let remote = branch.flatMap { git.out("config", "branch.\($0).remote") }
-        let merge = branch.flatMap { git.out("config", "branch.\($0).merge") }
-        let target = remote != nil && merge != nil ? [remote!, "HEAD:\(merge!)"] : ["origin", "HEAD"]
-        let pushed = git.run(["push"] + target)
+        let header = pushHeader(git, remote: target[0], env: env, log: log)
+        let pushGit = header == nil ? git : Git(dir: URL(fileURLWithPath: top), env: gitEnv, secrets: secrets(header!, v("SWIFTSHOT_HOST_TOKEN")))
+        // The header goes on this one command (-c), never into the git config.
+        let pushed = pushGit.run((header.map { ["-c", "http.extraHeader=\($0)"] } ?? []) + ["push"] + target)
         if pushed.code != 0 { throw Refused(description: "Committed \(commit), but git push \(target.joined(separator: " ")) failed:\n\(pushed.err.trimmingCharacters(in: .whitespacesAndNewlines))") }
         log.ok("Committed \(commit) and pushed to \(target.joined(separator: " "))")
         return 0
+    }
+
+    /// What `git push` gets: `--branch`, else the upstream, else (detached) the CI's branch, else `origin HEAD`.
+    private static func pushTarget(_ git: Git, branch: String?, ciBranch: String?) throws -> [String] {
+        let current = git.out("symbolic-ref", "--short", "-q", "HEAD")
+        let remote = current.flatMap { git.out("config", "branch.\($0).remote") }
+        let merge = current.flatMap { git.out("config", "branch.\($0).merge") }
+        func named(_ name: String) throws -> [String] {
+            if git.run("check-ref-format", "refs/heads/\(name)").code != 0 { throw UsageError("\"\(name)\" is not a valid branch name") }
+            return [remote ?? "origin", "HEAD:refs/heads/\(name)"]
+        }
+        if let branch { return try named(branch) }
+        if let remote, let merge { return [remote, "HEAD:\(merge)"] }
+        if current != nil { return ["origin", "HEAD"] }
+        if let ciBranch { return try named(ciBranch) }
+        throw Refused(description: "HEAD is detached and no branch is known; pass --branch <the pull request branch>")
+    }
+
+    /// The `http.extraHeader` for pushing to `remote` with `SWIFTSHOT_HOST_TOKEN`; nil when there is no token or the remote isn't https (or this machine).
+    private static func pushHeader(_ git: Git, remote: String, env: [String: String], log: Console) -> String? {
+        guard let token = env["SWIFTSHOT_HOST_TOKEN"], !token.isEmpty, let url = git.out("remote", "get-url", "--push", remote),
+              let u = URL(string: url), let scheme = u.scheme?.lowercased() else { return nil }
+        guard scheme == "https" || (scheme == "http" && Download.loopback.contains((u.host ?? "").lowercased())) else { return nil }
+        guard let host = Host.detect(url, env: env) else {
+            log.warn("SWIFTSHOT_HOST_TOKEN is not used: the git host of \(remote) is unknown (set SWIFTSHOT_GIT_HOST to github, gitlab or bitbucket)")
+            return nil
+        }
+        return host.pushHeader(token, jobToken: env["CI_JOB_TOKEN"].flatMap { $0.isEmpty ? nil : $0 })
+    }
+
+    /// What git output must never show: the header, its base64 credential and the token.
+    private static func secrets(_ header: String, _ token: String?) -> [String] {
+        var all = [header]
+        if let r = header.range(of: "Basic ") { all.append(String(header[r.upperBound...])) }
+        if let token { all.append(token) }
+        return all.filter { !$0.isEmpty }
     }
 
     private static func isDirectory(_ url: URL) -> Bool { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: url.path, isDirectory: &d) && d.boolValue }
@@ -220,7 +264,7 @@ enum Accept {
 
     // MARK: reports
 
-    private static func load(_ from: String, token: String?, temps: inout [URL]) throws -> Report {
+    private static func load(_ from: String, token: String?, env: [String: String], temps: inout [URL]) throws -> Report {
         let fm = FileManager.default
         func tempDir() throws -> URL {
             let t = fm.temporaryDirectory.appendingPathComponent("swiftshot-accept-\(UUID().uuidString)")
@@ -233,7 +277,7 @@ enum Accept {
         if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
             let tmp = try tempDir()
             let zip = tmp.appendingPathComponent("report.zip")
-            try Download.fetch(from, to: zip, token: token, maxBytes: Zip.maxBytes)
+            try Download.fetch(from, to: zip, token: token, env: env, maxBytes: Zip.maxBytes)
             dir = try extracted(zip, into: tmp.appendingPathComponent("report"), label: from)
         } else if isDirectory(URL(fileURLWithPath: from)) {
             dir = URL(fileURLWithPath: from)
@@ -311,13 +355,18 @@ enum Accept {
     struct Git {
         let dir: URL
         let env: [String: String]
+        /// Never in the output of a run: each is replaced with `***`.
+        var secrets: [String] = []
+
+        private func hide(_ s: String) -> String { secrets.sorted { $0.count > $1.count }.reduce(s) { $0.replacingOccurrences(of: $1, with: "***") } }
 
         func run(_ args: String..., input: String? = nil) -> Proc.Result { run(args, input: input) }
 
         func run(_ args: [String], input: String? = nil) -> Proc.Result {
             var e = env
             e["GIT_TERMINAL_PROMPT"] = "0"
-            return Proc.run(["git"] + args, cwd: dir, env: e, input: input.map { Data($0.utf8) })
+            let r = Proc.run(["git"] + args, cwd: dir, env: e, input: input.map { Data($0.utf8) })
+            return secrets.isEmpty ? r : Proc.Result(code: r.code, out: hide(r.out), err: hide(r.err))
         }
 
         /// Trimmed output, nil on failure or no output.
@@ -377,18 +426,40 @@ enum Download {
         }
     }
 
-    static func fetch(_ url: String, to dest: URL, token: String?, maxBytes: Int64) throws {
+    /// The header that carries the artifact `token` to `url`: `SWIFTSHOT_ARTIFACT_HEADER` ("Name: value", `{token}` in the value)
+    /// wins, else the host's own (docs/wiki/Baseline-format.md, "accept"), else Bearer.
+    static func artifactHeader(_ url: URL, token: String, env: [String: String]) throws -> (name: String, value: String) {
+        if let template = env["SWIFTSHOT_ARTIFACT_HEADER"], !template.isEmpty {
+            guard let colon = template.firstIndex(of: ":"), !template[..<colon].trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw UsageError("SWIFTSHOT_ARTIFACT_HEADER: \"Name: value\" with {token} in the value")
+            }
+            return (template[..<colon].trimmingCharacters(in: .whitespaces),
+                    template[template.index(after: colon)...].trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "{token}", with: token))
+        }
+        func hostOf(_ key: String) -> String? { env[key].flatMap { URL(string: $0)?.host?.lowercased() } }
+        func basic(_ s: String) -> String { "Basic " + Data(s.utf8).base64EncodedString() }
+        let host = url.host?.lowercased() ?? ""
+        if host == "api.github.com" || host == hostOf("GITHUB_API_URL") { return ("Authorization", "Bearer \(token)") }
+        if host == "gitlab.com" || host == hostOf("CI_API_V4_URL") { return (token == env["CI_JOB_TOKEN"] ? "JOB-TOKEN" : "PRIVATE-TOKEN", token) }
+        if host == "circleci.com" || host.hasSuffix(".circleci.com") { return ("Circle-Token", token) }
+        if host == "dev.azure.com" || host.hasSuffix(".visualstudio.com") { return ("Authorization", basic(":\(token)")) }
+        if token.contains(":") { return ("Authorization", basic(token)) }
+        return ("Authorization", "Bearer \(token)")
+    }
+
+    static func fetch(_ url: String, to dest: URL, token: String?, env: [String: String], maxBytes: Int64) throws {
         guard let origin = URL(string: url), let host = origin.host else { throw UsageError("--from \(url): not a valid URL") }
         // A bearer token in plain text is anyone's on the way; this machine's own server (tests, a local proxy) is no way.
         if token != nil, origin.scheme?.lowercased() != "https", !loopback.contains(host.lowercased()) {
             throw UsageError("--from \(url): SWIFTSHOT_ARTIFACT_TOKEN is sent only over https; use an https URL or unset the token")
         }
+        let auth = try token.map { try artifactHeader(origin, token: $0, env: env) }
         var current = origin
         for _ in 0..<10 {
             var request = URLRequest(url: current, timeoutInterval: 600)
             request.setValue("swiftshot", forHTTPHeaderField: "User-Agent")
-            if let token, current.scheme?.lowercased() == origin.scheme?.lowercased(), current.host?.lowercased() == origin.host?.lowercased(), current.port == origin.port {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            if let auth, current.scheme?.lowercased() == origin.scheme?.lowercased(), current.host?.lowercased() == origin.host?.lowercased(), current.port == origin.port {
+                request.setValue(auth.value, forHTTPHeaderField: auth.name)
             }
             FileManager.default.createFile(atPath: dest.path, contents: nil)
             guard let out = FileHandle(forWritingAtPath: dest.path) else { throw UsageError("--from \(url): can't write \(dest.path)") }
