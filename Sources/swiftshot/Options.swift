@@ -256,12 +256,29 @@ struct Options: Codable {
       --verbose
     """
 
+    /// Flags without a value (parse and `command` read the command line alike; `--frame` takes one only when it is a mode).
+    static let booleanFlags: Set<String> = ["--no-templates", "--no-boot", "--boot", "--full-length", "--allow-unsupported-devices", "--clear",
+        "--shutdown", "--download-missing-runtimes", "--no-html", "--no-status-bar", "--push", "--accept-bezel-license", "--force", "-f",
+        "--verbose", "-v", "--help", "-h", "--version"]
+
+    /// Where the command is: the first argument that is neither a flag nor a flag's value (nil: none, `run`).
+    static func commandIndex(_ args: [String]) -> Int? {
+        var i = 0
+        while i < args.count {
+            let a = args[i]
+            if !a.hasPrefix("-") { return i }
+            if a == "--frame" {
+                if i + 1 < args.count, FrameMode(rawValue: args[i + 1].lowercased()) != nil { i += 1 }
+            } else if !booleanFlags.contains(a) { i += 1 }
+            i += 1
+        }
+        return nil
+    }
+
     /// The command a command line names (`run` when none), as parse reads it.
     static func command(_ argv: [String]) -> String {
-        var args = argv
-        if let i = args.firstIndex(of: "--config"), i + 1 < args.count { args.removeSubrange(i...(i + 1)) }
-        guard let first = args.first, !first.hasPrefix("-") else { return "run" }
-        return first == "auto-setup" ? "init" : first
+        guard let i = commandIndex(argv) else { return "run" }
+        return argv[i] == "auto-setup" ? "init" : argv[i]
     }
 
     /// `{"pixels": n, "max_channel_delta": d}`: whole numbers ≥ 0, nothing else.
@@ -304,7 +321,7 @@ struct Options: Codable {
         var options = Options()
 
         // Config file first, then CLI overrides. `init` writes the config, so it never reads one.
-        let setup = ["init", "auto-setup"].contains(args.first ?? "")
+        let setup = command(args) == "init"
         var configPath: String?
         if let i = args.firstIndex(of: "--config"), i + 1 < args.count {
             configPath = args[i + 1]; args.removeSubrange(i...(i + 1))
@@ -317,10 +334,11 @@ struct Options: Codable {
             try options.applyBaselineConfig(data)
         }
 
-        if let first = args.first, !first.hasPrefix("-") {
+        if let at = commandIndex(args) {
+            let first = args[at]
             guard ["run", "verify", "record", "accept", "list", "devices", "calibrate", "emit-table", "init", "auto-setup", "frame"].contains(first) else { throw CLIError("Unknown command \(first)\n\n\(usage)") }
             options.command = setup ? "init" : first
-            args.removeFirst()
+            args.remove(at: at)
         }
 
         func list(_ s: String) -> [String] { s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }

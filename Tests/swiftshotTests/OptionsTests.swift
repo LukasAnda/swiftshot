@@ -156,6 +156,20 @@ final class OptionsTests: XCTestCase {
         do { let code = await Command.run(["--config", empty, "verify", "--no-such-flag"]); XCTAssertEqual(code, 64) }
     }
 
+    func testCommandAfterLeadingFlags() async throws {
+        let empty = emptyConfig()
+        XCTAssertEqual(Options.command(["-v", "verify"]), "verify")
+        XCTAssertEqual(Options.command(["--output", "out", "--no-boot", "record"]), "record")
+        XCTAssertEqual(Options.command(["--frame", "plain", "--output", "out"]), "run")
+        let o = try Options.parse(["--config", empty, "-v", "verify", "--output", "out"])
+        XCTAssertEqual(o.command, "verify")
+        XCTAssertTrue(o.verbose)
+        XCTAssertEqual(try Options.parse(["--config", empty, "--output", "out", "list"]).command, "list")
+        // A usage error of verify after a leading flag is still verify's: 64.
+        do { let code = await Command.run(["--config", empty, "-v", "verify", "--no-such-flag"]); XCTAssertEqual(code, 64) }
+        do { let code = await Command.run(["-v", "--config", empty, "accept"]); XCTAssertEqual(code, 64) }
+    }
+
     private func emptyConfig() -> String {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("swiftshot-empty.json")
         try? "{}".write(to: url, atomically: true, encoding: .utf8)
