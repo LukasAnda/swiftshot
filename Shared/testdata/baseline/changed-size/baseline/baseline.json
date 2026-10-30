@@ -1,0 +1,29 @@
+{
+  "fingerprints": {
+    "420bb81528af": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf"
+      ],
+      "host": "linux-x64",
+      "mode": "headless",
+      "platform": "flutter",
+      "renderer": "skia",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "images": {
+    "en-US/Pixel 9-Profile": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "420bb81528af",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "platform": "flutter",
+      "preview": "Profile"
+    }
+  },
+  "schema": 1
+}

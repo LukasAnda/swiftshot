@@ -1,0 +1,98 @@
+{
+  "branch": "feature/x",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 2,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 2
+  },
+  "errors": [],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Clock",
+      "language": "en-US",
+      "platform": "android",
+      "preview": "Clock",
+      "status": "unchanged"
+    },
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/Pixel 9-Clock Large.png",
+      "boxes": [
+        [
+          20,
+          70,
+          2,
+          1
+        ]
+      ],
+      "device": "Pixel 9",
+      "diff": "images/diff/en-US/Pixel 9-Clock Large.png",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Clock Large",
+      "language": "en-US",
+      "new": "images/new/en-US/Pixel 9-Clock Large.png",
+      "pixels": 2,
+      "platform": "android",
+      "preview": "Clock Large",
+      "reason": "pixels",
+      "status": "changed"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "pixels": 4,
+      "platform": "android",
+      "preview": "Home",
+      "reason": "tolerance",
+      "status": "unchanged"
+    },
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/Pixel 9-Settings.png",
+      "boxes": [
+        [
+          2,
+          2,
+          3,
+          2
+        ]
+      ],
+      "device": "Pixel 9",
+      "diff": "images/diff/en-US/Pixel 9-Settings.png",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Settings",
+      "language": "en-US",
+      "new": "images/new/en-US/Pixel 9-Settings.png",
+      "pixels": 6,
+      "platform": "android",
+      "preview": "Settings",
+      "reason": "pixels",
+      "status": "changed"
+    }
+  ],
+  "status": "failed",
+  "version": "1.0.0-test"
+}

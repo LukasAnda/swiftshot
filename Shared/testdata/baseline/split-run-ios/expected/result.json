@@ -1,0 +1,52 @@
+{
+  "branch": "feature/x",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 0,
+    "removed": 1,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "fingerprintMismatch": [],
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "id": "en-US/iPhone 17 Pro-Home",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Home",
+      "runtime": "26.0",
+      "status": "unchanged",
+      "textSize": "default"
+    },
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/iPhone 17 Pro-Settings.png",
+      "device": "iPhone 17 Pro",
+      "id": "en-US/iPhone 17 Pro-Settings",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "26.0",
+      "status": "removed",
+      "textSize": "default"
+    }
+  ],
+  "status": "failed",
+  "version": "1.0.0-test"
+}

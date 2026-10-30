@@ -1,0 +1,42 @@
+{
+  "branch": "feature/x",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 1,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [
+    "Broken · Pixel 9 · en-US: IllegalStateException: boom"
+  ],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "platform": "android",
+      "preview": "Home",
+      "status": "unchanged"
+    }
+  ],
+  "status": "error",
+  "version": "1.0.0-test"
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="5" failures="0" errors="0">
+  <testcase classname="ios.iPhone 17 Pro.en-US" name="Home light AX2"/>
+  <testcase classname="ios.iPhone 17 Pro.en-US" name="Home dark"/>
+  <testcase classname="ios.iPhone 17 Pro.en-US" name="Home light"/>
+  <testcase classname="ios.iPhone 17 Pro.en-US" name="Terms &amp; Privacy light"/>
+  <testcase classname="ios.iPhone 17 Pro.en-US" name="Über light"/>
+</testsuite>

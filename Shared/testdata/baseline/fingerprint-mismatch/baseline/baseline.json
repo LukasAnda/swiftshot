@@ -1,0 +1,45 @@
+{
+  "fingerprints": {
+    "7d572793275d": {
+      "compose": "1.9.0",
+      "host": "macos-arm64",
+      "jdk": "21.0.5",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.3"
+    },
+    "d2d5c0db8687": {
+      "host": "macos-x64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "23A300",
+      "swiftshot": "1.0.3",
+      "xcode": "17A324"
+    }
+  },
+  "images": {
+    "en-US/Pixel 9-Home": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "7d572793275d",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "platform": "android",
+      "preview": "Home"
+    },
+    "en-US/iPhone 17 Pro-Home": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "d2d5c0db8687",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Home",
+      "runtime": "26.0",
+      "textSize": "default"
+    }
+  },
+  "schema": 1
+}

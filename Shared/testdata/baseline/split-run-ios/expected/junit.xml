@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="2" failures="1" errors="0">
+  <testcase classname="ios.iPhone 17 Pro.en-US" name="Home light"/>
+  <testcase classname="ios.iPhone 17 Pro.en-US" name="Settings light">
+    <failure message="removed"/>
+  </testcase>
+</testsuite>

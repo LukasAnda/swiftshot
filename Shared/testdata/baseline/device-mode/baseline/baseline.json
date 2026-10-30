@@ -1,0 +1,37 @@
+{
+  "fingerprints": {
+    "3cf0cd7402a9": {
+      "host": "macos-arm64",
+      "mode": "device",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "images": {
+    "en-US/iPhone 17 Pro-Blur": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "3cf0cd7402a9",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Blur",
+      "runtime": "26.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro-Glass": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "fingerprint": "3cf0cd7402a9",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Glass",
+      "runtime": "26.0",
+      "textSize": "default"
+    }
+  },
+  "schema": 1
+}

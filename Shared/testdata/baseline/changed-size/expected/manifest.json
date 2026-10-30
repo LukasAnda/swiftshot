@@ -1,0 +1,27 @@
+{
+  "branch": "feature/x",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "configHash": "8f36dfee0cfcc981c95ea8bb102eb44823ed953419c97f19da5fd193b520117a",
+  "fingerprint": {
+    "flutter": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf"
+      ],
+      "host": "linux-x64",
+      "mode": "headless",
+      "platform": "flutter",
+      "renderer": "skia",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "ids": {
+    "added": [],
+    "changed": [
+      "en-US/Pixel 9-Profile"
+    ],
+    "removed": []
+  },
+  "schema": 1
+}

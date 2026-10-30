@@ -1,0 +1,24 @@
+{
+  "branch": "feature/x",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "configHash": "e077561b5e40e50ec32973f1e4ba30d8db578d84a5d519554e10624f01ee95dd",
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "ids": {
+    "added": [],
+    "changed": [
+      "en-US/Pixel 9-Feed-light"
+    ],
+    "removed": []
+  },
+  "schema": 1
+}

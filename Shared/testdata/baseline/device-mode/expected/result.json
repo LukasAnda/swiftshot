@@ -1,0 +1,64 @@
+{
+  "branch": "feature/x",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 1,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "device",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "fingerprintMismatch": [],
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/iPhone 17 Pro-Blur.png",
+      "boxes": [
+        [
+          0,
+          0,
+          3,
+          1
+        ]
+      ],
+      "device": "iPhone 17 Pro",
+      "diff": "images/diff/en-US/iPhone 17 Pro-Blur.png",
+      "id": "en-US/iPhone 17 Pro-Blur",
+      "language": "en-US",
+      "new": "images/new/en-US/iPhone 17 Pro-Blur.png",
+      "pixels": 3,
+      "platform": "ios",
+      "preview": "Blur",
+      "reason": "pixels",
+      "runtime": "26.0",
+      "status": "changed",
+      "textSize": "default"
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "id": "en-US/iPhone 17 Pro-Glass",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Glass",
+      "runtime": "26.0",
+      "status": "unchanged",
+      "textSize": "default"
+    }
+  ],
+  "status": "failed",
+  "version": "1.0.0-test"
+}

@@ -1,0 +1,64 @@
+{
+  "branch": "feature/x",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 1,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 0
+  },
+  "errors": [],
+  "fingerprint": {
+    "flutter": {
+      "flutter": "3.38.0",
+      "fonts": [
+        "MaterialIcons-Regular.otf",
+        "Roboto-Regular.ttf"
+      ],
+      "host": "linux-x64",
+      "mode": "headless",
+      "platform": "flutter",
+      "renderer": "skia",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/Pixel 9-Profile.png",
+      "baselineSize": [
+        40,
+        80
+      ],
+      "boxes": [
+        [
+          0,
+          80,
+          40,
+          16
+        ]
+      ],
+      "device": "Pixel 9",
+      "diff": "images/diff/en-US/Pixel 9-Profile.png",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Profile",
+      "language": "en-US",
+      "new": "images/new/en-US/Pixel 9-Profile.png",
+      "newSize": [
+        40,
+        96
+      ],
+      "pixels": 640,
+      "platform": "flutter",
+      "preview": "Profile",
+      "reason": "size",
+      "status": "changed"
+    }
+  ],
+  "status": "failed",
+  "version": "1.0.0-test"
+}

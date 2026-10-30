@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="2" failures="0" errors="1">
+  <testcase classname="android.Pixel 9.en-US" name="Home light"/>
+  <testcase classname="swiftshot" name="error 1">
+    <error message="Broken · Pixel 9 · en-US: IllegalStateException: boom"/>
+  </testcase>
+</testsuite>

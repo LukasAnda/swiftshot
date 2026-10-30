@@ -1,0 +1,67 @@
+{
+  "errors": [],
+  "fingerprint": {
+    "ios": {
+      "host": "macos-arm64",
+      "mode": "device",
+      "platform": "ios",
+      "runtime": "23A343",
+      "swiftshot": "1.0.0-test",
+      "xcode": "17A400"
+    }
+  },
+  "scope": {
+    "appearances": [
+      "light"
+    ],
+    "devices": [
+      "iPhone 17 Pro"
+    ],
+    "languages": [
+      "en-US"
+    ],
+    "platforms": [
+      "ios"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "Blur",
+      "Glass"
+    ],
+    "textSizes": [
+      "default"
+    ]
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Blur.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Blur",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Blur",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "device": "iPhone 17 Pro",
+      "file": "en-US/iPhone 17 Pro-Glass.png",
+      "height": 80,
+      "id": "en-US/iPhone 17 Pro-Glass",
+      "language": "en-US",
+      "platform": "ios",
+      "preview": "Glass",
+      "renderMs": 12.5,
+      "runtime": "26.0",
+      "scale": 3,
+      "width": 40
+    }
+  ],
+  "timings": {},
+  "totalSeconds": 1.5
+}

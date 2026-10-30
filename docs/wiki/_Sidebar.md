@@ -7,6 +7,7 @@
 - [[Configuration]]
 - [[Command line]]
 - [[CI]]
+- [[Baseline format]]
 - [[Device frames]]
 - [[Migrating|Migrating-from-fastlane]]
 - [[How it works]]
