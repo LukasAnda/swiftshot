@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Checks the CI recipes in docs/wiki/CI-*.md.
+
+A fenced block whose first line is `# swiftshot-recipe: <kind>` (or `// swiftshot-recipe: <kind>`
+for a Jenkinsfile) is validated by kind:
+
+  github-workflow <file>   actionlint; the block must equal <file> after the tag line
+  gitlab-ci, bitbucket-pipelines, bitrise, codemagic, circleciconfig, azure-pipelines
+                           check-jsonschema against Shared/ci-schemas/<kind>.json
+  jenkins                  balanced braces only (no schema exists)
+
+Every CI page must hold a block of its kind and name its accept job exactly as the hint in
+Summary.kt does. Needs python3, check-jsonschema and actionlint on PATH.
+
+  bin/check-recipes              check the repository
+  bin/check-recipes --self-test  prove that broken blocks fail
+"""
+import contextlib
+import io
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# page -> (kind, the name its accept job or stage must have)
+PAGES = {
+    "CI-GitHub-Actions.md": ("github-workflow", "/swiftshot accept"),
+    "CI-GitLab.md": ("gitlab-ci", "swiftshot-accept"),
+    "CI-Bitbucket.md": ("bitbucket-pipelines", "Accept screenshots"),
+    "CI-Bitrise.md": ("bitrise", "swiftshot-accept"),
+    "CI-Codemagic.md": ("codemagic", "swiftshot-accept"),
+    "CI-CircleCI.md": ("circleciconfig", "accept-screenshots"),
+    "CI-Azure-Pipelines.md": ("azure-pipelines", "Accept screenshots"),
+    "CI-Jenkins.md": ("jenkins", "Accept screenshots"),
+}
+SCHEMAS = {k for k, _ in PAGES.values()} - {"github-workflow", "jenkins"}
+FENCE = re.compile(r"^```(\w*)[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
+TAG = re.compile(r"^(?:#|//) swiftshot-recipe: (\S+)(?: (\S+))?[ \t]*$")
+
+
+def blocks(text):
+    for m in FENCE.finditer(text):
+        body = m.group(2)
+        tag = TAG.match(body.split("\n", 1)[0])
+        if tag:
+            yield tag.group(1), tag.group(2), body
+
+
+def run(cmd):
+    env = dict(os.environ, PYTHONWARNINGS="ignore")
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, env=env)
+    return p.returncode, p.stdout.strip()
+
+
+def balanced(src):
+    """Braces and parentheses of a Jenkinsfile, ignoring comments and string contents."""
+    src = re.sub(r"'''.*?'''|\"\"\".*?\"\"\"", "''", src, flags=re.S)
+    src = re.sub(r"//[^\n]*|/\*.*?\*/", "", src, flags=re.S)
+    src = re.sub(r"'(?:\\.|[^'\\\n])*'|\"(?:\\.|[^\"\\\n])*\"", "''", src)
+    stack = []
+    for ch in src:
+        if ch in "{(":
+            stack.append(ch)
+        elif ch in "})":
+            if not stack or stack.pop() != {"}": "{", ")": "("}[ch]:
+                return False
+    return not stack
+
+
+def check_block(kind, ref, body, root, tmp):
+    """Returns a list of problems."""
+    if kind == "jenkins":
+        return [] if balanced(body) else ["unbalanced braces or parentheses"]
+    path = os.path.join(tmp, "block.yml")
+    with open(path, "w") as f:
+        f.write(body)
+    if kind == "github-workflow":
+        problems = []
+        if not ref:
+            return ["github-workflow needs the recipe file after the tag"]
+        try:
+            with open(os.path.join(root, ref)) as f:
+                same = f.read().strip() == body.split("\n", 1)[1].strip()
+        except OSError as e:
+            return [str(e)]
+        if not same:
+            problems.append("differs from %s; paste the file after the tag line" % ref)
+        code, out = run(["actionlint", "-no-color", path])
+        if code:
+            problems.append(out)
+        return problems
+    if kind not in SCHEMAS:
+        return ["unknown recipe kind %r" % kind]
+    code, out = run(["check-jsonschema", "--regex-variant", "nonunicode", "--schemafile", os.path.join(root, "Shared", "ci-schemas", kind + ".json"), path])
+    return [out] if code else []
+
+
+def check(root, wiki):
+    failed = 0
+    for page, (kind, accept) in sorted(PAGES.items()):
+        path = os.path.join(wiki, page)
+        if not os.path.isfile(path):
+            print("FAIL %s: missing" % page)
+            failed += 1
+            continue
+        with open(path) as f:
+            text = f.read()
+        found = 0
+        for n, (k, ref, body) in enumerate(blocks(text), 1):
+            found += k == kind
+            with tempfile.TemporaryDirectory() as tmp:
+                problems = check_block(k, ref, body, root, tmp)
+            if k != kind:
+                problems.append("a %s block on a %s page" % (k, kind))
+            for p in problems:
+                print("FAIL %s block %d (%s): %s" % (page, n, k, p))
+            failed += bool(problems)
+            if not problems:
+                print("ok   %s block %d (%s)" % (page, n, k))
+        if not found:
+            print("FAIL %s: no `swiftshot-recipe: %s` block" % (page, kind))
+            failed += 1
+        if accept not in text:
+            print("FAIL %s: does not name %r" % (page, accept))
+            failed += 1
+    return failed
+
+
+def self_test():
+    """Copies the pages, breaks one block of each kind, and expects exactly those to fail."""
+    breaks = {
+        "gitlab-ci": ("when: always", "when: sometimes"),
+        "bitbucket-pipelines": ("trigger: manual", "trigger: sometimes"),
+        "bitrise": ("workflows:", "workflows: 5\n#"),
+        "codemagic": ("scripts:", "scripts: 5\n#"),
+        "circleciconfig": ("steps:", "steps: 5\n#"),
+        "azure-pipelines": ("stages:", "stages: 5\n#"),
+        "jenkins": ("stage('Verify') {", "stage('Verify') {{"),
+        "github-workflow": ("runs-on:", "runz-on:"),
+    }
+    ok = True
+    wiki = os.path.join(ROOT, "docs", "wiki")
+    for page, (kind, _) in sorted(PAGES.items()):
+        with open(os.path.join(wiki, page)) as f:
+            text = f.read()
+        old, new = breaks[kind]
+        if old not in text:
+            print("self-test: cannot break %s, %r not found" % (page, old))
+            ok = False
+            continue
+        with tempfile.TemporaryDirectory() as tmp:
+            for p in PAGES:
+                shutil.copy(os.path.join(wiki, p), os.path.join(tmp, p))
+            with open(os.path.join(tmp, page), "w") as f:
+                f.write(text.replace(old, new, 1))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                check(ROOT, tmp)
+            failing = {l.split()[1].rstrip(":") for l in buf.getvalue().splitlines() if l.startswith("FAIL")}
+        good = failing == {page}
+        print("self-test %-24s %s" % (page, "fails as expected" if good else "WRONG: failing pages %s" % sorted(failing)))
+        ok = ok and good
+    return ok
+
+
+def main():
+    for tool in ("check-jsonschema", "actionlint"):
+        if not shutil.which(tool):
+            sys.exit("%s is not on PATH" % tool)
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(0 if self_test() else 1)
+    if sys.argv[1:]:
+        sys.exit(__doc__)
+    sys.exit(1 if check(ROOT, os.path.join(ROOT, "docs", "wiki")) else 0)
+
+
+if __name__ == "__main__":
+    main()

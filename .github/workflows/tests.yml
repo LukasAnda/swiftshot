@@ -82,7 +82,7 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: true
 
-  # Every workflow and recipe workflow, linted with a pinned, checksum-verified actionlint.
+  # Every workflow and recipe, linted with a pinned, checksum-verified actionlint and schemas.
   workflow-lint:
     name: Workflow lint
     if: ${{ !inputs.tests }}
@@ -99,6 +99,14 @@ jobs:
           echo "$SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -color .github/workflows/*.yml docs/recipes/github/*.yml
+      # The CI pages' YAML against the vendored schemas (Shared/ci-schemas), then a deliberately broken copy.
+      - name: CI recipes
+        env:
+          CHECK_JSONSCHEMA: 0.36.2
+        run: |
+          pipx install "check-jsonschema==$CHECK_JSONSCHEMA"
+          PATH="$RUNNER_TEMP:$PATH" bin/check-recipes
+          PATH="$RUNNER_TEMP:$PATH" bin/check-recipes --self-test
 
   # Jetpack Compose previews on a free Linux runner: every device type, five languages, both
   # appearances; size checks, a byte-identical second run and the time budget.

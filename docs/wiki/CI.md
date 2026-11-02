@@ -5,6 +5,25 @@
 
 Neither boots a simulator or an emulator, and neither needs a GUI session.
 
+## Screenshot testing on CI
+
+`swiftshot verify` detects these systems from their environment, publishes its results the way
+each one shows them and, on a pull request, comments the result. A person accepts the changes in
+the way each system offers; nothing is ever accepted on its own. Each page has the recipe.
+
+| | detected by | results | accept |
+|---|---|---|---|
+| [[GitHub Actions|CI-GitHub-Actions]] | `GITHUB_ACTIONS` | job summary, annotations, `swiftshot` status | comment `/swiftshot accept` |
+| [[GitLab|CI-GitLab]] | `GITLAB_CI` | test summary, `expose_as` link | manual job `swiftshot-accept` |
+| [[Bitbucket|CI-Bitbucket]] | `BITBUCKET_BUILD_NUMBER` | Tests tab | manual step `Accept screenshots` |
+| [[Bitrise|CI-Bitrise]] | `BITRISE_IO` | Test Reports, `swiftshot-report.zip` | workflow `swiftshot-accept` |
+| [[Codemagic|CI-Codemagic]] | `CM_BUILD_ID` | test results | workflow `swiftshot-accept` |
+| [[CircleCI|CI-CircleCI]] | `CIRCLECI` | test results, artifacts | approval `accept-screenshots` |
+| [[Azure Pipelines|CI-Azure-Pipelines]] | `TF_BUILD` | test results, summary | stage `Accept screenshots` |
+| [[Jenkins|CI-Jenkins]] | `JENKINS_URL` | test results, artifacts | stage `Accept screenshots` |
+
+`SWIFTSHOT_CI=false` turns all of this off. The environment variables are in [[Screenshot testing]].
+
 ## GitHub Actions
 
 ```yaml
