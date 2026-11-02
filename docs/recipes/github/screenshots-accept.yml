@@ -5,7 +5,10 @@
 #   en-US/Pixel 9-Home
 #   en-US/Pixel 9-Settings
 # Save this file on the default branch (issue_comment workflows run from there) and keep the
-# runner and setup steps the same as in screenshots.yml.
+# runner and setup steps the same as in screenshots.yml, which must be saved under that file name
+# (this workflow looks up its runs by it). The verify at the end posts the "swiftshot" status on
+# the new head; it does not update the pull request comment (an issue_comment event has no pull
+# request number for it).
 name: screenshots-accept
 on:
   issue_comment:
@@ -91,7 +94,7 @@ jobs:
       # Pushes with the credentials checkout persisted; do not set SWIFTSHOT_HOST_TOKEN here.
       - name: Accept
         if: steps.prepare.outputs.proceed == 'true'
-        uses: LukasAnda/swiftshot@v0.9.0
+        uses: LukasAnda/swiftshot@v1.0.0
         with:
           command: accept
           from: ${{ steps.prepare.outputs.url }}
@@ -99,16 +102,23 @@ jobs:
         env:
           SWIFTSHOT_ARTIFACT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: New head
+        id: head
+        if: steps.prepare.outputs.proceed == 'true'
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       # A push with GITHUB_TOKEN starts no workflow: render once more here, which posts the
-      # "swiftshot" status on the new commit.
+      # "swiftshot" status on the new commit. An issue_comment run sees the default branch's commit
+      # and name, so the pull request's are given.
       - name: Verify the new baseline
         if: steps.prepare.outputs.proceed == 'true'
-        uses: LukasAnda/swiftshot@v0.9.0
+        uses: LukasAnda/swiftshot@v1.0.0
         with:
           command: verify
           report-name: swiftshot-report-accepted
         env:
-          SWIFTSHOT_HOST_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SWIFTSHOT_COMMIT: ${{ steps.head.outputs.sha }}
+          SWIFTSHOT_BRANCH: ${{ steps.prepare.outputs.ref }}
 
       - name: Thumbs up
         if: steps.prepare.outputs.proceed == 'true'
@@ -119,11 +129,12 @@ jobs:
         run: gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" -f content='+1' > /dev/null || echo "::warning::Could not react to the comment"
 
       - name: Reply with the error
-        if: failure() && steps.prepare.outputs.proceed == 'true'
+        # Not after a refusal: that already replied and exited 0 with proceed=false.
+        if: failure() && steps.prepare.outputs.proceed != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.issue.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh api "repos/$REPO/issues/$PR/comments" -f body="The accept failed, see the log: $RUN_URL" > /dev/null
+          gh api "repos/$REPO/issues/$PR/comments" -f body="Accepting failed, see the log: $RUN_URL" > /dev/null
