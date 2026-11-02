@@ -30,7 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAGES = {
     "CI-GitHub-Actions.md": ("github-workflow", "/swiftshot accept"),
     "CI-GitLab.md": ("gitlab-ci", "swiftshot-accept"),
-    "CI-Bitbucket.md": ("bitbucket-pipelines", "Accept screenshots"),
+    "CI-Bitbucket.md": ("bitbucket-pipelines", "swiftshot-accept"),
     "CI-Bitrise.md": ("bitrise", "swiftshot-accept"),
     "CI-Codemagic.md": ("codemagic", "swiftshot-accept"),
     "CI-CircleCI.md": ("circleciconfig", "accept-screenshots"),
@@ -131,23 +131,25 @@ def check(root, wiki):
 
 
 def self_test():
-    """Copies the pages, breaks one block of each kind, and expects exactly those to fail."""
-    breaks = {
-        "gitlab-ci": ("when: always", "when: sometimes"),
-        "bitbucket-pipelines": ("trigger: manual", "trigger: sometimes"),
-        "bitrise": ("workflows:", "workflows: 5\n#"),
-        "codemagic": ("scripts:", "scripts: 5\n#"),
-        "circleciconfig": ("steps:", "steps: 5\n#"),
-        "azure-pipelines": ("stages:", "stages: 5\n#"),
-        "jenkins": ("stage('Verify') {", "stage('Verify') {{"),
-        "github-workflow": ("runs-on:", "runz-on:"),
+    """Copies the pages, breaks one block of each kind, and expects exactly that page to fail, for the right reason."""
+    schema = r"Schema validation errors were encountered"
+    breaks = {  # kind: (text to replace, replacement, pattern the failure message must match)
+        "gitlab-ci": ("when: always", "when: sometimes", schema),
+        "bitbucket-pipelines": ("image: atlassian/default-image:4", "image: [5]", schema),
+        "bitrise": ("format_version: \"11\"", "format_version: [11]", schema),
+        "codemagic": ("instance_type: mac_mini_m2", "instance_type: [5]", schema),
+        "circleciconfig": ("version: 2.1", "version: [2]", schema),
+        "azure-pipelines": ("trigger: none", "trigger: [[5]]", schema),
+        "jenkins": ("stage('Verify') {", "stage('Verify') {{", "unbalanced"),
+        # actionlint prints file:line:col: message [rule]
+        "github-workflow": ("runs-on:", "runz-on:", r"block\.yml:\d+:\d+"),
     }
     ok = True
     wiki = os.path.join(ROOT, "docs", "wiki")
     for page, (kind, _) in sorted(PAGES.items()):
         with open(os.path.join(wiki, page)) as f:
             text = f.read()
-        old, new = breaks[kind]
+        old, new, reason = breaks[kind]
         if old not in text:
             print("self-test: cannot break %s, %r not found" % (page, old))
             ok = False
@@ -160,9 +162,10 @@ def self_test():
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 check(ROOT, tmp)
-            failing = {l.split()[1].rstrip(":") for l in buf.getvalue().splitlines() if l.startswith("FAIL")}
-        good = failing == {page}
-        print("self-test %-24s %s" % (page, "fails as expected" if good else "WRONG: failing pages %s" % sorted(failing)))
+        out = buf.getvalue()
+        failing = {l.split()[1].rstrip(":") for l in out.splitlines() if l.startswith("FAIL")}
+        good = failing == {page} and re.search(reason, out) is not None
+        print("self-test %-24s %s" % (page, "fails as expected" if good else "WRONG: failing pages %s, reason %r not found" % (sorted(failing), reason) if failing == {page} else "WRONG: failing pages %s" % sorted(failing)))
         ok = ok and good
     return ok
 

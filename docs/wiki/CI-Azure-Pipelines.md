@@ -41,7 +41,8 @@ stages:
   - stage: Accept
     displayName: Accept screenshots
     dependsOn: Verify
-    condition: and(succeededOrFailed(), eq(variables['Build.Reason'], 'PullRequest'))
+    # Only when verify found differences; a clean pull request never waits for a person.
+    condition: and(eq(dependencies.Verify.result, 'Failed'), eq(variables['Build.Reason'], 'PullRequest'))
     jobs:
       - job: wait
         pool: server
@@ -74,7 +75,7 @@ stages:
             displayName: Accept
 ```
 
-Both snippets are stages of one file. Users with the **Queue builds** permission approve the
+Both snippets are stages of one file; the accept stage appears only when verify failed. Users with the **Queue builds** permission approve the
 `Accept screenshots` stage in the run, and the stage rejects itself after a day.
 
 ## Comment

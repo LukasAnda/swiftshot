@@ -12,7 +12,7 @@ enum Summary {
         switch provider {
         case "github": return "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some."
         case "gitlab": return "Run the manual `swiftshot-accept` job in this pipeline to accept the changes."
-        case "bitbucket": return "Run the manual `Accept screenshots` step in this pipeline to accept the changes."
+        case "bitbucket": return "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes."
         case "bitrise": return "Run the `swiftshot-accept` workflow on this branch to accept the changes."
         case "codemagic": return "Start the `swiftshot-accept` workflow on this branch to accept the changes."
         case "circleci": return "Approve the `accept-screenshots` job in this workflow to accept the changes."

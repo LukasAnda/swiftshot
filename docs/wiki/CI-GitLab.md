@@ -16,9 +16,6 @@ verify:
   script:
     - curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
     - ~/.swiftshot/bin/swiftshot verify
-  # Exit 1 means differences: the job warns and the accept job can follow. Other codes still fail.
-  allow_failure:
-    exit_codes: 1
   artifacts:
     when: always
     expire_in: 14 days
@@ -29,7 +26,7 @@ verify:
       junit: screenshots-report/junit.xml
 ```
 
-`junit.xml` fills the merge request's test summary, `expose_as` links the report in the merge
+A changed screenshot fails the job. `junit.xml` fills the merge request's test summary, `expose_as` links the report in the merge
 request, and `summary.md` is in the report folder.
 
 ## Accept
@@ -42,17 +39,23 @@ swiftshot-accept:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true
-  needs:
-    - job: verify
-      artifacts: true
+  # No needs: verify failed, and a manual job that needs a failed job is not offered.
+  needs: []
   script:
     - curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
     # The runner's origin carries the job token; push with SWIFTSHOT_HOST_TOKEN instead.
     - git remote set-url origin "$CI_SERVER_URL/$CI_PROJECT_PATH.git"
-    - ~/.swiftshot/bin/swiftshot accept --from screenshots-report --push
+    # The artifacts of this pipeline's verify job, fetched with the same token (needs curl and python3).
+    - >
+      verify_job=$(curl -fsS --header "PRIVATE-TOKEN: $SWIFTSHOT_HOST_TOKEN"
+      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/jobs"
+      | python3 -c "import json,sys; print(next(j['id'] for j in json.load(sys.stdin) if j['name'] == 'verify'))")
+    - export SWIFTSHOT_ARTIFACT_TOKEN="$SWIFTSHOT_HOST_TOKEN"
+    - ~/.swiftshot/bin/swiftshot accept --from "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$verify_job/artifacts" --push
 ```
 
-Run the job from the merge request's pipeline. It commits the new screenshots to the merge
+Run the job from the merge request's pipeline. It downloads the report of that pipeline's verify
+job through the API (`needs` would hide the job, because verify failed). It commits the new screenshots to the merge
 request's source branch, which starts a new pipeline. To take only some, add
 `--only "<id>,<id>"`.
 
@@ -66,7 +69,8 @@ can't push.
 ## Notes
 
 - A job token can't comment, and can push only if the project allows it (Settings, CI/CD, Job
-  token permissions); the access token above works either way.
+  token permissions); the access token above is used for the comment, the report download and the
+  push.
 - Merge request pipelines from a fork run in the fork: accept refuses them.
 - With "merged results" pipelines the job renders the merge, not the source branch; use plain
   merge request pipelines for screenshot tests.

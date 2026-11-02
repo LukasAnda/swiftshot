@@ -15,7 +15,7 @@ the way each system offers; nothing is ever accepted on its own. Each page has t
 |---|---|---|---|
 | [[GitHub Actions|CI-GitHub-Actions]] | `GITHUB_ACTIONS` | job summary, annotations, `swiftshot` status | comment `/swiftshot accept` |
 | [[GitLab|CI-GitLab]] | `GITLAB_CI` | test summary, `expose_as` link | manual job `swiftshot-accept` |
-| [[Bitbucket|CI-Bitbucket]] | `BITBUCKET_BUILD_NUMBER` | Tests tab | manual step `Accept screenshots` |
+| [[Bitbucket|CI-Bitbucket]] | `BITBUCKET_BUILD_NUMBER` | Tests tab | custom pipeline `swiftshot-accept` |
 | [[Bitrise|CI-Bitrise]] | `BITRISE_IO` | Test Reports, `swiftshot-report.zip` | workflow `swiftshot-accept` |
 | [[Codemagic|CI-Codemagic]] | `CM_BUILD_ID` | test results | workflow `swiftshot-accept` |
 | [[CircleCI|CI-CircleCI]] | `CIRCLECI` | test results, artifacts | approval `accept-screenshots` |
@@ -32,9 +32,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - uses: LukasAnda/swiftshot@v0.8.0
+      - uses: LukasAnda/swiftshot@v1.0.0
         with:
-          version: 0.8.0
+          version: 1.0.0
       - uses: actions/upload-artifact@v7
         with:
           name: ios-screenshots
@@ -49,9 +49,9 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
-      - uses: LukasAnda/swiftshot@v0.8.0
+      - uses: LukasAnda/swiftshot@v1.0.0
         with:
-          version: 0.8.0
+          version: 1.0.0
       - uses: actions/upload-artifact@v7
         with:
           name: android-screenshots
@@ -74,7 +74,7 @@ Several iOS versions: the runner image ships a few runtimes. Missing ones can be
 `--download-missing-runtimes` (adds several minutes).
 
 ```yaml
-      - uses: LukasAnda/swiftshot@v0.8.0
+      - uses: LukasAnda/swiftshot@v1.0.0
         with:
           args: --ios 26.5,27.1 --download-missing-runtimes
 ```
@@ -94,7 +94,7 @@ own cache (unpacked layoutlib, class-data-sharing archives, device art) can be c
       - uses: actions/cache@v6
         with:
           path: ~/.cache/swiftshot/android
-          key: swiftshot-android-${{ runner.os }}-0.8.0
+          key: swiftshot-android-${{ runner.os }}-1.0.0
 ```
 
 macOS runners work the same way; there the cache is `~/Library/Caches/swiftshot/android`.
@@ -102,7 +102,7 @@ macOS runners work the same way; there the cache is `~/Library/Caches/swiftshot/
 Pass Gradle arguments with `args`, for example a module and a variant:
 
 ```yaml
-      - uses: LukasAnda/swiftshot@v0.8.0
+      - uses: LukasAnda/swiftshot@v1.0.0
         with:
           args: --modules :app --variant demoDebug --gradle-arg=--no-daemon
 ```
@@ -122,7 +122,7 @@ iOS: accept Apple's bezel license with a flag, and cache the downloaded bezels b
         with:
           path: ~/Library/Caches/swiftshot/frames
           key: swiftshot-frames-1
-      - uses: LukasAnda/swiftshot@v0.8.0
+      - uses: LukasAnda/swiftshot@v1.0.0
         with:
           args: --frame appstore --accept-bezel-license
 ```
@@ -133,7 +133,7 @@ into Swiftshot's cache, which the cache step above keeps.
 ## Other CI
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.8.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
 ~/.swiftshot/bin/swiftshot run --download-missing-runtimes     # iOS
 ~/.swiftshot/bin/swiftshot run                                 # Android, in the folder with gradlew
 ```

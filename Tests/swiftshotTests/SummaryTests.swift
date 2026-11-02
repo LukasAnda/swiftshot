@@ -22,7 +22,7 @@ final class SummaryTests: XCTestCase {
     func testAcceptHintPerProvider() {
         XCTAssertEqual(Summary.acceptHint("github"), "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.")
         XCTAssertEqual(Summary.acceptHint("gitlab"), "Run the manual `swiftshot-accept` job in this pipeline to accept the changes.")
-        XCTAssertEqual(Summary.acceptHint("bitbucket"), "Run the manual `Accept screenshots` step in this pipeline to accept the changes.")
+        XCTAssertEqual(Summary.acceptHint("bitbucket"), "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.")
         XCTAssertEqual(Summary.acceptHint("bitrise"), "Run the `swiftshot-accept` workflow on this branch to accept the changes.")
         XCTAssertEqual(Summary.acceptHint("codemagic"), "Start the `swiftshot-accept` workflow on this branch to accept the changes.")
         XCTAssertEqual(Summary.acceptHint("circleci"), "Approve the `accept-screenshots` job in this workflow to accept the changes.")

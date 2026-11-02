@@ -21,18 +21,19 @@ workflows:
       - name: swiftshot verify
         script: |
           curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
-          ~/.swiftshot/bin/swiftshot verify
+          ~/.swiftshot/bin/swiftshot verify && status=0 || status=$?
+          # Zip also after differences, then fail the build with verify's exit code.
+          [ ! -d screenshots-report ] || zip -qr swiftshot-report.zip screenshots-report
+          exit $status
         test_report: screenshots-report/junit.xml
-      - name: Zip the report
-        ignore_failure: true
-        script: zip -qr swiftshot-report.zip screenshots-report
     artifacts:
       - swiftshot-report.zip
       - screenshots-report/**
 ```
 
-`test_report` shows the differences in the build's test results. The zip step always runs, also
-after a failed verify. The workflow runs on pull request branches.
+`test_report` shows the differences in the build's test results. The script zips the report before
+it exits with verify's exit code, so a build with differences fails and still has the zip.
+The workflow runs on pull request branches.
 
 ## Accept
 
@@ -75,6 +76,8 @@ Codemagic documents pushing only over `https` with a token, so there is no SSH v
 
 - The link from the public-url call is short-lived and open to anyone who has it, so it expires in
   ten minutes and is passed to `accept` without a token.
+- Codemagic's docs don't say whether artifacts and `test_report` are kept for a failed build; check
+  that the zip appears on your first build with a difference.
 - Codemagic describes `CM_COMMIT` as the pull request's source commit, which is what verify
   records.
 - The artifact list of a build is read from the builds API (`build.artefacts`, with that

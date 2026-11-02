@@ -183,7 +183,7 @@ person accepts the changes the way the CI allows. Recipes:
 |---|---|
 | [GitHub Actions](https://github.com/LukasAnda/swiftshot/wiki/CI-GitHub-Actions) | a `/swiftshot accept` comment |
 | [GitLab](https://github.com/LukasAnda/swiftshot/wiki/CI-GitLab) | the manual `swiftshot-accept` job |
-| [Bitbucket](https://github.com/LukasAnda/swiftshot/wiki/CI-Bitbucket) | the manual `Accept screenshots` step |
+| [Bitbucket](https://github.com/LukasAnda/swiftshot/wiki/CI-Bitbucket) | the `swiftshot-accept` custom pipeline |
 | [Bitrise](https://github.com/LukasAnda/swiftshot/wiki/CI-Bitrise) | the `swiftshot-accept` workflow |
 | [Codemagic](https://github.com/LukasAnda/swiftshot/wiki/CI-Codemagic) | the `swiftshot-accept` workflow |
 | [CircleCI](https://github.com/LukasAnda/swiftshot/wiki/CI-CircleCI) | the `accept-screenshots` approval |

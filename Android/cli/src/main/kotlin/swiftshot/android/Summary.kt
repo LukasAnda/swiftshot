@@ -11,7 +11,7 @@ object Summary {
     fun acceptHint(provider: String?): String = when (provider) {
         "github" -> "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some."
         "gitlab" -> "Run the manual `swiftshot-accept` job in this pipeline to accept the changes."
-        "bitbucket" -> "Run the manual `Accept screenshots` step in this pipeline to accept the changes."
+        "bitbucket" -> "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes."
         "bitrise" -> "Run the `swiftshot-accept` workflow on this branch to accept the changes."
         "codemagic" -> "Start the `swiftshot-accept` workflow on this branch to accept the changes."
         "circleci" -> "Approve the `accept-screenshots` job in this workflow to accept the changes."

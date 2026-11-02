@@ -19,7 +19,7 @@ class SummaryTest {
     @Test fun acceptHintPerProvider() {
         assertEquals("Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.", Summary.acceptHint("github"))
         assertEquals("Run the manual `swiftshot-accept` job in this pipeline to accept the changes.", Summary.acceptHint("gitlab"))
-        assertEquals("Run the manual `Accept screenshots` step in this pipeline to accept the changes.", Summary.acceptHint("bitbucket"))
+        assertEquals("Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.", Summary.acceptHint("bitbucket"))
         assertEquals("Run the `swiftshot-accept` workflow on this branch to accept the changes.", Summary.acceptHint("bitrise"))
         assertEquals("Start the `swiftshot-accept` workflow on this branch to accept the changes.", Summary.acceptHint("codemagic"))
         assertEquals("Approve the `accept-screenshots` job in this workflow to accept the changes.", Summary.acceptHint("circleci"))
