@@ -31,8 +31,10 @@ final class BaselineIntegrationTests: XCTestCase {
         p.executableURL = URL(fileURLWithPath: program)
         p.arguments = args
         p.currentDirectoryURL = project
-        // Real git: accept checks the report's commit against HEAD.
-        p.environment = Self.env.filter { $0.key != "SWIFTSHOT_COMMIT" && $0.key != "SWIFTSHOT_BRANCH" }.merging(extra) { $1 }
+        // Real git: accept checks the report's commit against HEAD. The runner's file commands stay out of reach: a
+        // run that plays GitHub must not write into this job's summary, outputs or environment.
+        let hidden: Set<String> = ["SWIFTSHOT_COMMIT", "SWIFTSHOT_BRANCH", "GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_PATH", "GITHUB_STATE"]
+        p.environment = Self.env.filter { !hidden.contains($0.key) }.merging(extra) { $1 }
         let logURL = Self.work.appendingPathComponent("\(log).log")
         if !FileManager.default.fileExists(atPath: logURL.path) { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
         let handle = try FileHandle(forWritingTo: logURL)

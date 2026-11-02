@@ -33,7 +33,8 @@ out=$work/out
 # Runs the CLI, its output filtered to the console and a log; the exit code in $rc.
 cli() {  # log-name args...
   local log=$work/$1.log; shift
-  { c=0; java -jar "$jar" "$@" || c=$?; echo "$c" > "$work/rc"; } 2>&1 | { grep -v "^    \[w" || true; } | tee -a "$log"
+  # A run that plays GitHub prints workflow commands (::error); shown indented by a word, they stay plain text.
+  { c=0; java -jar "$jar" "$@" || c=$?; echo "$c" > "$work/rc"; } 2>&1 | { grep -v "^    \[w" || true; } | tee -a "$log" | sed 's/^\([[:space:]]*\)::/\1(swiftshot) ::/'
   rc=$(cat "$work/rc")
 }
 # One device, language and appearance keep it quick; the comparison covers Welcome and Settings.
@@ -116,6 +117,8 @@ event() {  # head sha
   printf '{"pull_request":{"number":7,"head":{"sha":"%s","ref":"feature/pr","repo":{"full_name":"acme/app"}},"base":{"repo":{"full_name":"acme/app"}}}}\n' "$1" > "$work/event.json"
 }
 githubenv() {  # GITHUB_SHA
+  # The runner's file commands stay out of reach: these runs must not write into this job's summary or outputs.
+  unset GITHUB_STEP_SUMMARY GITHUB_OUTPUT GITHUB_ENV GITHUB_PATH GITHUB_STATE
   export SWIFTSHOT_CI=true GITHUB_ACTIONS=true GITHUB_EVENT_PATH=$work/event.json GITHUB_REPOSITORY=acme/app GITHUB_HEAD_REF=feature/pr GITHUB_SHA=$1
 }
 event "$prhead"; githubenv "$(git_ rev-parse HEAD)"
