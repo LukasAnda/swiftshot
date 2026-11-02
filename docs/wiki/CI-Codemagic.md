@@ -49,10 +49,11 @@ workflows:
           set -eu
           curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
           pick() { python3 -c "import json,sys; $1"; }
-          artifact=$(curl -fsS -H "x-auth-token: $CODEMAGIC_TOKEN" "https://api.codemagic.io/builds/$SWIFTSHOT_VERIFY_BUILD" |
+          # The headers come from stdin, so the token is not on curl's command line.
+          api() { printf 'x-auth-token: %s\nContent-Type: application/json\n' "$CODEMAGIC_TOKEN" | curl -fsS -H @- "$@"; }
+          artifact=$(api "https://api.codemagic.io/builds/$SWIFTSHOT_VERIFY_BUILD" |
             pick "print(next(a['url'] for a in json.load(sys.stdin)['build']['artefacts'] if a['url'].endswith('/swiftshot-report.zip')))")
-          url=$(curl -fsS -H "x-auth-token: $CODEMAGIC_TOKEN" -H "Content-Type: application/json" \
-            -d "{\"expiresAt\": $(( $(date +%s) + 600 ))}" "$artifact/public-url" |
+          url=$(api -d "{\"expiresAt\": $(( $(date +%s) + 600 ))}" "$artifact/public-url" |
             pick "print(json.load(sys.stdin)['url'])")
           ~/.swiftshot/bin/swiftshot accept --from "$url" --push
 ```

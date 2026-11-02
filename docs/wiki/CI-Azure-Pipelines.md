@@ -75,8 +75,9 @@ stages:
             displayName: Accept
 ```
 
-Both snippets are stages of one file; the accept stage appears only when verify failed. Users with the **Queue builds** permission approve the
-`Accept screenshots` stage in the run, and the stage rejects itself after a day.
+Both snippets are stages of one file; the accept stage appears only when verify failed. Users with
+the **Queue builds** permission approve the `Accept screenshots` stage in the run, and the stage
+rejects itself after a day.
 
 ## Comment
 

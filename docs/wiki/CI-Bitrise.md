@@ -51,10 +51,11 @@ workflows:
                 curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
                 api="https://api.bitrise.io/v0.1/apps/$BITRISE_APP_SLUG/builds/$SWIFTSHOT_VERIFY_BUILD/artifacts"
                 pick() { python3 -c "import json,sys; $1"; }
-                slug=$(curl -fsS -H "Authorization: $BITRISE_TOKEN" "$api" |
+                # The header comes from stdin, so the token is not on curl's command line.
+                get() { printf 'Authorization: %s\n' "$BITRISE_TOKEN" | curl -fsS -H @- "$1"; }
+                slug=$(get "$api" |
                   pick "print(next(a['slug'] for a in json.load(sys.stdin)['data'] if a['title'] == 'swiftshot-report.zip'))")
-                url=$(curl -fsS -H "Authorization: $BITRISE_TOKEN" "$api/$slug" |
-                  pick "print(json.load(sys.stdin)['data']['expiring_download_url'])")
+                url=$(get "$api/$slug" | pick "print(json.load(sys.stdin)['data']['expiring_download_url'])")
                 ~/.swiftshot/bin/swiftshot accept --from "$url" --push
 ```
 

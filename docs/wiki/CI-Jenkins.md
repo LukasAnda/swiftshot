@@ -66,8 +66,9 @@ stage('Accept screenshots') {
 ```
 
 Both stages go into the same `stages`, one after the other. Anyone who may use the build
-(add `submitter 'alice,bob'` to limit it) presses Accept on the stage; `stash` carries the report to it. The stage only appears when the build is unstable (the
-differences), and gives up after a day.
+(add `submitter 'alice,bob'` to limit it) presses Accept on the stage; `stash` carries the report
+to it. The stage only appears when the build is unstable (the differences), and gives up after a
+day. On a Linux agent swiftshot runs on Java: the `git` agent needs JDK 21+.
 
 ## Comment
 

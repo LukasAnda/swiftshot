@@ -26,8 +26,8 @@ verify:
       junit: screenshots-report/junit.xml
 ```
 
-A changed screenshot fails the job. `junit.xml` fills the merge request's test summary, `expose_as` links the report in the merge
-request, and `summary.md` is in the report folder.
+A changed screenshot fails the job. `junit.xml` fills the merge request's test summary, `expose_as`
+links the report in the merge request, and `summary.md` is in the report folder.
 
 ## Accept
 
@@ -41,23 +41,25 @@ swiftshot-accept:
       allow_failure: true
   # No needs: verify failed, and a manual job that needs a failed job is not offered.
   needs: []
+  # On Linux swiftshot runs on Java: a JDK 21+ image with git, curl and python3 (verify's will do).
   script:
     - curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
     # The runner's origin carries the job token; push with SWIFTSHOT_HOST_TOKEN instead.
     - git remote set-url origin "$CI_SERVER_URL/$CI_PROJECT_PATH.git"
     # The artifacts of this pipeline's verify job, fetched with the same token (needs curl and python3).
+    # The header comes from stdin, so the token is not on curl's command line.
     - >
-      verify_job=$(curl -fsS --header "PRIVATE-TOKEN: $SWIFTSHOT_HOST_TOKEN"
-      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/jobs"
+      verify_job=$(printf 'PRIVATE-TOKEN: %s\n' "$SWIFTSHOT_HOST_TOKEN"
+      | curl -fsS --header @- "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/jobs?per_page=100"
       | python3 -c "import json,sys; print(next(j['id'] for j in json.load(sys.stdin) if j['name'] == 'verify'))")
     - export SWIFTSHOT_ARTIFACT_TOKEN="$SWIFTSHOT_HOST_TOKEN"
     - ~/.swiftshot/bin/swiftshot accept --from "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$verify_job/artifacts" --push
 ```
 
-Run the job from the merge request's pipeline. It downloads the report of that pipeline's verify
-job through the API (`needs` would hide the job, because verify failed). It commits the new screenshots to the merge
-request's source branch, which starts a new pipeline. To take only some, add
-`--only "<id>,<id>"`.
+Run the job from the merge request's pipeline once its verify job has finished. It downloads the
+report of that pipeline's verify job through the API (`needs` would hide the job, because verify
+failed). It commits the new screenshots to the merge request's source branch, which starts a new
+pipeline. To take only some, add `--only "<id>,<id>"`.
 
 ## Comment
 

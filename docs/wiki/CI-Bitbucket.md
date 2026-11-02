@@ -26,8 +26,8 @@ pipelines:
             - >
               if [ -d screenshots-report ]; then
               python3 -m zipfile -c "swiftshot-report-$BITBUCKET_COMMIT.zip" screenshots-report &&
-              curl -fsS -X POST --header "Authorization: Bearer $SWIFTSHOT_HOST_TOKEN"
-              -F "files=@swiftshot-report-$BITBUCKET_COMMIT.zip"
+              printf 'Authorization: Bearer %s\n' "$SWIFTSHOT_HOST_TOKEN" |
+              curl -fsS -X POST --header @- -F "files=@swiftshot-report-$BITBUCKET_COMMIT.zip"
               "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/downloads"; fi
 ```
 
@@ -44,12 +44,15 @@ pipelines:
     swiftshot-accept:
       - step:
           name: Accept screenshots
+          # On Linux swiftshot runs on Java: the image needs JDK 21+ (verify's will do).
           script:
             - curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
             - export SWIFTSHOT_ARTIFACT_TOKEN="$SWIFTSHOT_HOST_TOKEN"
             # After the clone, so that the push goes to Bitbucket with the token.
             - git remote set-url origin "https://bitbucket.org/$BITBUCKET_REPO_FULL_NAME.git"
-            - ~/.swiftshot/bin/swiftshot accept --from "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/downloads/swiftshot-report-$BITBUCKET_COMMIT.zip" --push --branch "$BITBUCKET_BRANCH"
+            - >
+              ~/.swiftshot/bin/swiftshot accept --push --branch "$BITBUCKET_BRANCH" --from
+              "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/downloads/swiftshot-report-$BITBUCKET_COMMIT.zip"
 ```
 
 Add it to the same `pipelines` as the verify step. Run it from the Pipelines page: "Run

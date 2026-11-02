@@ -2,6 +2,8 @@
 # result on the pull request, posts the "swiftshot" commit status and uploads the report.
 # iOS needs a Mac runner (e.g. macos-latest); for Android or Compose use ubuntu-latest and add
 # actions/setup-java (Temurin 21) before the swiftshot step.
+# Branch protection: require the "swiftshot" status, not the "screenshots / verify" check (the
+# accept workflow's push with GITHUB_TOKEN starts no workflow, so that check never reruns).
 name: screenshots
 on: pull_request
 

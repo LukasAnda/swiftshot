@@ -37,8 +37,8 @@ jobs:
             - screenshots-report
 ```
 
-A changed screenshot fails the job. `store_test_results` reads `junit.xml` from the report folder; `store_artifacts` keeps the images
-for the job's Artifacts tab.
+A changed screenshot fails the job. `store_test_results` reads `junit.xml` from the report folder;
+`store_artifacts` keeps the images for the job's Artifacts tab.
 
 ## Accept
 
@@ -63,7 +63,12 @@ jobs:
           command: curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
       - run:
           name: Accept
-          command: ~/.swiftshot/bin/swiftshot accept --from screenshots-report --push
+          command: |
+            # With SWIFTSHOT_HOST_TOKEN the push goes over https (git@host:a/b becomes https://host/a/b).
+            if [ -n "${SWIFTSHOT_HOST_TOKEN:-}" ]; then
+              git remote set-url origin "$(echo "$CIRCLE_REPOSITORY_URL" | sed -E 's#^git@([^:]+):#https://\1/#')"
+            fi
+            ~/.swiftshot/bin/swiftshot accept --from screenshots-report --push
 
 workflows:
   screenshots:
@@ -86,8 +91,9 @@ approves `accept-screenshots` in the workflow view; `accept` then pushes the new
 
 Set `SWIFTSHOT_HOST_TOKEN` as a project environment variable to post the pull request comment
 (GitHub: fine-grained, Pull requests write; GitLab: `api`; Bitbucket: `pullrequest`). It also
-pushes over `https` if you'd rather not add an SSH key (GitHub: Contents write; GitLab:
-`write_repository`; Bitbucket: `repository:write`).
+pushes if you'd rather not add an SSH key (GitHub: Contents write; GitLab: `write_repository`;
+Bitbucket: `repository:write`): the Accept step then points `origin` at `https`, and you can drop
+`add_ssh_keys`.
 
 ## Notes
 

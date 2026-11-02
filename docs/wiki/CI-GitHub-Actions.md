@@ -12,6 +12,8 @@ Save as `.github/workflows/screenshots.yml` (the accept workflow looks up its ru
 # result on the pull request, posts the "swiftshot" commit status and uploads the report.
 # iOS needs a Mac runner (e.g. macos-latest); for Android or Compose use ubuntu-latest and add
 # actions/setup-java (Temurin 21) before the swiftshot step.
+# Branch protection: require the "swiftshot" status, not the "screenshots / verify" check (the
+# accept workflow's push with GITHUB_TOKEN starts no workflow, so that check never reruns).
 name: screenshots
 on: pull_request
 
@@ -140,6 +142,7 @@ jobs:
 
       # Pushes with the credentials checkout persisted; do not set SWIFTSHOT_HOST_TOKEN here.
       - name: Accept
+        id: accept
         if: steps.prepare.outputs.proceed == 'true'
         uses: LukasAnda/swiftshot@v1.0.0
         with:
@@ -156,9 +159,11 @@ jobs:
 
       # A push with GITHUB_TOKEN starts no workflow: render once more here, which posts the
       # "swiftshot" status on the new commit. An issue_comment run sees the default branch's commit
-      # and name, so the pull request's are given.
+      # and name, so the pull request's are given. Differences left after a partial accept fail
+      # the status, not this job.
       - name: Verify the new baseline
         if: steps.prepare.outputs.proceed == 'true'
+        continue-on-error: true
         uses: LukasAnda/swiftshot@v1.0.0
         with:
           command: verify
@@ -168,7 +173,7 @@ jobs:
           SWIFTSHOT_BRANCH: ${{ steps.prepare.outputs.ref }}
 
       - name: Thumbs up
-        if: steps.prepare.outputs.proceed == 'true'
+        if: steps.accept.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -176,8 +181,8 @@ jobs:
         run: gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" -f content='+1' > /dev/null || echo "::warning::Could not react to the comment"
 
       - name: Reply with the error
-        # Not after a refusal: that already replied and exited 0 with proceed=false.
-        if: failure() && steps.prepare.outputs.proceed != 'false'
+        # Only when checking or accepting failed; a refusal already replied and exited 0.
+        if: failure() && (steps.prepare.outcome == 'failure' || steps.accept.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -208,6 +213,7 @@ refuse the push.
   commit.
 - Pull requests from forks get a read-only token: no comment, and accept refuses them.
 - A push with `GITHUB_TOKEN` starts no workflow, which is why the accept workflow verifies the
-  new head itself.
+  new head itself. In branch protection, require the `swiftshot` status, not the
+  `screenshots / verify` check.
 - Reports are kept as long as your artifact retention says.
 - The action's inputs and the rest of the setup are in [[CI]].
