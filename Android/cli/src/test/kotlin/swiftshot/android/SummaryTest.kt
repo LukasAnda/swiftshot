@@ -17,7 +17,7 @@ class SummaryTest {
     private fun e(status: String, id: String, message: String? = null) = mapOf("id" to id, "status" to status) + (message?.let { mapOf("message" to it) } ?: emptyMap())
 
     @Test fun acceptHintPerProvider() {
-        assertEquals("Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.", Summary.acceptHint("github"))
+        assertEquals("Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.", Summary.acceptHint("github"))
         assertEquals("Run the manual `swiftshot-accept` job in this pipeline to accept the changes.", Summary.acceptHint("gitlab"))
         assertEquals("Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.", Summary.acceptHint("bitbucket"))
         assertEquals("Run the `swiftshot-accept` workflow on this branch to accept the changes.", Summary.acceptHint("bitrise"))
@@ -40,6 +40,11 @@ class SummaryTest {
             "<!-- swiftshot -->\n### Screenshot run had errors\n\n1 changed · 3 added · 1 removed · 1 errors · 1 unchanged\n\n" +
                 "| Status | Screenshot |\n|---|---|\n| error | `m` |\n| changed | `z\\|y'x` |\n| added | `b` |\n| added | `～` |\n| added | `😀` |\n| removed | `a` |\n",
             Summary.markdown(v, ci("gitlab")))
+    }
+
+    @Test fun entriesWithoutAStringIdAreSkipped() {
+        val v = verification(listOf(e("added", "b"), mapOf("status" to "added"), mapOf("id" to 3L, "status" to "changed")))
+        assertEquals(listOf("added" to "b"), Summary.rows(v))
     }
 
     @Test fun failedHintFollowsTheFullReportLink() {

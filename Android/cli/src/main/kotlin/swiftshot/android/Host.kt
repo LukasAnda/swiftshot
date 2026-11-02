@@ -126,16 +126,23 @@ data class Host(val kind: String, val api: String, val project: String, val web:
         else -> listUrl(pr, 1).substringBefore('?') + "/$id"
     }
 
-    /** The comments of a page as (id, text), and whether there may be a next page. */
+    /**
+     * The comments of a page as (id, text), and whether there may be a next page. A comment whose id isn't a whole
+     * number that fits 64 bits is skipped.
+     */
     private fun comments(json: String): Pair<List<Pair<String, String>>, Boolean>? = runCatching {
         val root = Json.parse(json)
         val items = (if (kind == "bitbucket") (root as Map<*, *>)["values"] else root) as List<*>
-        val parsed = items.map { c ->
+        val parsed = items.mapNotNull { c ->
             c as Map<*, *>
             val text = if (kind == "bitbucket") (c["content"] as Map<*, *>)["raw"] else c["body"]
-            (c["id"] as Number).toLong().toString() to (text as? String ?: "")
+            val id = when (val n = c["id"] as Number) {
+                is Long -> n
+                else -> n.toDouble().takeIf { it.isFinite() && it == Math.floor(it) && it >= -9.223372036854775808E18 && it < 9.223372036854775808E18 }?.toLong()
+            }
+            id?.let { it.toString() to (text as? String ?: "") }
         }
-        parsed to (items.size >= 100 && (kind != "bitbucket" || (root as Map<*, *>)["next"] != null))
+        parsed to (if (kind == "bitbucket") (root as Map<*, *>)["next"] != null else items.size >= 100)
     }.getOrNull()
 
     /**

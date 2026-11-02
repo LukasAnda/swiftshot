@@ -93,13 +93,16 @@ enum NativeOutput {
             }
         }
         var archive = ZipArchive()
-        for name in names.sorted(by: utf8Less) { archive.add(name, try Data(contentsOf: URL(fileURLWithPath: root).appendingPathComponent(name))) }
-        try Data(archive.finish()).write(to: to)
+        for name in names.sorted(by: utf8Less) { try archive.add(name, try Data(contentsOf: URL(fileURLWithPath: root).appendingPathComponent(name))) }
+        try Data(try archive.finish()).write(to: to)
     }
 }
 
-/// A zip file written in memory: deflated entries, DOS time 1980-01-01 00:00, names in the order added.
+/// A zip file written in memory: deflated entries, DOS time 1980-01-01 00:00, names in the order added. No zip64:
+/// more than 65,535 entries or a size past 32 bits is an error.
 struct ZipArchive {
+    struct Failure: LocalizedError { let errorDescription: String? }
+
     private var body: [UInt8] = []
     private var central: [UInt8] = []
     private var count = 0
@@ -107,38 +110,52 @@ struct ZipArchive {
     private func le16(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8 & 255)] }
     private func le32(_ v: UInt32) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8 & 255), UInt8(v >> 16 & 255), UInt8(v >> 24 & 255)] }
     private static let dosDate = 1 << 5 | 1   // 1980-01-01
+    static let maxEntries = 65_535
 
-    private func deflateRaw(_ data: [UInt8]) -> [UInt8] {
+    /// A size or offset that fits the 32-bit fields (0xFFFFFFFF would mean zip64).
+    private func u32(_ v: Int, _ what: String) throws -> UInt32 {
+        guard v >= 0, v < Int(UInt32.max) else { throw Failure(errorDescription: "the report zip is too large (\(what))") }
+        return UInt32(v)
+    }
+
+    private func deflateRaw(_ data: [UInt8]) throws -> [UInt8] {
         var s = z_stream()
-        deflateInit2_(&s, 6, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY, zlibVersion(), Int32(MemoryLayout<z_stream>.size))
+        guard deflateInit2_(&s, 6, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY, zlibVersion(), Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
+            throw Failure(errorDescription: "zlib could not start compressing")
+        }
+        defer { deflateEnd(&s) }
         var out = [UInt8](repeating: 0, count: Int(deflateBound(&s, uLong(data.count))) + 16)
         var input = data
-        let n: Int = input.withUnsafeMutableBufferPointer { inp in
+        let (code, n): (Int32, Int) = input.withUnsafeMutableBufferPointer { inp in
             out.withUnsafeMutableBufferPointer { o in
                 s.next_in = inp.baseAddress; s.avail_in = uInt(inp.count)
                 s.next_out = o.baseAddress; s.avail_out = uInt(o.count)
-                deflate(&s, Z_FINISH)
-                return Int(s.total_out)
+                let code = deflate(&s, Z_FINISH)
+                return (code, Int(s.total_out))
             }
         }
-        deflateEnd(&s)
+        guard code == Z_STREAM_END else { throw Failure(errorDescription: "zlib could not compress a file (\(code))") }
         return Array(out[0..<n])
     }
 
-    mutating func add(_ name: String, _ content: Data) {
+    mutating func add(_ name: String, _ content: Data) throws {
+        guard count < Self.maxEntries else { throw Failure(errorDescription: "the report has more than \(Self.maxEntries) files for one zip") }
         let data = [UInt8](content)
         let nameBytes = Array(name.utf8)
-        let crc = UInt32(crc32(0, data, uInt(data.count)))
-        let packed = deflateRaw(data)
-        let offset = UInt32(body.count)
-        body += le32(0x0403_4b50) + le16(20) + le16(0x800) + le16(8) + le16(0) + le16(Self.dosDate) + le32(crc) + le32(UInt32(packed.count)) + le32(UInt32(data.count))
+        guard nameBytes.count <= 0xFFFF else { throw Failure(errorDescription: "a file name is too long for the zip") }
+        let size = try u32(data.count, "a file")
+        let crc = UInt32(crc32(0, data, uInt(size)))
+        let packed = try deflateRaw(data)
+        let (offset, packedSize) = (try u32(body.count, "offset"), try u32(packed.count, "a file"))
+        body += le32(0x0403_4b50) + le16(20) + le16(0x800) + le16(8) + le16(0) + le16(Self.dosDate) + le32(crc) + le32(packedSize) + le32(size)
             + le16(nameBytes.count) + le16(0) + nameBytes + packed
-        central += le32(0x0201_4b50) + le16(20) + le16(20) + le16(0x800) + le16(8) + le16(0) + le16(Self.dosDate) + le32(crc) + le32(UInt32(packed.count)) + le32(UInt32(data.count))
+        central += le32(0x0201_4b50) + le16(20) + le16(20) + le16(0x800) + le16(8) + le16(0) + le16(Self.dosDate) + le32(crc) + le32(packedSize) + le32(size)
             + le16(nameBytes.count) + le16(0) + le16(0) + le16(0) + le16(0) + le32(0) + le32(offset) + nameBytes
         count += 1
     }
 
-    func finish() -> [UInt8] {
-        body + central + le32(0x0605_4b50) + le16(0) + le16(0) + le16(count) + le16(count) + le32(UInt32(central.count)) + le32(UInt32(body.count)) + le16(0)
+    func finish() throws -> [UInt8] {
+        let (centralSize, centralOffset) = (try u32(central.count, "directory"), try u32(body.count, "directory offset"))
+        return body + central + le32(0x0605_4b50) + le16(0) + le16(0) + le16(count) + le16(count) + le32(centralSize) + le32(centralOffset) + le16(0)
     }
 }

@@ -20,7 +20,7 @@ final class SummaryTests: XCTestCase {
     }
 
     func testAcceptHintPerProvider() {
-        XCTAssertEqual(Summary.acceptHint("github"), "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.")
+        XCTAssertEqual(Summary.acceptHint("github"), "Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.")
         XCTAssertEqual(Summary.acceptHint("gitlab"), "Run the manual `swiftshot-accept` job in this pipeline to accept the changes.")
         XCTAssertEqual(Summary.acceptHint("bitbucket"), "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.")
         XCTAssertEqual(Summary.acceptHint("bitrise"), "Run the `swiftshot-accept` workflow on this branch to accept the changes.")
@@ -42,6 +42,11 @@ final class SummaryTests: XCTestCase {
         XCTAssertEqual(Summary.markdown(v, ci: ci("gitlab")),
             "<!-- swiftshot -->\n### Screenshot run had errors\n\n1 changed · 3 added · 1 removed · 1 errors · 1 unchanged\n\n" +
             "| Status | Screenshot |\n|---|---|\n| error | `m` |\n| changed | `z\\|y'x` |\n| added | `b` |\n| added | `\u{FF5E}` |\n| added | `\u{1F600}` |\n| removed | `a` |\n")
+    }
+
+    func testEntriesWithoutAStringIdAreSkipped() {
+        let v = verification([entry("added", "b"), ["status": .string("added")], ["id": .int(3), "status": .string("changed")]])
+        XCTAssertEqual(Summary.rows(v).map { "\($0.0) \($0.1)" }, ["added b"])
     }
 
     func testFailedHintFollowsTheFullReportLink() {

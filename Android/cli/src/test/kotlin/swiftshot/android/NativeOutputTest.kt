@@ -47,8 +47,7 @@ class NativeOutputTest {
         assertEquals(listOf("::error title=Render error::en-US/E: 50%25 bad: a,b%0Anext") + (1..9).map { "::error title=added screenshot::en-US/N%02d".format(it) }, lines())
     }
 
-    @Test fun githubTitleEscapesColonAndComma() {
-        // Only the title is escaped further; statuses are fixed words, so exercise the data escapes through the id.
+    @Test fun githubDataEscapes() {
         val v = verification(ci("github"), listOf(entry("changed", "en-US/100%\r\nx")))
         run(v, emptyMap())
         assertEquals(listOf("::error title=changed screenshot::en-US/100%25%0D%0Ax"), lines())

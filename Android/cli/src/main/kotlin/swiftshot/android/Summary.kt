@@ -9,7 +9,7 @@ object Summary {
     private val ORDER = listOf("error", "changed", "added", "removed")
 
     fun acceptHint(provider: String?): String = when (provider) {
-        "github" -> "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some."
+        "github" -> "Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some."
         "gitlab" -> "Run the manual `swiftshot-accept` job in this pipeline to accept the changes."
         "bitbucket" -> "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes."
         "bitrise" -> "Run the `swiftshot-accept` workflow on this branch to accept the changes."
@@ -32,7 +32,7 @@ object Summary {
 
     /** The rows a run has to show, as (status, id): errors, changed, added, removed; each by id in UTF-8 byte order. */
     fun rows(v: Verification): List<Pair<String, String>> =
-        v.entries.filter { it["status"] in ORDER }.map { it["status"] as String to it["id"] as String }
+        v.entries.filter { it["status"] in ORDER }.mapNotNull { e -> (e["id"] as? String)?.let { e["status"] as String to it } }
             .sortedWith(compareBy<Pair<String, String>> { ORDER.indexOf(it.first) }.thenComparing({ it.second }, CanonicalJson.utf8))
 
     fun markdown(v: Verification, ci: Ci?): String {

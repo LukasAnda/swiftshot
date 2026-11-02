@@ -187,6 +187,7 @@ struct Host: Equatable {
     }
 
     /// The comments of a page as (id, text), and whether there may be a next page; nil when it isn't a page of comments.
+    /// A comment whose id isn't a whole number that fits 64 bits is skipped.
     private func comments(_ json: String) -> (items: [(id: String, text: String)], more: Bool)? {
         guard let root = try? JSON.parse(json) else { return nil }
         guard let list = kind == "bitbucket" ? root["values"]?.array : root.array else { return nil }
@@ -196,13 +197,15 @@ struct Host: Equatable {
             let id: String
             switch o["id"] {
             case .int(let i)?: id = String(i)
-            case .double(let d)?: id = String(Int64(d))
+            case .double(let d)?:
+                guard let i = Int64(exactly: d) else { continue }
+                id = String(i)
             default: return nil
             }
             let text = kind == "bitbucket" ? o["content"]?["raw"]?.string : o["body"]?.string
             items.append((id, text ?? ""))
         }
-        return (items, list.count >= 100 && (kind != "bitbucket" || root["next"] != nil))
+        return (items, kind == "bitbucket" ? root["next"] != nil : list.count >= 100)
     }
 
     /// Writes `body` (which starts with `Summary.marker`) as a comment on pull request `pr`: the first comment that

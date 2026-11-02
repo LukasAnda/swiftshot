@@ -10,7 +10,7 @@ enum Summary {
 
     static func acceptHint(_ provider: String?) -> String {
         switch provider {
-        case "github": return "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some."
+        case "github": return "Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some."
         case "gitlab": return "Run the manual `swiftshot-accept` job in this pipeline to accept the changes."
         case "bitbucket": return "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes."
         case "bitrise": return "Run the `swiftshot-accept` workflow on this branch to accept the changes."

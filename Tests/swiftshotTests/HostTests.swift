@@ -203,6 +203,27 @@ final class HostTests: XCTestCase {
         XCTAssertTrue(s.seen[9].target.contains("page=10"))
     }
 
+    func testIdsThatAreNotWholeNumbersAreSkipped() throws {
+        for kind in kinds {
+            let odd = ["1e400", "-1e400", "1.5", "1e19"].map { id in kind == "bitbucket" ? "{\"id\":\(id),\"content\":{\"raw\":\"<!-- swiftshot -->\\nodd\"}}" : "{\"id\":\(id),\"body\":\"<!-- swiftshot -->\\nodd\"}" }
+            let s = try server { r in r.method == "GET" ? self.ok(self.page(kind, odd + [self.comment(9, "<!-- swiftshot -->\nold", kind)])) : self.ok("{}") }
+            let result = host(kind, s.url).upsertComment(pr: "7", body: marked, token: token, http: URLSessionHttp())
+            XCTAssertEqual(result.action, "updated", kind)
+            XCTAssertEqual(s.seen.last?.target, itemPath(kind, 9), kind)
+        }
+    }
+
+    func testBitbucketFollowsNextOnAShortPage() throws {
+        let s = try server { r in
+            if r.method == "GET" && r.target.contains("&page=1") { return self.ok(self.page("bitbucket", (1...10).map { self.comment($0, "c", "bitbucket") }, next: true)) }
+            if r.method == "GET" { return self.ok(self.page("bitbucket", [self.comment(42, "<!-- swiftshot -->\nold", "bitbucket")])) }
+            return self.ok("{}")
+        }
+        XCTAssertEqual(host("bitbucket", s.url).upsertComment(pr: "7", body: marked, token: token, http: URLSessionHttp()).action, "updated")
+        XCTAssertEqual(s.seen.count, 3)
+        XCTAssertEqual(s.seen.last?.target, itemPath("bitbucket", 42))
+    }
+
     func testFailuresAreReported() throws {
         for kind in kinds {
             for status in [401, 404, 500] {

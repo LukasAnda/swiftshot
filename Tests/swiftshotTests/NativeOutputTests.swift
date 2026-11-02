@@ -122,6 +122,13 @@ final class NativeOutputTests: XCTestCase {
         XCTAssertEqual(bytes(tmp.appendingPathComponent("d1/swiftshot-report.zip")), bytes(tmp.appendingPathComponent("d2/swiftshot-report.zip")))
     }
 
+    func testZipRefusesMoreEntriesThanItCanName() throws {
+        var archive = ZipArchive()
+        for i in 0..<ZipArchive.maxEntries { try archive.add("\(i)", Data()) }
+        XCTAssertThrowsError(try archive.add("one more", Data())) { XCTAssertTrue($0.localizedDescription.contains("65535 files"), $0.localizedDescription) }
+        XCTAssertNoThrow(try archive.finish())
+    }
+
     func testNothingWithoutTheVariableOrForOtherProviders() throws {
         let env = ["GITHUB_STEP_SUMMARY": tmp.appendingPathComponent("step.md").path, "BITRISE_DEPLOY_DIR": tmp.appendingPathComponent("deploy").path, "BITBUCKET_CLONE_DIR": tmp.appendingPathComponent("clone").path]
         for p in ["gitlab", "codemagic", "circleci", "jenkins"] { try run(verification(ci(p), failed), env) }

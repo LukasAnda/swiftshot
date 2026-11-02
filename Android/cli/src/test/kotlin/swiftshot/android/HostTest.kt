@@ -169,6 +169,29 @@ class HostTest {
         assertTrue(s.seen[9].target.contains("page=10"))
     }
 
+    @Test fun idsThatAreNotWholeNumbersAreSkipped() {
+        for (kind in kinds) {
+            val odd = listOf("1e400", "-1e400", "1.5", "1e19").map { id -> if (kind == "bitbucket") """{"id":$id,"content":{"raw":"<!-- swiftshot -->\nodd"}}""" else """{"id":$id,"body":"<!-- swiftshot -->\nodd"}""" }
+            val s = server { r -> if (r.method == "GET") ok(page(kind, odd + comment(9, "<!-- swiftshot -->\nold", kind))) else ok("{}") }
+            val result = host(kind, s.url).upsertComment("7", "<!-- swiftshot -->\nb", token, JavaHttp)
+            assertEquals("updated", result.action, kind)
+            assertEquals(itemPath(kind, 9), s.seen.last().target, kind)
+        }
+    }
+
+    @Test fun bitbucketFollowsNextOnAShortPage() {
+        val s = server { r ->
+            when {
+                r.method == "GET" && r.target.contains("&page=1") -> ok(page("bitbucket", (1..10).map { comment(it, "c", "bitbucket") }, next = true))
+                r.method == "GET" -> ok(page("bitbucket", listOf(comment(42, "<!-- swiftshot -->\nold", "bitbucket"))))
+                else -> ok("{}")
+            }
+        }
+        assertEquals("updated", host("bitbucket", s.url).upsertComment("7", "<!-- swiftshot -->\nb", token, JavaHttp).action)
+        assertEquals(3, s.seen.size)
+        assertEquals(itemPath("bitbucket", 42), s.seen.last().target)
+    }
+
     @Test fun failuresAreReported() {
         for (kind in kinds) {
             for (status in listOf(401, 404, 500)) {
