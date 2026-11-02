@@ -1,0 +1,14 @@
+# xcode-27 is this repository's runner label (a larger runner with Xcode 27).
+self-hosted-runner:
+  labels:
+    - xcode-27
+
+# Existing release and calibration scripts, written before the lint ran; shellcheck style notes only.
+paths:
+  .github/workflows/device-table.yml:
+    ignore:
+      - 'shellcheck reported issue in this script: SC2012:.+'
+      - 'shellcheck reported issue in this script: SC2086:.+'
+  .github/workflows/release.yml:
+    ignore:
+      - 'shellcheck reported issue in this script: SC2046:.+'

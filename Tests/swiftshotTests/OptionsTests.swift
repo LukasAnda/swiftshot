@@ -126,6 +126,8 @@ final class OptionsTests: XCTestCase {
         XCTAssertEqual(c.rules[1].ignoreRegions, [[0, 0, 16, 4]])
         XCTAssertNil(c.rules[2].tolerance)
         XCTAssertEqual(try Options.parse(["--config", path, "record", "--baseline-directory", "b2", "--report-directory", "r2"]).baselineDirectory, "b2")
+        // Given twice (the GitHub Action's default, then the user's), the last wins.
+        XCTAssertEqual(try Options.parse(["--config", path, "verify", "--report-directory", "r1", "--report-directory", "r2"]).reportDirectory, "r2")
         // Defaults.
         let d = try Options.parse(["--config", config("{}"), "verify", "--output", "out"])
         XCTAssertEqual(d.baselineDirectory, "screenshots-baseline")

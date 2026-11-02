@@ -472,6 +472,8 @@ class OptionsTest {
         val flags = parse("verify", "--baseline-directory", "b", "--report-directory", "r")
         assertEquals(File("b").absoluteFile, flags.baselineDir(flutter = false))
         assertEquals(File("r").absoluteFile, flags.reportDir(flutter = false))
+        // Given twice (the GitHub Action's default, then the user's), the last wins.
+        assertEquals(File("r2").absoluteFile, parse("verify", "--report-directory", "r1", "--report-directory", "r2").reportDir(flutter = false))
         // The report defaults next to the output.
         config("""{"output_directory": "shots"}""")
         assertEquals(File(dir, "shots-report"), parse("verify").reportDir(flutter = false))

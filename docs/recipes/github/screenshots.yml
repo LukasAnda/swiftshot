@@ -1,0 +1,24 @@
+# Screenshot tests on every pull request: compares against the committed baseline, comments the
+# result on the pull request, posts the "swiftshot" commit status and uploads the report.
+# iOS needs a Mac runner (e.g. macos-latest); for Android or Compose use ubuntu-latest and add
+# actions/setup-java (Temurin 21) before the swiftshot step.
+name: screenshots
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: LukasAnda/swiftshot@v0.9.0
+        with:
+          command: verify
+        env:
+          SWIFTSHOT_HOST_TOKEN: ${{ secrets.GITHUB_TOKEN }}
