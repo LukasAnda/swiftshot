@@ -561,6 +561,17 @@ final class AcceptTests: XCTestCase {
         XCTAssertEqual(try status(), "")
     }
 
+    func testPushFromDetachedOnAGithubCommentRefuses() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        try git(repo, "checkout", "-q", "--detach")
+        // An issue_comment run's GITHUB_REF_NAME is the default branch, never the pull request's.
+        let comment = ["GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "issue_comment", "GITHUB_REF_NAME": "main", "GITHUB_REF_TYPE": "branch"]
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: comment), 1)
+        XCTAssertTrue(errors.contains("HEAD is detached and no branch is known; pass --branch <the pull request branch>"), errors)
+        XCTAssertEqual(try status(), "")
+    }
+
     func testBranchFlagWins() throws {
         try repoWith("changed-pixels")
         try remote()
@@ -587,15 +598,42 @@ final class AcceptTests: XCTestCase {
         try git(repo, "remote", "add", "origin", "http://127.0.0.1:\(server.port)/owner/repo.git")
         let token = "tok-s3cret"
         let b64 = Data("x-access-token:\(token)".utf8).base64EncodedString()
-        // With redaction off, git traces the request headers, extraHeader included.
+        // With redaction off, git traces the request headers, extraHeader included. A GIT_CONFIG_* setting of the
+        // CI's own stays in force next to the header.
+        let ciConfig = ["GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.userAgent", "GIT_CONFIG_VALUE_0": "ci-agent"]
         XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: ["SWIFTSHOT_GIT_HOST": "github", "SWIFTSHOT_HOST_TOKEN": token],
-                              extraGit: ["GIT_TRACE_CURL": "1", "GIT_TRACE_REDACT": "0"]), 1)
+                              extraGit: ["GIT_TRACE_CURL": "1", "GIT_TRACE_REDACT": "0"].merging(ciConfig) { $1 }), 1)
         XCTAssertFalse(server.authorizations.isEmpty)
         XCTAssertTrue(server.authorizations.allSatisfy { $0 == "Basic \(b64)" }, "\(server.authorizations)")
+        XCTAssertTrue(!server.requests.isEmpty && server.requests.allSatisfy { $0["user-agent"] == "ci-agent" }, "\(server.requests)")
         XCTAssertTrue(errors.contains("git push origin HEAD failed"), errors)
         for secret in [token, b64] { XCTAssertFalse(errors.contains(secret), "output has \(secret)") }
         XCTAssertTrue(errors.contains("***"), errors)
         XCTAssertFalse(try String(contentsOf: repo.appendingPathComponent(".git/config"), encoding: .utf8).contains(token))
+    }
+
+    func testPushHeaderGoesInTheEnvironmentNotTheCommandLine() {
+        let header = "Authorization: Basic c2VjcmV0"
+        let (args, env) = Accept.pushCommand(["origin", "HEAD:refs/heads/x"], header: header, processEnv: [:])
+        XCTAssertEqual(args, ["push", "origin", "HEAD:refs/heads/x"])
+        XCTAssertFalse(args.contains { $0.contains("c2VjcmV0") })
+        XCTAssertEqual(env, ["GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.extraHeader", "GIT_CONFIG_VALUE_0": header])
+        // The CI's own GIT_CONFIG_* entries stay; the header goes after them.
+        XCTAssertEqual(Accept.pushCommand(["origin", "HEAD"], header: header, processEnv: ["GIT_CONFIG_COUNT": "2"]).env,
+                       ["GIT_CONFIG_COUNT": "3", "GIT_CONFIG_KEY_2": "http.extraHeader", "GIT_CONFIG_VALUE_2": header])
+        let plain = Accept.pushCommand(["origin", "HEAD"], header: nil, processEnv: ["GIT_CONFIG_COUNT": "2"])
+        XCTAssertEqual(plain.args, ["push", "origin", "HEAD"])
+        XCTAssertEqual(plain.env, [:])
+    }
+
+    func testTokenWithANonHttpsRemoteWarnsAndPushesPlainly() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        let token = "tok-s3cret"
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: ["SWIFTSHOT_GIT_HOST": "github", "SWIFTSHOT_HOST_TOKEN": token]), 0, errors)
+        XCTAssertEqual(try git(bare, "rev-parse", "main"), try head())
+        XCTAssertEqual(errors.components(separatedBy: "SWIFTSHOT_HOST_TOKEN is not used: origin is not an https remote").count, 2, errors)
+        XCTAssertFalse(errors.contains(token))
     }
 
     func testArtifactAuthHeaderPerHost() {
@@ -660,7 +698,11 @@ final class AcceptTests: XCTestCase {
         XCTAssertEqual(o.only, ["x", "y", "z"])
         XCTAssertTrue(o.push)
         XCTAssertEqual(o.author, "A <a@b.c>")
-        XCTAssertEqual(try Options.parse(["--config", config.path, "accept", "--from", "a", "--branch", "pr"]).branch, "pr")
+        XCTAssertEqual(try Options.parse(["--config", config.path, "accept", "--from", "a", "--push", "--branch", "pr"]).branch, "pr")
+        XCTAssertThrowsError(try Options.parse(["--config", config.path, "accept", "--from", "a", "--branch", "pr"])) {
+            XCTAssertTrue($0 is UsageError)
+            XCTAssertEqual("\($0)", "--branch needs --push")
+        }
         XCTAssertThrowsError(try Options.parse(["--config", config.path, "accept"])) { XCTAssertTrue($0 is UsageError) }
         XCTAssertThrowsError(try Options.parse(["--config", config.path, "run", "--push"]))
     }

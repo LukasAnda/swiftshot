@@ -384,7 +384,10 @@ class Options {
     private fun validate() {
         if (command in setOf("frame", "calibrate", "emit-table")) throw CliError("`swiftshot $command` is part of the iOS tool and needs a Mac with Xcode.")
         require(command in setOf("run", "verify", "record", "list", "devices", "init", "auto-setup", "emit-devices", "accept")) { "Unknown command \"$command\"" }
-        if (command == "accept") { if (from.isEmpty()) throw UsageError("accept needs --from <report directory, .zip or URL>") }
+        if (command == "accept") {
+            if (from.isEmpty()) throw UsageError("accept needs --from <report directory, .zip or URL>")
+            if (branch != null && !push) throw UsageError("--branch needs --push")
+        }
         else require(from.isEmpty() && only == null && !push && author == null && branch == null) { "--from, --only, --push, --author and --branch are for accept" }
         if (command == "verify" || command == "record") {
             if (format != "png") throw UsageError("$command compares plain PNG screenshots; --format $format can't be used with it (drop --format, or use run).")

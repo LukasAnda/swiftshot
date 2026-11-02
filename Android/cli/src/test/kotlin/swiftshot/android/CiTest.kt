@@ -16,7 +16,7 @@ class CiTest {
 
     @Test fun everyFixtureCaseMatches() {
         val cases = root.listFiles { f -> f.name.endsWith(".json") }!!.sortedBy { it.name }
-        assertEquals(20, cases.size, "fixture cases")
+        assertEquals(22, cases.size, "fixture cases")
         val problems = mutableListOf<String>()
         for (f in cases) {
             val case = Json.parse(f.readText()) as Map<*, *>

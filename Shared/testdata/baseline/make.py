@@ -624,7 +624,7 @@ def verify(case):
 MARKER = "<!-- swiftshot -->"
 HEADINGS = {"passed": "Screenshots match the baseline", "failed": "Screenshots differ from the baseline", "error": "Screenshot run had errors"}
 HINTS = {
-    "github": "Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> \u2026` for some.",
+    "github": "Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.",
     "gitlab": "Run the manual `swiftshot-accept` job in this pipeline to accept the changes.",
     "bitbucket": "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.",
     "bitrise": "Run the `swiftshot-accept` workflow on this branch to accept the changes.",
@@ -721,7 +721,9 @@ def ci_detect(env, files):
             return o if isinstance(o, str) and o else None
         number = pull.get("number")
         head, base = dig(pull, "head", "repo", "full_name"), dig(pull, "base", "repo", "full_name")
-        return done("github", first(dig(pull, "head", "sha"), g("GITHUB_SHA")), first(g("GITHUB_HEAD_REF"), g("GITHUB_REF_NAME")),
+        # GITHUB_REF_NAME is a branch to push to only on a push of a branch (an issue comment's is the default branch).
+        pushed = g("GITHUB_EVENT_NAME") == "push" and g("GITHUB_REF_TYPE") != "tag"
+        return done("github", first(dig(pull, "head", "sha"), g("GITHUB_SHA")), first(g("GITHUB_HEAD_REF"), g("GITHUB_REF_NAME") if pushed else None),
                     str(number) if isinstance(number, int) and not isinstance(number, bool) else None,
                     head != base if head and base else None,
                     join("%s/%s/actions/runs/%s", "GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"),

@@ -47,7 +47,7 @@ detached and the CI doesn't say.
 
 | variable | |
 |---|---|
-| `SWIFTSHOT_HOST_TOKEN` | a token for the git host (GitHub, GitLab, Bitbucket): posts the comment, and pushes over `https` |
+| `SWIFTSHOT_HOST_TOKEN` | a token for the git host (GitHub, GitLab, Bitbucket): posts the comment, and pushes to an `https` remote |
 | `SWIFTSHOT_ARTIFACT_TOKEN` | a token to download the `--from` URL; sent only to that URL's host |
 | `SWIFTSHOT_ARTIFACT_HEADER` | the header to send it in, `Name: value` with `{token}` in the value, e.g. `PRIVATE-TOKEN: {token}`; default per host |
 | `SWIFTSHOT_GIT_HOST` | `github`, `gitlab` or `bitbucket`, when the remote's host isn't one of the usual |
@@ -63,8 +63,8 @@ stays as above.
 | | `verify` | `record` | `accept` |
 |---|---|---|---|
 | 0 | no differences | recorded | applied, or nothing to apply |
-| 1 | differences | | refused (the report isn't from this commit) |
-| 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | |
+| 1 | differences | | refused (the report isn't from this commit, or `--push` can't push) |
+| 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | interrupted |
 | 64 | wrong option or config | wrong option or config | wrong option, or not a valid report |
 
 ## Where files go

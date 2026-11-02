@@ -5,6 +5,7 @@
     "GITHUB_EVENT_PATH": "/home/runner/work/_temp/_github_workflow/event.json",
     "GITHUB_REF": "refs/heads/main",
     "GITHUB_REF_NAME": "main",
+    "GITHUB_REF_TYPE": "branch",
     "GITHUB_REPOSITORY": "acme/app",
     "GITHUB_RUN_ID": "9876543210",
     "GITHUB_SERVER_URL": "https://github.com",

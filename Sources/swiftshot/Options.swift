@@ -438,6 +438,7 @@ struct Options: Codable {
         let command = options.command
         if command == "accept" {
             if options.from.isEmpty { throw UsageError("accept needs --from <report directory, .zip or URL>") }
+            if options.branch != nil && !options.push { throw UsageError("--branch needs --push") }
         } else if !options.from.isEmpty || options.only != nil || options.push || options.author != nil || options.branch != nil {
             throw UsageError("--from, --only, --push, --author and --branch are for accept")
         }

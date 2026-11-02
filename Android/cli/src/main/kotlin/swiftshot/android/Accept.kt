@@ -130,9 +130,9 @@ object Accept {
             "--author", "${identity.first} <${identity.second}>", "-m", summary, "-m", trailers, "--pathspec-from-file=-", "--pathspec-file-nul", input = staged.joinToString("\u0000") { ":(literal)$it" })
         val commit = git.out("rev-parse", "HEAD")
         val header = pushHeader(git, target[0], env, log)
-        val pushGit = if (header == null) git else Git(File(top), gitEnv, secrets(header, v("SWIFTSHOT_HOST_TOKEN")))
-        // The header goes on this one command (-c), never into the git config.
-        val pushed = pushGit.run(*(if (header == null) emptyArray() else arrayOf("-c", "http.extraHeader=$header")), "push", *target.toTypedArray())
+        val (args, headerEnv) = pushCommand(target, header, System.getenv() + gitEnv)
+        val pushGit = if (header == null) git else Git(File(top), gitEnv + headerEnv, secrets(header, v("SWIFTSHOT_HOST_TOKEN")))
+        val pushed = pushGit.run(*args.toTypedArray())
         if (pushed.code != 0) throw Refused("Committed $commit, but git push ${target.joinToString(" ")} failed:\n${pushed.err.trim()}")
         log.ok("Committed $commit and pushed to ${target.joinToString(" ")}")
         return 0
@@ -156,12 +156,29 @@ object Accept {
         }
     }
 
-    /** The `http.extraHeader` for pushing to [remote] with `SWIFTSHOT_HOST_TOKEN`; null when there is no token or the remote isn't https (or this machine). */
+    /**
+     * `git push` [target] and the environment that carries [header] to that one command: `GIT_CONFIG_*` entries after
+     * any [processEnv] already has, so the token is never on git's command line or in the git config.
+     */
+    internal fun pushCommand(target: List<String>, header: String?, processEnv: Map<String, String>): Pair<List<String>, Map<String, String>> {
+        val args = listOf("push") + target
+        if (header == null) return args to emptyMap()
+        val n = processEnv["GIT_CONFIG_COUNT"]?.toIntOrNull()?.takeIf { it >= 0 } ?: 0
+        return args to mapOf("GIT_CONFIG_COUNT" to "${n + 1}", "GIT_CONFIG_KEY_$n" to "http.extraHeader", "GIT_CONFIG_VALUE_$n" to header)
+    }
+
+    /**
+     * The `http.extraHeader` for pushing to [remote] with `SWIFTSHOT_HOST_TOKEN`; null when there is no token, or (with
+     * a warning) when the remote isn't https (or this machine) or its host is unknown.
+     */
     private fun pushHeader(git: Git, remote: String, env: Map<String, String>, log: Log): String? {
         val token = env["SWIFTSHOT_HOST_TOKEN"]?.takeIf { it.isNotEmpty() } ?: return null
-        val url = git.out("remote", "get-url", "--push", remote) ?: return null
-        val uri = runCatching { URI(url) }.getOrNull()
-        if (uri == null || !(uri.scheme.equals("https", true) || uri.scheme.equals("http", true) && uri.host?.lowercase() in LOOPBACK)) return null
+        val url = git.out("remote", "get-url", "--push", remote)
+        val uri = url?.let { runCatching { URI(it) }.getOrNull() }
+        if (url == null || uri == null || !(uri.scheme.equals("https", true) || uri.scheme.equals("http", true) && uri.host?.lowercase() in LOOPBACK)) {
+            log.warn("SWIFTSHOT_HOST_TOKEN is not used: $remote is not an https remote (a token push needs one)")
+            return null
+        }
         val host = Host.detect(url, env)
         if (host == null) log.warn("SWIFTSHOT_HOST_TOKEN is not used: the git host of $remote is unknown (set SWIFTSHOT_GIT_HOST to github, gitlab or bitbucket)")
         return host?.pushHeader(token, env["CI_JOB_TOKEN"]?.takeIf { it.isNotEmpty() })

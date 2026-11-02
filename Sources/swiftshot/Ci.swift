@@ -109,7 +109,9 @@ struct Ci: Equatable {
             repository = "\(server)/\(repo)"
             if let run = v("GITHUB_RUN_ID") { url = "\(server)/\(repo)/actions/runs/\(run)" }
         }
-        return Ci(provider: "github", commit: text(pull?["head"]?["sha"]) ?? v("GITHUB_SHA"), branch: v("GITHUB_HEAD_REF") ?? v("GITHUB_REF_NAME"),
+        // GITHUB_REF_NAME is a branch to push to only on a push of a branch (an issue comment's is the default branch).
+        let pushed = v("GITHUB_EVENT_NAME") == "push" && v("GITHUB_REF_TYPE") != "tag"
+        return Ci(provider: "github", commit: text(pull?["head"]?["sha"]) ?? v("GITHUB_SHA"), branch: v("GITHUB_HEAD_REF") ?? (pushed ? v("GITHUB_REF_NAME") : nil),
                   pullRequest: number, fork: head != nil && base != nil ? head != base : nil, buildUrl: url, repository: repository,
                   isCi: true, warnings: warnings)
     }

@@ -54,10 +54,11 @@ baseline entry), or when it rendered nothing but would remove baseline images (t
 changes); else 0. baseline.json is written last (temp file, then rename).
 
 `accept`: 0 applied (or nothing to apply), 1 refused (the report's commit isn't HEAD and a commit
-other than an `accept` commit followed it, or `git push` failed), 64 usage error or invalid report
-(also: an `--only` id the reports don't list, the same id with different content in two reports, a
-zip entry leaving the report or a symbolic link, a damaged zip, a `--from` that can't be read, a
-malformed manifest.json, result.json or baseline.json). Interrupted: 2.
+other than an `accept` commit followed it, `--push` from a fork's pull request, `--push` with HEAD
+detached and no branch known, or `git push` failed), 64 usage error or invalid report (also: an
+`--only` id the reports don't list, the same id with different content in two reports, a zip entry
+leaving the report or a symbolic link, a damaged zip, a `--from` that can't be read, a malformed
+manifest.json, result.json or baseline.json, `--branch` without `--push`). Interrupted: 2.
 
 ## Serialization
 
@@ -305,7 +306,7 @@ value counts as unset.
 
 | provider | detected when | commit (first non-empty) | branch | pullRequest | fork | buildUrl | repository |
 |---|---|---|---|---|---|---|---|
-| `github` | `GITHUB_ACTIONS=true` | `pull_request.head.sha` of the JSON file at `GITHUB_EVENT_PATH`, else `GITHUB_SHA` | `GITHUB_HEAD_REF`, else `GITHUB_REF_NAME` | `pull_request.number` of that file | `pull_request.head.repo.full_name` differs from `pull_request.base.repo.full_name` (both present) | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID` | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY` |
+| `github` | `GITHUB_ACTIONS=true` | `pull_request.head.sha` of the JSON file at `GITHUB_EVENT_PATH`, else `GITHUB_SHA` | `GITHUB_HEAD_REF`, else `GITHUB_REF_NAME` when `GITHUB_EVENT_NAME` is `push` and `GITHUB_REF_TYPE` isn't `tag` | `pull_request.number` of that file | `pull_request.head.repo.full_name` differs from `pull_request.base.repo.full_name` (both present) | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID` | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY` |
 | `gitlab` | `GITLAB_CI=true` | `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`, else `CI_COMMIT_SHA` | `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, else `CI_COMMIT_BRANCH` | `CI_MERGE_REQUEST_IID` | `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` differs from `CI_MERGE_REQUEST_PROJECT_ID` (both set) | `CI_JOB_URL` | `CI_PROJECT_URL` |
 | `bitbucket` | `BITBUCKET_BUILD_NUMBER` set | `BITBUCKET_COMMIT` | `BITBUCKET_BRANCH` | `BITBUCKET_PR_ID` | `false` on a pull request (fork pull requests run no pipeline), else `null` | `$BITBUCKET_GIT_HTTP_ORIGIN/pipelines/results/$BITBUCKET_BUILD_NUMBER` | `BITBUCKET_GIT_HTTP_ORIGIN` |
 | `bitrise` | `BITRISE_IO=true` | `BITRISE_GIT_COMMIT`, else `GIT_CLONE_COMMIT_HASH` | `BITRISE_GIT_BRANCH` | `BITRISE_PULL_REQUEST` | `BITRISEIO_PULL_REQUEST_REPOSITORY_URL` differs from `GIT_REPOSITORY_URL` (both set) | `BITRISE_BUILD_URL` | `GIT_REPOSITORY_URL` |
@@ -467,9 +468,13 @@ directory or be a symbolic link, at most 2 GB extracted.
   --branch <the pull request branch>`. When the CI says the pull request comes from a fork (`ci.fork`
   is true), exit 1 before anything is written: `This pull request comes from a fork; download the
   report and run swiftshot accept --from <report> in the fork`. With `SWIFTSHOT_HOST_TOKEN` set and an
-  `https` push remote (see "Git host" for the header) the push is `git -c http.extraHeader=… push`:
-  the header is on that command only, never in the git config, and the token, its base64 form and the
-  header are replaced with `***` in git's output and in the refusal message.
+  `https` push remote (or `http` to this machine; see "Git host" for the header) the header goes to
+  `git push` alone, in its environment (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>=http.extraHeader`,
+  `GIT_CONFIG_VALUE_<n>`, after any `GIT_CONFIG_*` entries already set): never on git's command line
+  or in the git config, and the token, its base64 form and the header are replaced with `***` in
+  git's output and in the refusal message. A token push needs an `https` remote: with an `ssh`, `scp`-style
+  or other remote, one warning `SWIFTSHOT_HOST_TOKEN is not used: <remote> is not an https remote (a
+  token push needs one)` and a plain `git push` with git's own credentials.
   Nothing to apply, or none of those files changed: no commit.
 
 ## junit.xml
@@ -521,7 +526,7 @@ text). UTF-8, `\n` line ends, one final `\n`. Blocks are separated by one blank 
 
 [Full report](https://github.com/acme/app/actions/runs/9876543210)
 
-Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.
+Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.
 ```
 
 - Heading by `status`: `passed` "Screenshots match the baseline", `failed` "Screenshots differ from
@@ -535,7 +540,7 @@ Comment `/swiftshot accept` on this pull request to accept every change, or `/sw
   and a backtick `'`. Omitted when there are no rows. Errors without id have no row (see the counts).
 - `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table.
 - Accept hint, `failed` only, last. By `ci.provider`; `null` or unknown gets the last text:
-  - `github`: Comment `/swiftshot accept` on this pull request to accept every change, or `/swiftshot accept <id> …` for some.
+  - `github`: Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.
   - `gitlab`: Run the manual `swiftshot-accept` job in this pipeline to accept the changes.
   - `bitbucket`: Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.
   - `bitrise`: Run the `swiftshot-accept` workflow on this branch to accept the changes.
@@ -583,14 +588,16 @@ repository containing the project directory (`https://[user@]host[:port]/a/b[.gi
 | `bitbucket` | `bitbucket.org` | `https://api.bitbucket.org/2.0` | `Authorization: Bearer <t>`, or `Basic base64(<t>)` when `<t>` contains `:` (`email:api-token`) |
 
 `SWIFTSHOT_GIT_HOST` (`github`, `gitlab`, `bitbucket`) names the host kind, and `SWIFTSHOT_HOST_API` the
-API base, when the remote doesn't say (`SWIFTSHOT_HOST` is the renderer host of the fingerprint and is
-not used here). A GitLab project path keeps its subgroups and is URL-encoded in API paths. An unknown
+API base; when set, each wins over what the remote says (`SWIFTSHOT_HOST` is the renderer host of the
+fingerprint and is not used here). A GitLab project path keeps its subgroups and is URL-encoded in API paths. An unknown
 host sends nothing and prints one line (never the token). A GitLab job token can't write notes: use a
 project or personal access token with the `api` scope.
 
 The comment body is exactly `summary.md`, whose first line is `<!-- swiftshot -->`. The first comment
 whose text starts with that line is updated (GitHub `PATCH`, GitLab and Bitbucket `PUT`); else one is
-created. At most 10 pages of 100 comments are read.
+created. At most 10 pages of 100 comments are read: GitHub and GitLab go on while a page has 100,
+Bitbucket while its page has `next`. A comment whose `id` isn't a whole number that fits 64 bits is
+skipped.
 
 | host | list and create | update | text |
 |---|---|---|---|
@@ -601,7 +608,8 @@ created. At most 10 pages of 100 comments are read.
 The token is sent only over `https` (or to this machine) and never along a redirect: a 3xx is a
 failure, not followed. Any failure (a status other than 2xx, no reply, a reply that isn't the expected
 JSON, a non-https API) is one warning, `couldn't comment on the pull request (<host> <status>)`
-where status is the code, `no response` or `https only`; no reply body is printed and the exit code
+where status is the code, `no response`, `https only` or `invalid pull request` (`ci.pullRequest`
+isn't 1 to 18 digits); no reply body is printed and the exit code
 stays as it was.
 
 For `git push` (`accept --push`) the same token goes in `http.extraHeader`, never in a URL:

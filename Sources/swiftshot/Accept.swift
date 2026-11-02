@@ -123,9 +123,9 @@ enum Accept {
                          "--pathspec-from-file=-", "--pathspec-file-nul", input: staged.map { ":(literal)" + $0 }.joined(separator: "\0"))
         let commit = git.out("rev-parse", "HEAD") ?? "?"
         let header = pushHeader(git, remote: target[0], env: env, log: log)
-        let pushGit = header == nil ? git : Git(dir: URL(fileURLWithPath: top), env: gitEnv, secrets: secrets(header!, v("SWIFTSHOT_HOST_TOKEN")))
-        // The header goes on this one command (-c), never into the git config.
-        let pushed = pushGit.run((header.map { ["-c", "http.extraHeader=\($0)"] } ?? []) + ["push"] + target)
+        let command = pushCommand(target, header: header, processEnv: ProcessInfo.processInfo.environment.merging(gitEnv) { $1 })
+        let pushGit = header == nil ? git : Git(dir: URL(fileURLWithPath: top), env: gitEnv.merging(command.env) { $1 }, secrets: secrets(header!, v("SWIFTSHOT_HOST_TOKEN")))
+        let pushed = pushGit.run(command.args)
         if pushed.code != 0 { throw Refused(description: "Committed \(commit), but git push \(target.joined(separator: " ")) failed:\n\(pushed.err.trimmingCharacters(in: .whitespacesAndNewlines))") }
         log.ok("Committed \(commit) and pushed to \(target.joined(separator: " "))")
         return 0
@@ -147,11 +147,24 @@ enum Accept {
         throw Refused(description: "HEAD is detached and no branch is known; pass --branch <the pull request branch>")
     }
 
-    /// The `http.extraHeader` for pushing to `remote` with `SWIFTSHOT_HOST_TOKEN`; nil when there is no token or the remote isn't https (or this machine).
+    /// `git push` `target` and the environment that carries `header` to that one command: `GIT_CONFIG_*` entries after
+    /// any `processEnv` already has, so the token is never on git's command line or in the git config.
+    static func pushCommand(_ target: [String], header: String?, processEnv: [String: String]) -> (args: [String], env: [String: String]) {
+        let args = ["push"] + target
+        guard let header else { return (args, [:]) }
+        let n = processEnv["GIT_CONFIG_COUNT"].flatMap { Int($0) }.flatMap { $0 >= 0 ? $0 : nil } ?? 0
+        return (args, ["GIT_CONFIG_COUNT": "\(n + 1)", "GIT_CONFIG_KEY_\(n)": "http.extraHeader", "GIT_CONFIG_VALUE_\(n)": header])
+    }
+
+    /// The `http.extraHeader` for pushing to `remote` with `SWIFTSHOT_HOST_TOKEN`; nil when there is no token, or (with
+    /// a warning) when the remote isn't https (or this machine) or its host is unknown.
     private static func pushHeader(_ git: Git, remote: String, env: [String: String], log: Console) -> String? {
-        guard let token = env["SWIFTSHOT_HOST_TOKEN"], !token.isEmpty, let url = git.out("remote", "get-url", "--push", remote),
-              let u = URL(string: url), let scheme = u.scheme?.lowercased() else { return nil }
-        guard scheme == "https" || (scheme == "http" && Download.loopback.contains((u.host ?? "").lowercased())) else { return nil }
+        guard let token = env["SWIFTSHOT_HOST_TOKEN"], !token.isEmpty else { return nil }
+        guard let url = git.out("remote", "get-url", "--push", remote), let u = URL(string: url), let scheme = u.scheme?.lowercased(),
+              scheme == "https" || (scheme == "http" && Download.loopback.contains((u.host ?? "").lowercased())) else {
+            log.warn("SWIFTSHOT_HOST_TOKEN is not used: \(remote) is not an https remote (a token push needs one)")
+            return nil
+        }
         guard let host = Host.detect(url, env: env) else {
             log.warn("SWIFTSHOT_HOST_TOKEN is not used: the git host of \(remote) is unknown (set SWIFTSHOT_GIT_HOST to github, gitlab or bitbucket)")
             return nil

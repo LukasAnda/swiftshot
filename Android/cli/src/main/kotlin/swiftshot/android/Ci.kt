@@ -99,7 +99,9 @@ data class Ci(
             val server = v("GITHUB_SERVER_URL")
             val repo = v("GITHUB_REPOSITORY")
             val run = v("GITHUB_RUN_ID")
-            return Ci("github", text(dig(pull, "head", "sha")) ?: v("GITHUB_SHA"), v("GITHUB_HEAD_REF") ?: v("GITHUB_REF_NAME"),
+            // GITHUB_REF_NAME is a branch to push to only on a push of a branch (an issue comment's is the default branch).
+            val pushed = v("GITHUB_EVENT_NAME") == "push" && v("GITHUB_REF_TYPE") != "tag"
+            return Ci("github", text(dig(pull, "head", "sha")) ?: v("GITHUB_SHA"), v("GITHUB_HEAD_REF") ?: v("GITHUB_REF_NAME")?.takeIf { pushed },
                 (dig(pull, "number") as? Long)?.toString(), if (head != null && base != null) head != base else null,
                 if (server != null && repo != null && run != null) "$server/$repo/actions/runs/$run" else null,
                 if (server != null && repo != null) "$server/$repo" else null, true, warnings)

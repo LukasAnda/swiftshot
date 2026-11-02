@@ -9,7 +9,7 @@ final class CiTests: XCTestCase {
 
     func testEveryFixtureCaseMatches() throws {
         let names = try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.hasSuffix(".json") }.sorted()
-        XCTAssertEqual(names.count, 20, "fixture cases")
+        XCTAssertEqual(names.count, 22, "fixture cases")
         var problems: [String] = []
         for name in names {
             let c = try readJSON(root.appendingPathComponent(name))

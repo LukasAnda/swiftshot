@@ -401,13 +401,16 @@ class AcceptTest {
         repoWith("changed-pixels")
         val data = zip(report("changed-pixels"), File(tmp, "report.zip")).readBytes()
         val seen = mutableListOf<String?>()
+        val agents = mutableListOf<String?>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/artifact.zip") { ex ->
             seen += ex.requestHeaders.getFirst("Authorization")
+            agents += ex.requestHeaders.getFirst("User-Agent")
             ex.sendResponseHeaders(200, data.size.toLong()); ex.responseBody.use { it.write(data) }
         }
         server.createContext("/redirect") { ex ->
             seen += ex.requestHeaders.getFirst("Authorization")
+            agents += ex.requestHeaders.getFirst("User-Agent")
             // Another host (localhost, not 127.0.0.1): the token stays behind.
             ex.responseHeaders.add("Location", "http://localhost:${server.address.port}/artifact.zip")
             ex.sendResponseHeaders(302, -1); ex.close()
@@ -440,7 +443,9 @@ class AcceptTest {
         assertEquals(setOf("x", "y", "z"), o.only)
         assertTrue(o.push)
         assertEquals("A <a@b.c>", o.author)
-        assertEquals("pr", Options.parse(listOf("accept", "--project-dir", dir.path, "--from", "a", "--branch", "pr")).branch)
+        assertEquals("pr", Options.parse(listOf("accept", "--project-dir", dir.path, "--from", "a", "--push", "--branch", "pr")).branch)
+        assertFailsWith<UsageError> { Options.parse(listOf("accept", "--project-dir", dir.path, "--from", "a", "--branch", "pr")) }
+        assertEquals(64, cli(listOf("accept", "--project-dir", dir.path, "--from", "a", "--branch", "pr"), Log(false)))
         assertEquals(64, cli(listOf("accept", "--project-dir", dir.path), Log(false)))
         assertFailsWith<IllegalArgumentException> { Options.parse(listOf("run", "--project-dir", dir.path, "--push")) }
     }
@@ -492,6 +497,17 @@ class AcceptTest {
         assertEquals("", clean())
     }
 
+    @Test fun pushFromDetachedOnAGithubCommentRefuses() {
+        repoWith("changed-pixels")
+        remote()
+        git(repo, "checkout", "-q", "--detach")
+        // An issue_comment run's GITHUB_REF_NAME is the default branch, never the pull request's.
+        val comment = mapOf("GITHUB_ACTIONS" to "true", "GITHUB_EVENT_NAME" to "issue_comment", "GITHUB_REF_NAME" to "main", "GITHUB_REF_TYPE" to "branch")
+        assertEquals(1, accept(report("changed-pixels"), push = true, env = comment))
+        assertContains(errors.toString(), "HEAD is detached and no branch is known; pass --branch <the pull request branch>")
+        assertEquals("", clean())
+    }
+
     @Test fun branchFlagWins() {
         repoWith("changed-pixels")
         remote()
@@ -515,9 +531,11 @@ class AcceptTest {
     @Test fun pushFailureHidesToken() {
         repoWith("changed-pixels")
         val seen = mutableListOf<String?>()
+        val agents = mutableListOf<String?>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { ex ->
             seen += ex.requestHeaders.getFirst("Authorization")
+            agents += ex.requestHeaders.getFirst("User-Agent")
             ex.sendResponseHeaders(403, -1); ex.close()
         }
         server.start()
@@ -525,10 +543,13 @@ class AcceptTest {
             git(repo, "remote", "add", "origin", "http://127.0.0.1:${server.address.port}/owner/repo.git")
             val token = "tok-s3cret"
             val b64 = java.util.Base64.getEncoder().encodeToString("x-access-token:$token".toByteArray())
-            // With redaction off, git traces the request headers, extraHeader included.
-            assertEquals(1, accept(report("changed-pixels"), push = true, extraGit = mapOf("GIT_TRACE_CURL" to "1", "GIT_TRACE_REDACT" to "0"),
+            // With redaction off, git traces the request headers, extraHeader included. A GIT_CONFIG_* setting of
+            // the CI's own stays in force next to the header.
+            val ciConfig = mapOf("GIT_CONFIG_COUNT" to "1", "GIT_CONFIG_KEY_0" to "http.userAgent", "GIT_CONFIG_VALUE_0" to "ci-agent")
+            assertEquals(1, accept(report("changed-pixels"), push = true, extraGit = mapOf("GIT_TRACE_CURL" to "1", "GIT_TRACE_REDACT" to "0") + ciConfig,
                 env = mapOf("SWIFTSHOT_GIT_HOST" to "github", "SWIFTSHOT_HOST_TOKEN" to token)))
             assertTrue(seen.isNotEmpty() && seen.all { it == "Basic $b64" }, "the header reached the server: $seen")
+            assertTrue(agents.isNotEmpty() && agents.all { it == "ci-agent" }, "the CI's config reached the server: $agents")
             val out = errors.toString()
             assertContains(out, "git push origin HEAD failed")
             for (secret in listOf(token, b64)) assertFalse(secret in out, "output has $secret")
@@ -537,6 +558,29 @@ class AcceptTest {
         } finally {
             server.stop(0)
         }
+    }
+
+    @Test fun pushHeaderGoesInTheEnvironmentNotTheCommandLine() {
+        val header = "Authorization: Basic c2VjcmV0"
+        val (args, env) = Accept.pushCommand(listOf("origin", "HEAD:refs/heads/x"), header, emptyMap())
+        assertEquals(listOf("push", "origin", "HEAD:refs/heads/x"), args)
+        assertFalse(args.any { "c2VjcmV0" in it })
+        assertEquals(mapOf("GIT_CONFIG_COUNT" to "1", "GIT_CONFIG_KEY_0" to "http.extraHeader", "GIT_CONFIG_VALUE_0" to header), env)
+        // The CI's own GIT_CONFIG_* entries stay; the header goes after them.
+        assertEquals(mapOf("GIT_CONFIG_COUNT" to "3", "GIT_CONFIG_KEY_2" to "http.extraHeader", "GIT_CONFIG_VALUE_2" to header),
+            Accept.pushCommand(listOf("origin", "HEAD"), header, mapOf("GIT_CONFIG_COUNT" to "2")).second)
+        assertEquals(listOf("push", "origin", "HEAD") to emptyMap(), Accept.pushCommand(listOf("origin", "HEAD"), null, mapOf("GIT_CONFIG_COUNT" to "2")))
+    }
+
+    @Test fun tokenWithANonHttpsRemoteWarnsAndPushesPlainly() {
+        repoWith("changed-pixels")
+        remote()
+        val token = "tok-s3cret"
+        assertEquals(0, accept(report("changed-pixels"), push = true, env = mapOf("SWIFTSHOT_GIT_HOST" to "github", "SWIFTSHOT_HOST_TOKEN" to token)))
+        assertEquals(head(), git(bare, "rev-parse", "main"))
+        val out = errors.toString()
+        assertEquals(1, Regex("SWIFTSHOT_HOST_TOKEN is not used: origin is not an https remote").findAll(out).count(), out)
+        assertFalse(token in out)
     }
 
     @Test fun artifactAuthHeaderPerHost() {
