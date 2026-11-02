@@ -142,7 +142,7 @@ jobs:
           chmod +x "$RUNNER_TEMP/bin/swiftshot"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           (cd Example/AndroidDemo && tar cf - --exclude=./build --exclude='./*/build' --exclude=./.gradle --exclude=./.kotlin --exclude=./local.properties .) | (cd "$RUNNER_TEMP/action-demo" && tar xf -)
-          [ -f Example/AndroidDemo/local.properties ] && cp Example/AndroidDemo/local.properties "$RUNNER_TEMP/action-demo/" || true
+          if [ -f Example/AndroidDemo/local.properties ]; then cp Example/AndroidDemo/local.properties "$RUNNER_TEMP/action-demo/"; fi
       - name: Action record
         uses: ./
         with:
