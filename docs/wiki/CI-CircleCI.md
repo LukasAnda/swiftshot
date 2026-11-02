@@ -64,10 +64,6 @@ jobs:
       - run:
           name: Accept
           command: |
-            # With SWIFTSHOT_HOST_TOKEN the push goes over https (git@host:a/b becomes https://host/a/b).
-            if [ -n "${SWIFTSHOT_HOST_TOKEN:-}" ]; then
-              git remote set-url origin "$(echo "$CIRCLE_REPOSITORY_URL" | sed -E 's#^git@([^:]+):#https://\1/#')"
-            fi
             ~/.swiftshot/bin/swiftshot accept --from screenshots-report --push
 
 workflows:
@@ -90,14 +86,13 @@ approves `accept-screenshots` in the workflow view; `accept` then pushes the new
 ## Comment
 
 Set `SWIFTSHOT_HOST_TOKEN` as a project environment variable to post the pull request comment
-(GitHub: fine-grained, Pull requests write; GitLab: `api`; Bitbucket: `pullrequest`). It also
-pushes if you'd rather not add an SSH key (GitHub: Contents write; GitLab: `write_repository`;
-Bitbucket: `repository:write`): the Accept step then points `origin` at `https`, and you can drop
-`add_ssh_keys`.
+(GitHub: fine-grained, Pull requests write; GitLab: `api`; Bitbucket: `pullrequest`). It is not
+used for the push.
 
 ## Notes
 
-- CircleCI's checkout key is read-only, hence `add_ssh_keys`. The key must be added in the
+- CircleCI's checkout key is read-only, hence `add_ssh_keys`. The push stays on ssh: `checkout`
+  rewrites `https://github.com` to ssh globally, so a token can't push. The key must be added in the
   project settings; an environment variable can't hold it.
 - The approval only appears when verify failed, so a clean run never waits for a person
   (`requires` with a status is CircleCI's "flexible requires"). The workspace and the approval both
