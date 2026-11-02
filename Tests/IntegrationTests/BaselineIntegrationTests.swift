@@ -34,7 +34,13 @@ final class BaselineIntegrationTests: XCTestCase {
         // Real git: accept checks the report's commit against HEAD. The runner's file commands stay out of reach: a
         // run that plays GitHub must not write into this job's summary, outputs or environment.
         let hidden: Set<String> = ["SWIFTSHOT_COMMIT", "SWIFTSHOT_BRANCH", "GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_PATH", "GITHUB_STATE"]
-        p.environment = Self.env.filter { !hidden.contains($0.key) }.merging(extra) { $1 }
+        // The runner's CI variables (GITHUB_SHA, the real pull request event ...) must not leak in either: a run plays a
+        // CI only through `extra`. RUNNER_* stays.
+        let ciPrefixes = ["GITHUB_", "GITLAB_", "CI_", "BITBUCKET_", "BITRISE", "CM_", "CIRCLE", "TF_BUILD", "BUILD_", "SYSTEM_", "JENKINS_", "CHANGE_"]
+        let ciNames: Set<String> = ["CI", "SWIFTSHOT_CI", "GIT_COMMIT", "GIT_BRANCH", "GIT_URL", "BRANCH_NAME"]
+        p.environment = Self.env.filter { key, _ in
+            !hidden.contains(key) && !ciNames.contains(key) && !ciPrefixes.contains { key.hasPrefix($0) }
+        }.merging(extra) { $1 }
         let logURL = Self.work.appendingPathComponent("\(log).log")
         if !FileManager.default.fileExists(atPath: logURL.path) { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
         let handle = try FileHandle(forWritingTo: logURL)
