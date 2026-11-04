@@ -6,7 +6,7 @@ Works for iOS, Android, Compose Multiplatform and Flutter, with the same command
 ## Three commands
 
 ```
-swiftshot record                       # render and save the screenshots as the baseline
+swiftshot record                       # render and save the screenshots as the baseline (local use)
 swiftshot verify                       # render and compare with the baseline
 swiftshot accept --from <report>       # take the changes verify found into the baseline
 ```
@@ -15,23 +15,27 @@ swiftshot accept --from <report>       # take the changes verify found into the 
 `accept` renders nothing and takes its own: `--from`, `--only`, `--push`, `--author` (see
 [[Command line]]).
 
-1. **Record** once, and commit the `screenshots-baseline` folder.
-2. **Verify** after every change. It renders, compares and prints what changed:
+Baselines are recorded and accepted on CI, so the results are always the same. The flow:
+
+1. **Verify** on CI after every change. It renders, compares and prints what changed:
    ```
    changed  en-US/iPhone 17 Pro-Welcome  (5320 pixels)
    ! Verify failed: 9 unchanged, 1 changed, 0 added, 0 removed, 0 errors → screenshots-report
    ```
    For each changed screenshot, `screenshots-report/images` holds the old one (`baseline`), the
    new one (`new`) and the difference in red (`diff`).
-3. If the change is intended, **accept** it: `swiftshot accept --from screenshots-report`. It
-   renders nothing; it copies the new screenshots into the baseline. Commit the result.
+2. A person looks at the result and triggers **accept** on CI (a comment, a manual job or an
+   approval, see *On CI* below). `swiftshot accept --from <report> --push` renders nothing; it
+   copies the new screenshots into the baseline and commits them. A CI never accepts by itself.
+3. The first baseline is made the same way: with no baseline yet, `verify` reports every
+   screenshot as added (exit 1), and accept commits them with `baseline.json`.
 
-`accept` only takes a report made on the commit you are on. If you committed something else
+`accept` only takes a report made on the commit you are on. If something else was committed
 since, run `verify` again first.
 
-A baseline recorded on your own machine is marked as local, and `verify` reminds you of it. Fonts
-and rendering can differ slightly between machines, so the baseline is best recorded where verify
-runs; see *On CI* below.
+`swiftshot verify` also runs on your own machine to look at the results. Fonts and rendering can
+differ slightly between machines, so a local fingerprint can differ from CI's and `verify` says
+so. A baseline recorded locally (`swiftshot record`) is marked `local`; don't commit it.
 
 ## On CI
 
@@ -67,10 +71,12 @@ stays as above.
 | 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | interrupted |
 | 64 | wrong option or config | wrong option or config | wrong option, or not a valid report |
 
+`verify --json` prints the report's `result.json` to stdout and exits with the same codes, see [[Command line]].
+
 ## The report
 
-`verify` writes `screenshots-report/index.html`. Open it: it lists what changed, was added or
-removed, and what failed, and shows each screenshot side by side with its baseline, on a slider, or
+`verify` writes `<output_directory>-report/index.html` (`screenshots-report/index.html` by default).
+Open it: it lists what changed, was added or removed, and what failed, and shows each screenshot side by side with its baseline, on a slider, or
 as the differences. Tick what you want to keep and it builds the accept command, or on GitHub the
 comment to post. `j` and `k` move through the list; `1`, `2`, `3` switch the view. It needs no server
 and no network, so a downloaded report works too. `--no-html` leaves it out.

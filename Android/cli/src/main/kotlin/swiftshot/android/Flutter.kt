@@ -27,7 +27,8 @@ class Flutter(private val o: Options, private val log: Log) {
         for (p in previews.filter { it.private }) log.warn("${p.file.relativeTo(root)}:${p.line}: ${p.reference} is private; previews must be public")
         val public = previews.filter { !it.private }
         if (o.command == "list") {
-            for (p in public) println("  ${p.reference}  ${p.file.relativeTo(root)}:${p.line}  @${p.annotations.joinToString(" @")}")
+            if (o.json) JsonOutput.print(JsonOutput.list(public.map { it.reference }))
+            else for (p in public) println("  ${p.reference}  ${p.file.relativeTo(root)}:${p.line}  @${p.annotations.joinToString(" @")}")
             return 0
         }
         if (public.isEmpty()) throw CliError("No @Preview functions found in ${File(root, "lib")}.")

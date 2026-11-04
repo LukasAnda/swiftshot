@@ -1,7 +1,7 @@
 import Foundation
 
 /// A command line, start to exit status. verify and record: 0/1/2 as docs/wiki/Baseline-format.md says, 64 for
-/// usage errors; accept: 0 applied, 1 refused, 64 usage or invalid report; every other command 0 or 1.
+/// usage errors; accept: 0 applied, 1 refused, 2 interrupted, 64 usage or invalid report; every other command 0 or 1.
 enum Command {
     static func run(_ arguments: [String]) async -> Int32 {
         let baselineCommand = ["verify", "record", "accept"].contains(Options.command(arguments))
@@ -15,7 +15,7 @@ enum Command {
         case "accept":
             return Accept.run(from: options.from, only: options.only, push: options.push, author: options.author,
                               baseline: URL(fileURLWithPath: options.baselineDirectory), log: Console(),
-                              branch: options.branch, env: ProcessInfo.processInfo.environment)
+                              branch: options.branch, env: ProcessInfo.processInfo.environment, handleSignals: true)
         case "verify", "record":
             return await baseline(options)
         default:
@@ -44,8 +44,8 @@ enum Command {
 
     /// verify and record: the normal run into the output directory (PNG, no frames), then the comparison with the
     /// baseline or the recording into it. A run that fails as a whole (a build error) is a report with one error
-    /// without id: verify then exits 2 and reports no removals. `render` is the run (tests replace it).
-    static func baseline(_ options: Options, render: (Options) async throws -> Void = { try await Runner(options: $0).run() }) async -> Int32 {
+    /// without id: verify then exits 2 and reports no removals. With --json, verify writes the result.json it produced to `stdout` and prints nothing else there. `render` is the run (tests replace it).
+    static func baseline(_ options: Options, stdout: FileHandle = .standardOutput, render: (Options) async throws -> Void = { try await Runner(options: $0).run() }) async -> Int32 {
         let output = URL(fileURLWithPath: options.output).standardizedFileURL
         let report = output.appendingPathComponent("swiftshot-report.json")
         try? FileManager.default.removeItem(at: report)
@@ -58,12 +58,22 @@ enum Command {
         if !FileManager.default.fileExists(atPath: report.path) { try? Report.writeFailure(to: output.path, message: "the run wrote no report") }
         let baseline = URL(fileURLWithPath: options.baselineDirectory).standardizedFileURL
         let reportDir = URL(fileURLWithPath: options.reportPath)
+        // --json: everything verify prints goes to stderr; stdout gets the result.json this run wrote.
+        let json = options.json && options.command == "verify"
+        let console = Console(toStderr: json)
         do {
-            if options.command == "record" { return try Baseline.record(output: output, baseline: baseline, ci: Ci.detect(ProcessInfo.processInfo.environment).isCi, log: Console()) }
+            if options.command == "record" { return try Baseline.record(output: output, baseline: baseline, ci: Ci.detect(ProcessInfo.processInfo.environment).isCi, log: console) }
             let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             let processEnv = ProcessInfo.processInfo.environment
-            return try Baseline.verify(output: output, baseline: baseline, report: reportDir, config: CompareConfig.from(options),
-                                       env: BaselineEnv.detect(cwd, env: processEnv), log: Console(), processEnv: processEnv, projectDir: cwd, html: options.html)
+            let code = try Baseline.verify(output: output, baseline: baseline, report: reportDir, config: CompareConfig.from(options),
+                                           env: BaselineEnv.detect(cwd, env: processEnv), log: console, processEnv: processEnv,
+                                           out: json ? { FileHandle.standardError.write(Data(($0 + "\n").utf8)) } : { print($0) }, projectDir: cwd, html: options.html)
+            if json, let result = try? Data(contentsOf: reportDir.appendingPathComponent("result.json")) {
+                // A reader that closed early (`| head -1`) must not take the exit code along: no SIGPIPE, and a failed write is only logged.
+                signal(SIGPIPE, SIG_IGN)
+                do { try stdout.write(contentsOf: result) } catch { console.error("couldn't write the result to stdout: \(error.localizedDescription)") }
+            }
+            return code
         } catch {
             // No result: nothing of an earlier verify may stay behind to be read as this one's.
             if options.command == "verify" { try? BaselineReport.clear(reportDir) }

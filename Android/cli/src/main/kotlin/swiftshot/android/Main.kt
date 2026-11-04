@@ -1,6 +1,7 @@
 package swiftshot.android
 
 import java.io.File
+import java.io.PrintStream
 import java.util.Locale
 import kotlin.system.exitProcess
 
@@ -13,7 +14,7 @@ fun main(args: Array<String>) {
 }
 
 /** The exit status of a command line. verify and record: 0/1/2 as the baseline format says, 64 for usage errors. [render] is the run (tests replace it). */
-fun cli(args: List<String>, log: Log, render: (Options, Boolean) -> Unit = { o, flutter -> if (flutter) Flutter(o, log).run() else Runner(o, log).run() }): Int {
+fun cli(args: List<String>, log: Log, stdout: PrintStream = System.out, render: (Options, Boolean) -> Unit = { o, flutter -> if (flutter) Flutter(o, log).run() else Runner(o, log).run() }): Int {
     if (Options.command(args) in setOf("verify", "record", "accept")) {
         val o = try { Options.parse(args) } catch (e: Exception) {
             if (e !is CliError && e !is IllegalArgumentException && e !is IllegalStateException) throw e
@@ -23,7 +24,7 @@ fun cli(args: List<String>, log: Log, render: (Options, Boolean) -> Unit = { o, 
         if (o.command == "accept") return Accept.run(o.from, o.only, o.push, o.author, o.baselineDir(isFlutter(o)), log, o.branch, System.getenv())
         return try {
             o.notes.forEach(log::warn)
-            baselineCommand(o, log, render)
+            baselineCommand(o, log, stdout, render)
         } catch (e: CliError) {
             log.error(e.message ?: "failed"); 2
         } catch (e: IllegalArgumentException) {
@@ -36,7 +37,7 @@ fun cli(args: List<String>, log: Log, render: (Options, Boolean) -> Unit = { o, 
         val o = Options.parse(args)
         o.notes.forEach(log::warn)
         when (o.command) {
-            "devices" -> { devices(); 0 }
+            "devices" -> { devices(o); 0 }
             "init", "auto-setup" -> Init.run(o, o.force, log)
             "emit-devices" -> {
                 val jar = o.commandArgs.getOrNull(0) ?: "/Applications/Android Studio.app/Contents/plugins/android/lib/sdklib.jar"
@@ -61,7 +62,7 @@ private fun isFlutter(o: Options) = !File(o.projectDir, "gradlew").isFile && Flu
  * baseline or the recording into it. A run that fails as a whole (a build error) is a report with one error
  * without id: verify then exits 2 and reports no removals.
  */
-private fun baselineCommand(o: Options, log: Log, render: (Options, Boolean) -> Unit): Int {
+private fun baselineCommand(o: Options, log: Log, stdout: PrintStream, render: (Options, Boolean) -> Unit): Int {
     val flutter = isFlutter(o)
     val output = o.outputDir(flutter)
     File(output, "swiftshot-report.json").delete()
@@ -77,8 +78,13 @@ private fun baselineCommand(o: Options, log: Log, render: (Options, Boolean) -> 
     if (o.command == "record") return Baseline.record(output, baseline, Ci.detect(System.getenv()).isCi, log)
     val report = o.reportDir(flutter)
     val processEnv = System.getenv()
+    // --json: everything verify prints goes to stderr; stdout gets the result.json this run wrote.
+    val json = o.json && o.command == "verify"
     return try {
-        Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir), processEnv), log, processEnv, projectDir = File(o.projectDir), html = o.html)
+        val code = Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir), processEnv), log, processEnv,
+            out = if (json) System.err else System.out, projectDir = File(o.projectDir), html = o.html)
+        if (json) File(report, "result.json").takeIf { it.isFile }?.let { stdout.write(it.readBytes()); stdout.flush() }
+        code
     } catch (e: Exception) {
         // No result: nothing of an earlier verify may stay behind to be read as this one's.
         BaselineReport.clear(report)
@@ -89,7 +95,8 @@ private fun baselineCommand(o: Options, log: Log, render: (Options, Boolean) -> 
 /** An exception's message; one we didn't expect also says what it was. */
 private fun describe(e: Exception): String = if (e is CliError || e is IllegalArgumentException) e.message ?: "failed" else e.toString()
 
-private fun devices() {
+private fun devices(o: Options) {
+    if (o.json) { JsonOutput.print(JsonOutput.devices(JsonOutput.allDevices())); return }
     for ((type, list) in Devices.all.groupBy { it.type }) {
         println(type.replaceFirstChar { it.uppercase() })
         for (d in list) println(String.format(Locale.ROOT, "  %-34s %5d×%-5d px  %4d dpi  %5.0f×%-5.0f dp%s", d.name, d.width, d.height, d.density, d.widthDp, d.heightDp, if (d.round) "  round" else ""))

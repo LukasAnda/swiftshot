@@ -9,16 +9,18 @@ struct UsageError: Error, CustomStringConvertible {
 /// What verify, record and accept print: to the terminal, or (tests) collected in `text`.
 final class Console: @unchecked Sendable {
     private let capture: Bool
+    private let toStderr: Bool
     private let lock = NSLock()
     private var collected = ""
-    init(capture: Bool = false) { self.capture = capture }
+    /// `toStderr`: plain lines go to stderr too (--json keeps stdout for the document).
+    init(capture: Bool = false, toStderr: Bool = false) { self.capture = capture; self.toStderr = toStderr }
 
     var text: String { lock.lock(); defer { lock.unlock() }; return collected }
 
     func ok(_ s: String) { emit(s) { Log.success(s) } }
     func warn(_ s: String) { emit(s) { Log.warn(s) } }
     func error(_ s: String) { emit(s) { Log.failure(s) } }
-    func plain(_ s: String) { emit(s) { print(s) } }
+    func plain(_ s: String) { emit(s) { if toStderr { FileHandle.standardError.write(Data((s + "\n").utf8)) } else { print(s) } } }
 
     private func emit(_ s: String, _ show: () -> Void) {
         if capture { lock.lock(); collected += s + "\n"; lock.unlock() } else { show() }

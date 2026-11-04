@@ -7,6 +7,7 @@
 - [[Configuration]]
 - [[Command line]]
 - [[Screenshot testing]]
+- [[Agents]]
 - [[CI]]
   - [[GitHub Actions|CI-GitHub-Actions]]
   - [[GitLab|CI-GitLab]]

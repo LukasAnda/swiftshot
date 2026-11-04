@@ -26,7 +26,8 @@ final class BaselineIntegrationTests: XCTestCase {
 
     /// Runs a program in the project copy; its exit code and output (also appended to a log the CI job follows).
     @discardableResult
-    func exec(_ program: String, _ args: [String], log: String, env extra: [String: String] = [:]) throws -> (code: Int32, output: String) {
+    /// `stdoutFile`: stdout goes to that file instead of the output, which then holds stderr only.
+    func exec(_ program: String, _ args: [String], log: String, env extra: [String: String] = [:], stdoutFile: URL? = nil) throws -> (code: Int32, output: String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: program)
         p.arguments = args
@@ -47,6 +48,10 @@ final class BaselineIntegrationTests: XCTestCase {
         defer { try? handle.close() }
         handle.seekToEndOfFile()
         let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
+        if let stdoutFile {
+            FileManager.default.createFile(atPath: stdoutFile.path, contents: nil)
+            p.standardOutput = try FileHandle(forWritingTo: stdoutFile)
+        }
         try p.run()
         var data = Data()
         while case let chunk = pipe.fileHandleForReading.availableData, !chunk.isEmpty { data.append(chunk); handle.write(chunk) }
@@ -62,10 +67,10 @@ final class BaselineIntegrationTests: XCTestCase {
     }
 
     /// One device, language and appearance keep it quick; the comparison covers Welcome and Settings.
-    func swiftshot(_ command: String, report: String) throws -> (code: Int32, output: String) {
+    func swiftshot(_ command: String, report: String, extra: [String] = [], stdoutFile: URL? = nil) throws -> (code: Int32, output: String) {
         try exec(Self.tool, [command, "--devices", Self.device, "--ios", ParityAndPerformanceTests.ios, "--languages", "en-US", "--appearances", "light",
-                             "--previews", "Welcome,Settings", "--output", output.path, "--report-directory", Self.work.appendingPathComponent(report).path],
-                 log: command)
+                             "--previews", "Welcome,Settings", "--output", output.path, "--report-directory", Self.work.appendingPathComponent(report).path] + extra,
+                 log: command, stdoutFile: stdoutFile)
     }
 
     func json(_ url: URL) throws -> [String: Any] {
@@ -109,6 +114,15 @@ final class BaselineIntegrationTests: XCTestCase {
         try assertOverhead("report-same")
         let welcome = try screenshots("report-same").filter { $0["preview"] as? String == "Welcome" }.compactMap { $0["id"] as? String }
         XCTAssertFalse(welcome.isEmpty)
+
+        // verify --json: stdout is the run's result.json, byte for byte, and nothing else; the logs are on stderr.
+        let jsonOut = Self.work.appendingPathComponent("verify.stdout")
+        r = try swiftshot("verify", report: "report-json", extra: ["--json"], stdoutFile: jsonOut)
+        XCTAssertEqual(r.code, 0, "verify --json:\n\(r.output.suffix(4000))")
+        let written = try Data(contentsOf: Self.work.appendingPathComponent("report-json/result.json"))
+        XCTAssertEqual(try Data(contentsOf: jsonOut), written, "stdout is not result.json")
+        XCTAssertNotNil(try JSONSerialization.jsonObject(with: Data(contentsOf: jsonOut)))
+        XCTAssertTrue(r.output.contains("Verify passed"), "the summary is on stderr:\n\(r.output.suffix(2000))")
 
         // One colour in the copy: Welcome's second glow becomes blue.
         let file = project.appendingPathComponent("Sources/WelcomeView.swift")

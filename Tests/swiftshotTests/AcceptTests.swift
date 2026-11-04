@@ -64,6 +64,25 @@ final class AcceptTests: XCTestCase {
     func status() throws -> String { try git(repo, "status", "--porcelain") }
     func statusLines() throws -> Set<String> { Set(try status().split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }) }
 
+    func testInterruptedAcceptExitsTwoAndLeavesTheBaselineAlone() throws {
+        try repoWith("changed-pixels")
+        let before = bytes(baseline.appendingPathComponent("en-US/Pixel 9-Home.png"))
+        let interruption = Accept.Interruption()
+        interruption.set()
+        let code = Accept.run(from: [try report("changed-pixels").path], only: nil, push: false, author: nil, baseline: baseline, log: console,
+                              env: [:], gitEnv: gitEnv, interruption: interruption)
+        XCTAssertEqual(code, 2)
+        XCTAssertTrue(errors.contains("accept was interrupted"), errors)
+        XCTAssertEqual(before, bytes(baseline.appendingPathComponent("en-US/Pixel 9-Home.png")))
+    }
+
+    func testExitCodeOfAnError() {
+        XCTAssertEqual(Accept.exitCode(for: Accept.Interrupted(), interrupted: false), 2)
+        XCTAssertEqual(Accept.exitCode(for: Accept.Refused(description: "x"), interrupted: true), 2)
+        XCTAssertEqual(Accept.exitCode(for: Accept.Refused(description: "x"), interrupted: false), 1)
+        XCTAssertEqual(Accept.exitCode(for: UsageError("x"), interrupted: false), 64)
+    }
+
     func testAppliesChangedImageWithManifestFingerprintAndLeavesTheRestAlone() throws {
         try repoWith("changed-pixels")
         let settingsBefore = bytes(baseline.appendingPathComponent("en-US/Pixel 9-Settings.png"))
@@ -126,6 +145,33 @@ final class AcceptTests: XCTestCase {
             XCTAssertEqual(accept(r), 64, label)
             XCTAssertTrue(errors.contains("manifest.json has no ci"), "\(label): \(errors)")
         }
+    }
+
+    /// The first baseline: verify against a baseline directory that does not exist reports every screenshot as added
+    /// (exit 1), and accept of that report writes the PNGs and a baseline.json with the fingerprints.
+    func testFirstBaselineFromAVerifyWithoutOne() throws {
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try git(repo, "init", "-q", "-b", "main")
+        try "app\n".write(to: repo.appendingPathComponent("README"), atomically: true, encoding: .utf8)
+        try git(repo, "add", "-A")
+        try git(repo, "commit", "-q", "-m", "initial")
+        let c = fixtures.appendingPathComponent("added")
+        let config = CompareConfig.from(try Options.parse(["verify", "--config", c.appendingPathComponent("config.json").path]))
+        let env = BaselineEnv.detect(tmp, env: ["SWIFTSHOT_COMMIT": try head(), "SWIFTSHOT_BRANCH": "main", "SWIFTSHOT_CI": "false"],
+                                     readFile: { try? String(contentsOf: c.appendingPathComponent($0), encoding: .utf8) }, version: "1.0.0-test")
+        let reportDir = tmp.appendingPathComponent("first-report")
+        let v = try Baseline.evaluate(output: c.appendingPathComponent("output"), baseline: baseline, report: reportDir, config: config, env: env)
+        let result = try readJSON(reportDir.appendingPathComponent("result.json"))
+        XCTAssertEqual(result["counts"]!["added"], .int(2))
+        XCTAssertEqual(result["counts"]!["unchanged"], .int(0))
+        XCTAssertEqual(result["counts"]!["changed"], .int(0))
+        XCTAssertTrue(v.errors.isEmpty)
+        XCTAssertEqual(accept(reportDir), 0, errors)
+        XCTAssertTrue(exists(baseline.appendingPathComponent("en-US/Pixel 9-Home.png")))
+        XCTAssertTrue(exists(baseline.appendingPathComponent("en-US/Pixel 9-Onboarding.png")))
+        let baselineJson = try readJSON(baseline.appendingPathComponent("baseline.json"))
+        XCTAssertEqual(try images().count, 2)
+        XCTAssertFalse(baselineJson["fingerprints"]!.object!.isEmpty)
     }
 
     func testAddsNewImages() throws {
