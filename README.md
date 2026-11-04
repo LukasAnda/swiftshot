@@ -171,9 +171,9 @@ Needs Flutter 3.35+ (widget previews) and a JDK 21+. See the
 
 ### Screenshot testing
 
-`swiftshot record` saves the screenshots as a baseline to commit, `swiftshot verify` renders and
-compares with it (exit 1 when something changed), and `swiftshot accept --from screenshots-report`
-takes intended changes into the baseline. See the
+`swiftshot verify` renders and compares with the baseline (exit 1 when something changed), and
+`swiftshot accept --from screenshots-report` takes intended changes into it. Baselines, the first
+one included, are made and accepted on CI so results are always the same. See the
 [Screenshot testing](https://github.com/LukasAnda/swiftshot/wiki/Screenshot-testing) wiki page.
 
 On CI, `verify` comments the result on the pull request and shows it in the CI's own results; a
@@ -527,6 +527,8 @@ every platform, the [Android](https://github.com/LukasAnda/swiftshot/wiki/Androi
 [Compose Multiplatform](https://github.com/LukasAnda/swiftshot/wiki/Compose-Multiplatform) and
 [Flutter](https://github.com/LukasAnda/swiftshot/wiki/Flutter) guides, CI
 recipes, migration guides from fastlane and troubleshooting.
+
+Coding agents: [llms.txt](llms.txt) lists the docs, and the [Agents](https://github.com/LukasAnda/swiftshot/wiki/Agents) page says how to use Swiftshot in a project.
 
 ## Contributing
 

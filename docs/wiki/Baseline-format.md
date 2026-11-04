@@ -47,6 +47,8 @@ Examples below are abbreviated and not in the sorted key order the files use.
 | 2 | errors, with or without differences |
 | 64 | usage error |
 
+`verify --json` prints `result.json` to stdout, byte for byte, and exits the same. A run that ends without a `result.json` (64, or an error before the comparison finished) prints nothing.
+
 `verify` and `record`: a baseline.json that isn't valid (not JSON, `fingerprints` or `images` `null`
 or not an object of objects: `"<key>" must be an object of objects`, an `images` id that isn't a
 relative `/`-separated path without `.` or `..` parts) is a usage error. `record`: 2 when the run had errors (images with errors keep their

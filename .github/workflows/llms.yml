@@ -1,0 +1,20 @@
+# llms-full.txt is docs/wiki concatenated, and llms.txt links every page. A separate workflow,
+# because the tests workflow skips documentation changes.
+name: llms
+on:
+  push:
+    branches: [main]
+    paths: ["docs/wiki/**", "llms.txt", "llms-full.txt", "bin/gen-llms", ".github/workflows/llms.yml"]
+  pull_request:
+    paths: ["docs/wiki/**", "llms.txt", "llms-full.txt", "bin/gen-llms", ".github/workflows/llms.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: llms files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: bin/gen-llms --check

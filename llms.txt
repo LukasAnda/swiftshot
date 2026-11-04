@@ -1,0 +1,41 @@
+# Swiftshot
+
+> Renders screenshots of the SwiftUI, UIKit, Jetpack Compose, Compose Multiplatform and Flutter previews a project already has, for every device, language and appearance, and compares them with a committed baseline.
+
+Install with `brew install lukasanda/tap/swiftshot` (Mac or Linux), then run `swiftshot init` in the project folder to write `swiftshot.json`, `swiftshot` to render every preview into `<output_directory>` (default `screenshots`), and `swiftshot verify` to compare with the baseline in `screenshots-baseline/`. `verify` exits 0 (same), 1 (differences), 2 (errors) or 64 (usage error) and writes `result.json` to `<output_directory>-report`; `--json` prints it to stdout (with exit 2 it can be empty). Baselines are recorded and accepted on CI, and a person triggers the accept.
+
+## Start
+
+- [Installation](https://github.com/LukasAnda/swiftshot/wiki/Installation): Mac, Linux and CI machine install, requirements, JDK lookup
+- [Agents](https://github.com/LukasAnda/swiftshot/wiki/Agents): for a coding agent: set up, previews that render well, verify, result.json, exit codes, common failures
+- [Android](https://github.com/LukasAnda/swiftshot/wiki/Android): Jetpack Compose previews for phones, foldables, tablets and Wear OS
+- [Compose Multiplatform](https://github.com/LukasAnda/swiftshot/wiki/Compose-Multiplatform): Android, desktop and iOS screenshots from shared previews
+- [Flutter](https://github.com/LukasAnda/swiftshot/wiki/Flutter): widget previews on iPhones, iPads and Android devices
+
+## Reference
+
+- [Command line](https://github.com/LukasAnda/swiftshot/wiki/Command-line): every command, flag and exit code, and the --json output of list, devices and verify
+- [Configuration](https://github.com/LukasAnda/swiftshot/wiki/Configuration): swiftshot.json and per-screenshot settings for every platform
+- [Screenshot testing](https://github.com/LukasAnda/swiftshot/wiki/Screenshot-testing): record a baseline, verify against it, accept changes, tolerances
+- [Baseline format](https://github.com/LukasAnda/swiftshot/wiki/Baseline-format): the files verify, record and accept read and write, including result.json
+- [Device frames](https://github.com/LukasAnda/swiftshot/wiki/Device-frames): Apple bezels, App Store titles and backgrounds, Android Studio's device art
+- [Troubleshooting](https://github.com/LukasAnda/swiftshot/wiki/Troubleshooting): common errors and their fixes
+
+## CI
+
+- [CI](https://github.com/LukasAnda/swiftshot/wiki/CI): runners, what each CI system shows, and how a person accepts
+- [GitHub Actions](https://github.com/LukasAnda/swiftshot/wiki/CI-GitHub-Actions): verify workflow and the /swiftshot accept comment
+- [GitLab](https://github.com/LukasAnda/swiftshot/wiki/CI-GitLab): pipeline and the manual swiftshot-accept job
+- [Bitbucket](https://github.com/LukasAnda/swiftshot/wiki/CI-Bitbucket): pipeline and the swiftshot-accept custom pipeline
+- [Bitrise](https://github.com/LukasAnda/swiftshot/wiki/CI-Bitrise): workflows and the swiftshot-accept workflow
+- [Codemagic](https://github.com/LukasAnda/swiftshot/wiki/CI-Codemagic): workflows and the swiftshot-accept workflow
+- [CircleCI](https://github.com/LukasAnda/swiftshot/wiki/CI-CircleCI): config and the accept-screenshots approval
+- [Azure Pipelines](https://github.com/LukasAnda/swiftshot/wiki/CI-Azure-Pipelines): pipeline and the Accept screenshots stage
+- [Jenkins](https://github.com/LukasAnda/swiftshot/wiki/CI-Jenkins): Jenkinsfile and the Accept screenshots stage
+
+## Optional
+
+- [Home](https://github.com/LukasAnda/swiftshot/wiki/Home): overview and index of the wiki
+- [Migrating](https://github.com/LukasAnda/swiftshot/wiki/Migrating-from-fastlane): from fastlane snapshot and screengrab, Paparazzi and Roborazzi
+- [How it works](https://github.com/LukasAnda/swiftshot/wiki/How-it-works): why it is fast and how output stays pixel identical
+- [Roadmap](https://github.com/LukasAnda/swiftshot/wiki/Roadmap): what is planned for upcoming versions

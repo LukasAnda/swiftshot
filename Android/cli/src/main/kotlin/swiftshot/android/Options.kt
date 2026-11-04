@@ -2,6 +2,7 @@ package swiftshot.android
 
 import swiftshot.android.shared.Json
 import java.io.File
+import java.io.PrintStream
 
 /** Per-screenshot settings: the first rule whose `preview` matches wins. */
 data class ScreenRule(
@@ -66,6 +67,8 @@ class Options {
     var screens: List<ScreenRule> = emptyList()
     var verbose = false
     var force = false
+    /** list, devices, verify: stdout carries one JSON document and nothing else (logs go to stderr). */
+    var json = false
     /** Said once before the run (iOS-only settings this renderer leaves to the Mac tool). */
     val notes = mutableListOf<String>()
     var frame = "none"
@@ -99,7 +102,7 @@ class Options {
 
     companion object {
         /** Flags without a value (parse and [command] read the command line alike). */
-        val BOOLEAN_FLAGS = setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license", "--push")
+        val BOOLEAN_FLAGS = setOf("--clear", "--no-html", "--full-length", "-v", "--verbose", "-h", "--help", "--force", "--accept-bezel-license", "--push", "--json")
 
         val usage = """
             swiftshot — screenshot tests and Play Store screenshots from Jetpack Compose and Compose
@@ -179,8 +182,15 @@ class Options {
                                                     the CI's branch when HEAD is detached)
 
               --config <file>                       Default: ./swiftshot.json
+              --json                                list, devices, verify: print one JSON document to stdout (logs go
+                                                    to stderr); verify prints its result.json
               -v, --verbose
         """.trimIndent()
+
+        /** Usage text. With --json on the command line stdout stays empty, so it goes to stderr. */
+        fun info(text: String, json: Boolean, out: PrintStream = System.out, err: PrintStream = System.err) {
+            (if (json) err else out).println(text)
+        }
 
         fun parse(args: List<String>): Options {
             val o = Options()
@@ -197,7 +207,7 @@ class Options {
                 } else positional += a
                 i++
             }
-            if (flags.any { it.first == "-h" || it.first == "--help" }) { println(usage); kotlin.system.exitProcess(0) }
+            if (flags.any { it.first == "-h" || it.first == "--help" }) { info(usage, flags.any { it.first == "--json" }); kotlin.system.exitProcess(0) }
             positional.firstOrNull()?.let { o.command = it; o.commandArgs += positional.drop(1) }
             o.config = flags.lastOrNull { it.first == "--config" }?.second
             o.projectDir = flags.lastOrNull { it.first == "--project-dir" }?.second ?: "."
@@ -244,6 +254,7 @@ class Options {
                 "--screen" -> rules += screenFlag(v!!)
                 "-v", "--verbose" -> o.verbose = true
                 "--force" -> o.force = true
+                "--json" -> o.json = true
                 "--frame" -> { o.frame = v!!; o.frameFlag = true }
                 "--format" -> o.format = v!!
                 "--baseline-directory" -> o.baselineDirectory = v!!
@@ -389,6 +400,7 @@ class Options {
             if (branch != null && !push) throw UsageError("--branch needs --push")
         }
         else require(from.isEmpty() && only == null && !push && author == null && branch == null) { "--from, --only, --push, --author and --branch are for accept" }
+        require(!json || command in setOf("list", "devices", "verify")) { "--json is for list, devices and verify" }
         if (command == "verify" || command == "record") {
             if (format != "png") throw UsageError("$command compares plain PNG screenshots; --format $format can't be used with it (drop --format, or use run).")
             if (frameFlag && frame != "none") throw UsageError("$command compares plain screenshots; device frames aren't written (drop --frame, or use run).")

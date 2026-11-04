@@ -275,6 +275,47 @@ final class BaselineTests: XCTestCase {
         for f in ["result.json", "manifest.json", "junit.xml"] { XCTAssertFalse(FileManager.default.fileExists(atPath: report.appendingPathComponent(f).path), f) }
     }
 
+    /// verify --json: stdout gets the bytes of the result.json the run wrote, and only that.
+    func testVerifyJsonWritesTheResultToStdout() async throws {
+        let (report, o) = try staleRun()
+        var json = o; json.json = true
+        let sink = tmp.appendingPathComponent("stdout.txt")
+        FileManager.default.createFile(atPath: sink.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: sink)
+        let code = await Command.baseline(json, stdout: handle) { _ in throw CLIError("boom") }
+        try handle.close()
+        XCTAssertEqual(code, 2)
+        XCTAssertEqual(bytes(sink), bytes(report.appendingPathComponent("result.json")))
+        XCTAssertEqual(try readJSON(sink)["status"], .string("error"))
+    }
+
+    /// A reader that closed early: the write fails, the exit code stays.
+    func testVerifyJsonKeepsItsExitCodeWhenStdoutIsClosed() async throws {
+        let (_, o) = try staleRun()
+        var json = o; json.json = true
+        let pipe = Pipe()
+        try pipe.fileHandleForReading.close()
+        let code = await Command.baseline(json, stdout: pipe.fileHandleForWriting) { _ in throw CLIError("boom") }
+        XCTAssertEqual(code, 2)
+    }
+
+    /// No result.json for the run (the comparison failed): stdout stays empty.
+    func testVerifyJsonWithoutAResultWritesNothing() async throws {
+        let (_, o) = try staleRun()
+        var json = o; json.json = true
+        let out = tmp.appendingPathComponent("out")
+        let sink = tmp.appendingPathComponent("stdout.txt")
+        FileManager.default.createFile(atPath: sink.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: sink)
+        let code = await Command.baseline(json, stdout: handle) { _ in
+            try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            try Data("{\"screenshots\": [".utf8).write(to: out.appendingPathComponent("swiftshot-report.json"))
+        }
+        try handle.close()
+        XCTAssertEqual(code, 2)
+        XCTAssertEqual(bytes(sink), [])
+    }
+
     func testMultiRuntimeMismatchIsOnlyForTheChangedRuntime() throws {
         let v = try verify(fixture("multi-runtime"))
         XCTAssertEqual(v.mismatches, ["ios runtime: baseline 23F77, this run 23F80"])
