@@ -59,6 +59,8 @@ struct Options: Codable {
     var acceptBezelLicense = false
     var force = false     // init: overwrite an existing swiftshot.json
     var verbose = false
+    /// list, devices, verify: stdout carries one JSON document and nothing else (logs go to stderr).
+    var json = false
     // verify, record: where the baseline lives and where verify writes its report (default <output>-report).
     var baselineDirectory = "screenshots-baseline"
     var reportDirectory: String?
@@ -257,13 +259,15 @@ struct Options: Codable {
                                               --mode device always uses booted simulators.
 
       --config <file>                         JSON config (default ./swiftshot.json if present)
+      --json                                  list, devices, verify: print one JSON document to stdout (logs go to
+                                              stderr); verify prints its result.json
       --verbose
     """
 
     /// Flags without a value (parse and `command` read the command line alike; `--frame` takes one only when it is a mode).
     static let booleanFlags: Set<String> = ["--no-templates", "--no-boot", "--boot", "--full-length", "--allow-unsupported-devices", "--clear",
         "--shutdown", "--download-missing-runtimes", "--no-html", "--no-status-bar", "--push", "--accept-bezel-license", "--force", "-f",
-        "--verbose", "-v", "--help", "-h", "--version"]
+        "--verbose", "-v", "--help", "-h", "--version", "--json"]
 
     /// Where the command is: the first argument that is neither a flag nor a flag's value (nil: none, `run`).
     static func commandIndex(_ args: [String]) -> Int? {
@@ -414,6 +418,7 @@ struct Options: Codable {
             case "--accept-bezel-license": options.acceptBezelLicense = true
             case "--force", "-f": options.force = true
             case "--verbose", "-v": options.verbose = true
+            case "--json": options.json = true
             case "--help", "-h": print(usage); exit(0)
             case "--version": print("swiftshot \(swiftshotVersion)"); exit(0)
             default:
@@ -442,6 +447,7 @@ struct Options: Codable {
         } else if !options.from.isEmpty || options.only != nil || options.push || options.author != nil || options.branch != nil {
             throw UsageError("--from, --only, --push, --author and --branch are for accept")
         }
+        if options.json && !["list", "devices", "verify"].contains(command) { throw UsageError("--json is for list, devices and verify") }
         if command == "verify" || command == "record" {
             if options.format != "png" { throw UsageError("\(command) compares plain PNG screenshots; --format \(options.format) can't be used with it (drop --format, or use run).") }
             if frameFlag && options.frame != nil { throw UsageError("\(command) compares plain screenshots; device frames aren't written (drop --frame, or use run).") }

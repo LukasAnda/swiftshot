@@ -13,6 +13,19 @@ final class OptionsTests: XCTestCase {
         XCTAssertEqual(flags.count, Set(flags).count)
     }
 
+    func testJsonIsForListDevicesAndVerify() throws {
+        for command in ["list", "devices", "verify"] {
+            XCTAssertTrue(try Options.parse(["--config", emptyConfig(), command, "--json"]).json, command)
+            XCTAssertTrue(try Options.parse(["--config", emptyConfig(), "--json", command]).json, command)
+        }
+        XCTAssertFalse(try Options.parse(["--config", emptyConfig(), "verify"]).json)
+        for command in ["run", "record", "calibrate", "init", "frame"] {
+            XCTAssertThrowsError(try Options.parse(["--config", emptyConfig(), command, "--json"]), command) { XCTAssertTrue($0 is UsageError, "\(command): \($0)") }
+        }
+        XCTAssertThrowsError(try Options.parse(["--config", emptyConfig(), "--json"])) { XCTAssertTrue($0 is UsageError, "run is the default command: \($0)") }
+        XCTAssertThrowsError(try Options.parse(["--config", emptyConfig(), "accept", "--from", "x", "--json"])) { XCTAssertTrue($0 is UsageError) }
+    }
+
     func testDefaultsWithoutConfig() throws {
         let o = try Options.parse(["--config", emptyConfig()])
         XCTAssertEqual(o.command, "run")

@@ -745,17 +745,24 @@ final class Runner {
         let device = try await prepare(type: type, runtime: runtime, suffix: "", app: app)
         let result = try await launch(makeJob(mode: .list, language: options.languages[0], runtime: runtime, devices: [], target: target),
                                       tag: "list", udid: device.udid, app: app)
+        if options.json { print(JsonOutput.list(previews: result.previews).pretty(), terminator: ""); return }
         print("\(result.previews.count) previews:")
         for p in result.previews { print("  • \(p)") }
     }
 
     func devices() async throws {
         let runtimes = try await Simctl.runtimes()
-        print("Installed iOS runtimes: \(runtimes.map(\.version).joined(separator: ", "))")
+        if !options.json { print("Installed iOS runtimes: \(runtimes.map(\.version).joined(separator: ", "))") }
         let cache = DeviceCatalog.loadCache()
         let types = options.devices.isEmpty ? try await Simctl.deviceTypes() : try await resolveDeviceTypes()
+        var listed: [JsonOutput.Device] = []
+        defer { if options.json { print(JsonOutput.devices(listed, runtimes: runtimes.map(\.version)).pretty(), terminator: "") } }
         for type in types {
             guard let (p, source) = DeviceCatalog.profile(for: type, runtime: runtimes.last?.version ?? "", cache: cache) else { continue }
+            if options.json {
+                listed.append(JsonOutput.Device(name: type.name, platform: Platform.of(type).rawValue, width: p.width, height: p.height, scale: p.scale))
+                continue
+            }
             let s = p.safeArea
             let geometry = String(format: "%4.0f×%-4.0fpt @%.0fx  safe area t%.0f b%.0f l%.0f r%.0f", p.width, p.height, p.scale, s.top, s.bottom, s.left, s.right)
             print("  " + type.name.padding(toLength: 30, withPad: " ", startingAt: 0) + geometry + "  [\(source)]")
