@@ -1,0 +1,45 @@
+# This repository's own use of the recipe, on Example/DemoApp: the same workflow users copy from
+# docs/recipes/github/screenshots.yml, with the local action and a swiftshot built from source,
+# a pinned runner, a small scope (swiftshot.ci.json) and path filters.
+# Screenshot tests on every pull request: compares against the committed baseline, comments the
+# result on the pull request, posts the "swiftshot" commit status and uploads the report.
+# iOS needs a Mac runner (e.g. macos-latest); for Android or Compose use ubuntu-latest and add
+# actions/setup-java (Temurin 21) before the swiftshot step.
+# Branch protection: require the "swiftshot" status, not the "screenshots / verify" check (the
+# accept workflow's push with GITHUB_TOKEN starts no workflow, so that check never reruns).
+name: screenshots
+on:
+  pull_request:
+    paths:
+      - Example/DemoApp/**
+      - Sources/**
+      - Shared/**
+      - Agent/**
+      - action.yml
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  verify:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      # Swiftshot built from this checkout: nothing is released yet to install. The binary finds the
+      # agent, no-boot and simhost helpers next to itself, so bin/ goes on PATH whole.
+      - name: Build swiftshot
+        run: |
+          make
+          echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
+      - uses: ./
+        with:
+          command: verify
+          version: local
+          working-directory: Example/DemoApp
+          args: --config swiftshot.ci.json
+        env:
+          SWIFTSHOT_HOST_TOKEN: ${{ secrets.GITHUB_TOKEN }}
