@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; style-src 'sha256-3w55YEPcy56lJWaAJlWPcYg352vR7e5/8kBaBhyAQ48='; script-src 'sha256-MK5Zl5eUymOef/q9LpLd8fi8/B9qgV4c7PqpfbAQeQM='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; style-src 'sha256-c2gz3CqqJu57XSbP9CkwaX0XZ7yws2K5EGHx2KeXCo4='; script-src 'sha256-KTwe6ISNewmdQVeyjBFVoRJCYQs27BSyAX4xKfE5CsI='; base-uri 'none'; form-action 'none'">
 <title>Swiftshot report</title>
 <style>
 :root{--chrome:#ececec;--panel:#f7f7f7;--ink:#1a1a1a;--soft:#5e5e5e;--line:#d0d0d0;--stage:#808080;--diff:#ff00b4;--added:#0a7040;--removed:#6a6a6a;--error:#c01818;--sel:#fff;--code:#e2e2e2}
@@ -36,7 +36,8 @@ nav p{margin:0;padding:12px;color:var(--soft)}
 #cur{min-width:0}
 .modes{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-left:auto}
 .modes button{background:var(--panel);border:0;border-left:1px solid var(--line);padding:4px 12px;cursor:pointer}.modes button:first-child{border-left:0}.modes button[aria-pressed=true]{background:var(--ink);color:var(--chrome)}
-#stage{background:var(--stage);overflow:auto;display:flex;justify-content:center;align-items:flex-start;gap:32px;padding:24px;container-type:size}
+#stage{background:var(--stage);overflow:auto;display:flex;justify-content:flex-start;align-items:flex-start;gap:32px;padding:24px;container-type:size}
+#stage>:first-child{margin-left:auto}#stage>:last-child{margin-right:auto}
 figure{margin:0;flex:none;position:relative}figcaption{color:#fff;font-size:13px;margin-bottom:6px}
 .shot{position:relative;display:block;height:calc(100vh - 262px);height:calc(100cqh - 24px);min-height:320px;aspect-ratio:var(--ar)}
 .shot img{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
@@ -56,7 +57,7 @@ input[type=range].sl{position:absolute;inset:0;width:100%;height:100%;opacity:0;
 #copy{background:var(--ink);color:var(--chrome);border:0;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600}
 #copy:disabled{opacity:.4;cursor:default}
 #tickall{background:none;border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
-@media (max-width:760px){main{grid-template-columns:minmax(0,1fr);grid-template-rows:38vh 1fr}nav{border-right:0;border-bottom:1px solid var(--line)}#report{height:auto;min-height:100vh}.filters{margin-left:0}#tray{grid-template-columns:1fr}.shot{height:auto;min-height:0;width:min(80vw,380px)}.free img{width:100%;height:auto}#stage{justify-content:flex-start;container-type:normal}}
+@media (max-width:760px){main{grid-template-columns:minmax(0,1fr);grid-template-rows:38vh 1fr}nav{border-right:0;border-bottom:1px solid var(--line)}#report{height:auto;min-height:100vh}.filters{margin-left:0}#tray{grid-template-columns:1fr}.shot{height:auto;min-height:0;width:min(80vw,380px)}.free img{width:100%;height:auto}#stage{container-type:normal}#stage>:first-child,#stage>:last-child{margin:0}}
 @media (prefers-reduced-motion:no-preference){.row{transition:background .08s}}
 </style></head><body>
 <div id="report">
@@ -181,9 +182,11 @@ function whyNot(id){
  return null;
 }
 const acceptable=all.filter(s=>s.status=="changed"||s.status=="added"||s.status=="removed");
-const selectable=acceptable.filter(s=>!whyNot(s.id));
+const selectable=acceptable.filter(s=>!whyNot(s.id)),selectableSet=new Set(selectable);
 const picked=new Set();
-const github=!!R.ci&&R.ci.provider=="github";
+/* The comment names the commit it was built from, so the recipe can refuse a report that is out of date. */
+const commit=typeof R.commit=="string"&&/^[0-9a-fA-F]{7,64}$/.test(R.commit)?R.commit:null;
+const github=!!R.ci&&R.ci.provider=="github"&&R.ci.pullRequest!=null&&commit!=null;
 const single=s=>"'"+s.replace(/'/g,"'\\''")+"'";
 function fromArg(){
  if(location.protocol!="file:")return "<report>";
@@ -192,25 +195,43 @@ function fromArg(){
  dir=dir.replace(/\/[^\/]*$/,"").replace(/^\/([A-Za-z]:)/,"$1");
  return /^[A-Za-z0-9_\/.:=@+-]+$/.test(dir)?dir:single(dir);
 }
+/* --only is repeatable: one argument may not pass 128 KiB on Linux, so long lists are split; the whole line stays below LINE. */
+const ARG=100000,LINE=400000,bytes=s=>new TextEncoder().encode(s).length;
+let tooLong=false;
+function chunks(ids){
+ const out=[];let cur=[],n=0;
+ for(const id of ids){
+  const b=bytes(id)+1;
+  if(cur.length&&n+b>ARG){out.push(cur);cur=[];n=0}
+  cur.push(id);n+=b;
+ }
+ if(cur.length)out.push(cur);
+ return out;
+}
 function acceptText(ticked){
  const every=ticked.length==acceptable.length,ids=ticked.map(s=>s.id);
- if(github)return every?"/swiftshot accept":"/swiftshot accept\n"+ids.join("\n");
+ tooLong=false;
+ if(github){const head="/swiftshot accept "+commit;return every?head:head+"\n"+ids.join("\n")}
  const base="swiftshot accept --from "+fromArg();
  if(every)return base;
- const list=ids.join(",");
- return base+" --only "+(/[$`\\"!]/.test(list)?single(list):'"'+list+'"');
+ const text=base+chunks(ids).map(c=>{const list=c.join(",");return " --only "+(/[$`\\"!]/.test(list)?single(list):'"'+list+'"')}).join("");
+ tooLong=bytes(text)>LINE;
+ return text;
 }
+const shown=()=>vis.filter(s=>selectableSet.has(s));
 function tray(){
+ tooLong=false;
  const ticked=selectable.filter(s=>picked.has(s)),text=ticked.length?acceptText(ticked):"Tick the screenshots you want to accept. The "+(github?"comment to post":"command to run")+" appears here.";
- $("count").textContent="Accept "+ticked.length+" of "+selectable.length+(github&&text.length>65536?" (too long for one comment: tick fewer)":"");
+ $("count").textContent="Accept "+ticked.length+" of "+selectable.length+(github&&text.length>65536?" (too long for one comment: tick fewer)":"")+(tooLong?" (too long to run as one command: tick fewer)":"");
  $("copy").disabled=!ticked.length;
  $("cmd").textContent=text;
- $("tickall").textContent=ticked.length==selectable.length?"Untick all":"Tick all";
- $("tickall").hidden=selectable.length<2;
+ const sh=shown(),on=sh.some(s=>!picked.has(s)),whole=sh.length==selectable.length;
+ $("tickall").textContent=(on?"Tick ":"Untick ")+(whole?"all ":"")+sh.length+(whole?"":" shown");
+ $("tickall").hidden=sh.length<2;
 }
 function tickAll(){
- const on=picked.size<selectable.length;
- for(const s of selectable){if(on)picked.add(s);else picked.delete(s);if(s._box)s._box.checked=on}
+ const sh=shown(),on=sh.some(s=>!picked.has(s));
+ for(const s of sh){if(on)picked.add(s);else picked.delete(s);if(s._box)s._box.checked=on}
  tray();
 }
 function label(t){const c=$("copy");c.textContent=t;setTimeout(()=>{c.textContent="Copy"},1600)}
@@ -232,6 +253,7 @@ function percent(s){
  const c=s.canvasSize;if(!c)return "";
  const t=c[0]*c[1],p=s.pixels;if(!(t>0))return "";
  if(p>0&&p*1000<t)return "<0.1%";
+ if(p<t&&p*1000>t*999)return ">99.9%";
  const tenths=Math.floor((p*2000+t)/(2*t));
  return Math.floor(tenths/10)+"."+tenths%10+"%";
 }
@@ -316,6 +338,7 @@ function draw(){
  list.replaceChildren(frag);
  const stay=cur&&vis[cur._i]===cur;
  if(!stay)setCur(vis.find(s=>s.status=="changed")||vis[0]||null,false);
+ tray();
 }
 
 /* The stage. */

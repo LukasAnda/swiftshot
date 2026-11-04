@@ -9,10 +9,12 @@ for a Jenkinsfile) is validated by kind:
                            check-jsonschema against Shared/ci-schemas/<kind>.json
   jenkins                  balanced braces only (no schema exists)
 
+The github accept recipe is also run, with `gh` stubbed, on sample comments (needs bash and jq).
+
 Every CI page must hold a block of its kind and name its accept job exactly as the hint in
 Summary.kt does. Needs python3, check-jsonschema and actionlint on PATH.
 
-  bin/check-recipes              check the repository
+  bin/check-recipes              check the repository, and run the accept recipe's comment parsing on sample comments
   bin/check-recipes --self-test  prove that broken blocks fail
 """
 import contextlib
@@ -167,7 +169,131 @@ def self_test():
         good = failing == {page} and re.search(reason, out) is not None
         print("self-test %-24s %s" % (page, "fails as expected" if good else "WRONG: failing pages %s, reason %r not found" % (sorted(failing), reason) if failing == {page} else "WRONG: failing pages %s" % sorted(failing)))
         ok = ok and good
+    # The comment parsing: without the out-of-date refusal, the hex check or the minimum length, the sample comments fail.
+    with open(os.path.join(ROOT, ACCEPT_RECIPE)) as f:
+        recipe = f.read()
+    mutants = {
+        "no out-of-date refusal": ('[ -z "$token" ] || [[ "$sha" == "$token"* ]] || refuse', 'true || refuse'),
+        "no hex check": ("*[!0-9a-fA-F]*) refuse", "*[!0-9a-fA-F]*) true"),
+        "no minimum length": ('[ "${#token}" -ge 7 ] && ', ''),
+    }
+    for name, (old, new) in mutants.items():
+        if old not in recipe:
+            print("self-test: cannot break the accept recipe (%s), %r not found" % (name, old))
+            ok = False
+            continue
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, os.path.dirname(ACCEPT_RECIPE)))
+            with open(os.path.join(tmp, ACCEPT_RECIPE), "w") as f:
+                f.write(recipe.replace(old, new, 1))
+            problems = accept_behaviour(tmp)
+        good = bool(problems)
+        print("self-test accept recipe, %-22s %s" % (name, "fails as expected" if good else "WRONG: no sample comment failed"))
+        ok = ok and good
     return ok
+
+
+ACCEPT_RECIPE = "docs/recipes/github/screenshots-accept.yml"
+HEAD = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+STUB_GH = r"""#!/bin/bash
+# A gh that answers the calls of the accept recipe's first step.
+case "$*" in
+  *collaborators*) echo "${STUB_PERMISSION:-write}" ;;
+  *"/pulls/"*) printf '{"head":{"sha":"%s","ref":"feature/x","repo":{"full_name":"acme/app"}}}' "$STUB_HEAD" ;;
+  *workflows/screenshots.yml/runs*) echo 4242 ;;
+  *artifacts*) echo "https://example.com/report.zip" ;;
+  *issues/*/comments*) for a in "$@"; do case "$a" in body=*) printf '%s\n' "${a#body=}" >> "$STUB_REPLIES" ;; esac; done ;;
+esac
+"""
+
+
+def prepare_script(recipe):
+    """The run: script of the step `prepare`, as the shell gets it."""
+    lines = recipe.split("\n")
+    start = next(i for i, l in enumerate(lines) if l.strip() == "id: prepare")
+    run = next(i for i in range(start, len(lines)) if lines[i] == "        run: |")
+    body = []
+    for l in lines[run + 1:]:
+        if l.strip() and not l.startswith(" " * 10):
+            break
+        body.append(l[10:])
+    return "\n".join(body) + "\n"
+
+
+def run_prepare(script, comment, head=HEAD, permission="write"):
+    """(outputs, replies, files created) of the step for a comment."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bindir = os.path.join(tmp, "bin")
+        os.mkdir(bindir)
+        with open(os.path.join(bindir, "gh"), "w") as f:
+            f.write(STUB_GH)
+        os.chmod(os.path.join(bindir, "gh"), 0o755)
+        work = os.path.join(tmp, "work")
+        os.mkdir(work)
+        out, replies = os.path.join(tmp, "output"), os.path.join(tmp, "replies")
+        open(out, "w").close()
+        env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"], GITHUB_OUTPUT=out, STUB_REPLIES=replies, STUB_HEAD=head,
+                   STUB_PERMISSION=permission, REPO="acme/app", PR="7", ACTOR="dev", COMMENT=comment, GH_TOKEN="x")
+        p = subprocess.run(["bash", "-e", "-c", script], cwd=work, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        values = dict(l.split("=", 1) for l in open(out).read().splitlines() if "=" in l)
+        got = open(replies).read() if os.path.exists(replies) else ""
+        return p.returncode, p.stdout, values, got, os.listdir(work)
+
+
+def accept_behaviour(root):
+    """Runs the accept recipe's first step on comments; returns a list of problems."""
+    with open(os.path.join(root, ACCEPT_RECIPE)) as f:
+        recipe = f.read()
+    problems = []
+    if "startsWith(github.event.comment.body, '/swiftshot accept')" not in recipe:
+        problems.append("the trigger no longer matches a comment that starts with /swiftshot accept")
+    script = prepare_script(recipe)
+    sub, rest = HEAD[:7], "\n"
+    ids = "en-US/Pixel 9-Home\n  deadbeef \r\nen-US/Pixel 9-Settings"
+    # (comment, proceeds, the --only ids, text the reply must contain, or None for no reply)
+    cases = [
+        ("/swiftshot accept", True, [], None),
+        ("/swiftshot accept " + HEAD, True, [], None),
+        ("/swiftshot accept " + HEAD + "\r\n" + ids, True, ["en-US/Pixel 9-Home", "deadbeef", "en-US/Pixel 9-Settings"], None),
+        ("/swiftshot accept " + sub, True, [], None),
+        ("/swiftshot accept " + sub.upper() + "  ", True, [], None),
+        ("/swiftshot accept\n" + ids, True, ["en-US/Pixel 9-Home", "deadbeef", "en-US/Pixel 9-Settings"], None),
+        ("/swiftshot accept a1b2c3e", False, None, "out of date"),
+        ("/swiftshot accept " + "0" * 40 + "\nen-US/Pixel 9-Home", False, None, "out of date"),
+        ("/swiftshot accept a1b2c3", False, None, "7 to 64"),
+        ("/swiftshot accept " + "a" * 65, False, None, "7 to 64"),
+        ("/swiftshot accept en-US/Pixel 9-Home", False, None, "first line"),
+        ("/swiftshot accept " + sub + " extra", False, None, "first line"),
+        ("/swiftshot accept $(touch pwned)", False, None, "first line"),
+        ("/swiftshot accept " + sub + "; touch pwned", False, None, "first line"),
+        ("/swiftshot accept `touch pwned`", False, None, "first line"),
+        ("/swiftshot acceptance", False, None, None),
+        ("hello\n/swiftshot accept", False, None, None),
+    ]
+    for comment, proceeds, only, reply in cases:
+        code, out, values, replies, files = run_prepare(script, comment)
+        what = repr(comment)
+        if code:
+            problems.append("%s: the step failed: %s" % (what, out))
+        elif (values.get("proceed") == "true") != proceeds:
+            problems.append("%s: proceed=%s" % (what, values.get("proceed")))
+        elif files:
+            problems.append("%s: ran something, left %s" % (what, files))
+        elif reply is None and replies:
+            problems.append("%s: replied %r" % (what, replies))
+        elif reply is not None and reply not in replies:
+            problems.append("%s: reply %r lacks %r" % (what, replies, reply))
+        elif proceeds:
+            import shlex
+            args = shlex.split(values.get("args", ""))
+            if args != ["--push", "--branch", "feature/x"] + [x for i in only for x in ("--only", i)]:
+                problems.append("%s: args %s" % (what, args))
+        elif reply is not None and "pwned" in replies:
+            problems.append("%s: the reply repeats the comment: %r" % (what, replies))
+    code, out, values, replies, files = run_prepare(script, "/swiftshot accept deadbeef", permission="read")
+    if values.get("proceed") == "true" or "write access" not in replies:
+        problems.append("a reader's out-of-date comment is answered with %r" % replies)
+    return problems
 
 
 def main():
@@ -178,7 +304,13 @@ def main():
         sys.exit(0 if self_test() else 1)
     if sys.argv[1:]:
         sys.exit(__doc__)
-    sys.exit(1 if check(ROOT, os.path.join(ROOT, "docs", "wiki")) else 0)
+    failed = check(ROOT, os.path.join(ROOT, "docs", "wiki"))
+    problems = accept_behaviour(ROOT)
+    for p in problems:
+        print("FAIL accept recipe: %s" % p)
+    if not problems:
+        print("ok   accept recipe comment parsing")
+    sys.exit(1 if failed or problems else 0)
 
 
 if __name__ == "__main__":

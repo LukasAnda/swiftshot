@@ -50,10 +50,14 @@ workflows run from there.
 # swiftshot-recipe: github-workflow docs/recipes/github/screenshots-accept.yml
 # Comment "/swiftshot accept" on a pull request to commit its new screenshots to the baseline.
 # Only people with write access can; pull requests from forks are refused.
-#   /swiftshot accept                 accepts every difference
-#   /swiftshot accept                 accepts only these, one id per line
+#   /swiftshot accept                 accepts every difference of the latest run
+#   /swiftshot accept <commit>        the same, but only if <commit> is the pull request's head
+#   /swiftshot accept <commit>        accepts only these, one id per line (the commit may be left out)
 #   en-US/Pixel 9-Home
 #   en-US/Pixel 9-Settings
+# The report's index.html writes the commit (the one it was rendered from, 7 to 64 hex digits, a
+# prefix is enough) so that a comment made from an old report is refused, not applied to a newer
+# push. After the command the first line holds nothing else: anything that isn't a commit is refused.
 # Save this file on the default branch (issue_comment workflows run from there) and keep the
 # runner and setup steps the same as in screenshots.yml, which must be saved under that file name
 # (this workflow looks up its runs by it). The verify at the end posts the "swiftshot" status on
@@ -102,8 +106,20 @@ jobs:
             *) refuse "@$ACTOR only people with write access can accept screenshots." ;;
           esac
 
+          # The first line may end in the commit the report was rendered from. It is only ever compared
+          # as text, never run or put in a command, and has to be hex before it is even shown.
+          token=$(printf '%s' "${first#"/swiftshot accept"}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          if [ -n "$token" ]; then
+            case "$token" in
+              *[!0-9a-fA-F]*) refuse "Nothing after \`/swiftshot accept\` on its first line may be anything but the commit of the report (7 or more hex digits). Put screenshot ids one per line below it." ;;
+            esac
+            [ "${#token}" -ge 7 ] && [ "${#token}" -le 64 ] || refuse "The commit after \`/swiftshot accept\` must be 7 to 64 hex digits."
+            token=$(printf '%s' "$token" | tr 'A-F' 'a-f')
+          fi
+
           pr=$(gh api "repos/$REPO/pulls/$PR")
           sha=$(jq -r .head.sha <<< "$pr")
+          [ -z "$token" ] || [[ "$sha" == "$token"* ]] || refuse "That report is out of date: it was rendered from ${token:0:7} and the pull request is now at ${sha:0:7}. Nothing was accepted. Open the report of the latest run and comment again."
           ref=$(jq -r .head.ref <<< "$pr")
           head_repo=$(jq -r '.head.repo.full_name // empty' <<< "$pr")
           [ "$head_repo" = "$REPO" ] || refuse "This pull request comes from a fork, so swiftshot can't push to it. Download the report and run \`swiftshot accept --from <report>\` in the fork."
@@ -113,11 +129,8 @@ jobs:
           url=$(gh api "repos/$REPO/actions/runs/$run/artifacts?name=swiftshot-report" --jq '[.artifacts[] | select(.expired == false)][0].archive_download_url // empty')
           [ -n "$url" ] || refuse "The report of the screenshots run for ${sha:0:7} is missing or expired. Push again to render a new one."
 
-          # The ids: text after the command on its first line, then one id per line (ids contain spaces).
+          # The ids: one per line after the first (ids contain spaces).
           ids=()
-          rest=${first#"/swiftshot accept"}
-          rest=$(printf '%s' "$rest" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-          [ -z "$rest" ] || ids+=("$rest")
           while IFS= read -r line; do
             line=$(printf '%s' "$line" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             [ -z "$line" ] || ids+=("$line")
@@ -197,6 +210,16 @@ Comment `/swiftshot accept` on the pull request. To take only some changes, list
 per line below the command. The workflow checks that the commenter has write access, that the
 pull request is not from a fork and that the report is from the pull request's head, then pushes
 the new baseline to its branch and verifies it again.
+
+The report's `index.html` writes the comment for you, always with the commit it was rendered from
+on the first line: `/swiftshot accept <commit>`, then the ids one per line when you ticked only some.
+If that commit is no longer the pull request's head (someone pushed after the report was made), the
+workflow replies that the report is out of date and accepts nothing, so you never accept changes you
+have not seen. The commit is 7 to 64 hex digits and a prefix of the head is enough. A bare
+`/swiftshot accept`, as the pull request comment suggests, still accepts the latest run's changes.
+Nothing else may follow the command on its first line: the ids go on the lines below, and anything
+on the first line that is not a commit is refused. The commit is only compared as text; it never
+reaches a shell command.
 
 ## Comment
 

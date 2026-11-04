@@ -30,10 +30,11 @@ object Summary {
         "${it["changed"]} changed · ${it["added"]} added · ${it["removed"]} removed · ${it["errors"]} errors · ${it["unchanged"]} unchanged"
     }
 
-    /** The share of the canvas that differs: integers only, one decimal rounded half up, `<0.1%` above zero but below 0.1. */
+    /** The share of the canvas that differs: integers only, one decimal rounded half up; `<0.1%` above zero but below 0.1, `>99.9%` below the whole canvas but above 99.9. */
     fun percent(pixels: Long, total: Long): String {
         if (total <= 0) return ""
         if (pixels > 0 && pixels * 1000 < total) return "<0.1%"
+        if (pixels < total && pixels * 1000 > total * 999) return ">99.9%"
         val tenths = (pixels * 2000 + total) / (2 * total)
         return "${tenths / 10}.${tenths % 10}%"
     }
@@ -64,7 +65,7 @@ object Summary {
             if (notes.isNotEmpty()) blocks += notes.joinToString("\n")
             if (rows.isNotEmpty()) {
                 val lines = mutableListOf("| Status | Screenshot | Pixels |", "|---|---|---|")
-                for ((status, id, pixels) in rows.take(shown)) lines += "| $status | `${id.replace("|", "\\|").replace('`', '\'')}` |${if (pixels.isEmpty()) "" else " $pixels"} |"
+                for ((status, id, pixels) in rows.take(shown)) lines += "| $status | `${id.replace("|", "\\|").replace('`', '\'')}` |${if (pixels.isEmpty()) "" else " ${pixels.replace(">", "\\>")}"} |"
                 if (shown < rows.size) lines += "| | …and ${rows.size - shown} more | |"
                 blocks += lines.joinToString("\n")
             }

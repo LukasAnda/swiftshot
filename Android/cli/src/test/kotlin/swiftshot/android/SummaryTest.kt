@@ -48,9 +48,15 @@ class SummaryTest {
         assertTrue("| changed | `a` | 1.9% |\n| added | `b` | |\n" in text, text)
     }
 
+    @Test fun almostEverythingChangedNeverReadsAsAll() {
+        val changed = e("changed", "a") + mapOf("pixels" to 1999L, "canvasSize" to listOf(40L, 50L))
+        val text = Summary.markdown(verification(listOf(changed)), null)
+        assertTrue("| changed | `a` | \\>99.9% |\n" in text, text)
+    }
+
     @Test fun percentIsIntegerMathRoundedHalfUp() {
         for ((pixels, total, want) in listOf(Triple(0L, 1000L, "0.0%"), Triple(1L, 1001L, "<0.1%"), Triple(1L, 2000L, "<0.1%"), Triple(1L, 1000L, "0.1%"), Triple(3L, 2000L, "0.2%"),
-            Triple(149L, 1000L, "14.9%"), Triple(999L, 1000L, "99.9%"), Triple(1999L, 2000L, "100.0%"), Triple(1L, 1L, "100.0%"))) {
+            Triple(149L, 1000L, "14.9%"), Triple(999L, 1000L, "99.9%"), Triple(1999L, 2000L, ">99.9%"), Triple(9990L, 10000L, "99.9%"), Triple(9991L, 10000L, ">99.9%"), Triple(1L, 1L, "100.0%"))) {
             assertEquals(want, Summary.percent(pixels, total), "$pixels/$total")
         }
         // Far beyond what floats keep exact.

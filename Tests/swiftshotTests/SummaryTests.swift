@@ -52,8 +52,16 @@ final class SummaryTests: XCTestCase {
         XCTAssertTrue(text.contains("| changed | `a` | 1.9% |\n| added | `b` | |\n"), text)
     }
 
+    func testAlmostEverythingChangedNeverReadsAsAll() {
+        var changed = entry("changed", "a")
+        changed["pixels"] = .int(1999)
+        changed["canvasSize"] = .array([.int(40), .int(50)])
+        let text = Summary.markdown(verification([changed]), ci: nil)
+        XCTAssertTrue(text.contains("| changed | `a` | \\>99.9% |\n"), text)
+    }
+
     func testPercentIsIntegerMathRoundedHalfUp() {
-        let table: [(Int64, Int64, String)] = [(0, 1000, "0.0%"), (1, 1001, "<0.1%"), (1, 2000, "<0.1%"), (1, 1000, "0.1%"), (3, 2000, "0.2%"), (149, 1000, "14.9%"), (999, 1000, "99.9%"), (1999, 2000, "100.0%"), (1, 1, "100.0%")]
+        let table: [(Int64, Int64, String)] = [(0, 1000, "0.0%"), (1, 1001, "<0.1%"), (1, 2000, "<0.1%"), (1, 1000, "0.1%"), (3, 2000, "0.2%"), (149, 1000, "14.9%"), (999, 1000, "99.9%"), (1999, 2000, ">99.9%"), (9990, 10000, "99.9%"), (9991, 10000, ">99.9%"), (1, 1, "100.0%")]
         for (pixels, total, want) in table {
             XCTAssertEqual(Summary.percent(pixels: pixels, total: total), want, "\(pixels)/\(total)")
         }

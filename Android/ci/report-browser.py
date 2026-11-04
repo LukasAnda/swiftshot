@@ -4,11 +4,13 @@
 
 Each report is checked twice:
 - as written: rows, groups, images that exist, nothing injected by a hostile id (its CSP is in force);
-- a copy with a test script added (only its script-src relaxed): keys, filters, ticks and the accept text, which
-  goes through a real shell or the accept recipe's parsing.
+- a copy with a test script added (only its script-src relaxed): keys, filters, ticks, the slider and the accept text,
+  which goes through a real shell. (The accept recipe's reading of the comment is tested by bin/check-recipes.)
 
 Android/ci/report-browser.py        CHROME=<path> names the browser; the default looks on PATH.
 """
+import base64
+import hashlib
 import html.parser
 import json
 import os
@@ -104,7 +106,38 @@ def as_written(browser, name, profile):
         check(path in allowed, "%s: image %s is not in result.json" % (name, path))
         check((case / path).is_file(), "%s: image %s does not exist" % (name, path))
     check(bool(dom.all("h1", id="verdict")[0]["text"]), "%s: no verdict" % name)
+    # The policy is exactly this, with the hashes of the page's own style and script, as the browser has it.
+    source = (case / "index.html").read_text(encoding="utf-8")
+    style = re.search(r"<style>(.*?)</style>", source, re.S).group(1)
+    script = re.search(r"<script>(.*?)</script>", source, re.S).group(1)
+    want_csp = ("default-src 'none'; img-src 'self' file:; style-src '%s'; script-src '%s'; base-uri 'none'; form-action 'none'"
+                % (sha256(style), sha256(script)))
+    metas = dom.all("meta", **{"http-equiv": "Content-Security-Policy"})
+    check(len(metas) == 1 and metas[0]["attrs"].get("content") == want_csp, "%s: CSP %s, want %s" % (name, [m["attrs"].get("content") for m in metas], want_csp))
+    # The Pixels the page shows are the ones summary.md shows.
+    summary = case / "summary.md"
+    if summary.is_file():
+        cells = [m.group(1).replace("\\>", ">") for m in (re.match(r"\| changed \| `.*` \| (\S+) \|$", line) for line in summary.read_text(encoding="utf-8").splitlines()) if m]
+        shown = [m.group(1) if m else None for m in (re.search(r"\(([^)]*)\)", text) for text in row_pixels(dom))]
+        check(shown == cells, "%s: Pixels on the page %s, in summary.md %s" % (name, shown, cells))
     return dom, result
+
+
+def sha256(text):
+    return "sha256-" + base64.b64encode(hashlib.sha256(text.encode("utf-8")).digest()).decode("ascii")
+
+
+def row_pixels(dom):
+    """The .px text of each changed row of the list, in order."""
+    out, status = [], None
+    for e in dom.elements:
+        if e["attrs"].get("id") == "stagewrap":
+            break
+        if e["attrs"].get("class") == "row":
+            status = e["attrs"].get("data-status")
+        elif e["attrs"].get("class") == "px" and status == "changed":
+            out.append(e["text"])
+    return out
 
 
 ALLOWED = {"html", "head", "meta", "title", "style", "body", "div", "header", "h1", "h2", "h3", "span", "select", "option", "label", "input",
@@ -159,18 +192,67 @@ TEST_SCRIPT = r"""
 """
 
 
-def with_test_script(name, directory, ci=None):
-    """A copy of the report in `directory` with the test script; `ci`: result.json's ci in the copy."""
+DATA = re.compile(r'(<script type="application/json" id="data">)(.*?)(</script>)', re.S)
+
+
+def small_script(body):
+    """A test script that has `$`, `$$`, `key`, `click` and `out`, and prints `out` as JSON in #test-result."""
+    return ("<script>(function(){const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)],out={};"
+            "const key=k=>document.body.dispatchEvent(new KeyboardEvent('keydown',{key:k,bubbles:true})),click=e=>e.click();"
+            "const change=(e,v)=>{e.value=v;e.dispatchEvent(new Event('change'))},boxes=()=>$$('#list input[type=checkbox]');"
+            + body +
+            ";const pre=document.createElement('pre');pre.id='test-result';"
+            "addEventListener('load',()=>{pre.textContent=JSON.stringify(out);document.body.append(pre)})})();</script>")
+
+
+# The size-change stage: sizes as shares of the canvas, the slider's clip and handle, in every mode.
+SLIDER_SCRIPT = small_script("""
+ const imgs=()=>$$('#stage img').map(i=>[i.style.width,i.style.height]);
+ out.ar=$('#stage .shot').style.getPropertyValue('--ar');out.side=imgs();out.sideShots=$$('#stage .shot').length;
+ key('2');out.slider=imgs();out.range=!!$('#stage input[type=range]');out.at50=[$('#stage .clip').style.clipPath,$('#stage .handle').style.left];
+ const r=$('#stage input[type=range]');r.value='25';r.dispatchEvent(new Event('input'));
+ out.at25=[$('#stage .clip').style.clipPath,$('#stage .handle').style.left];
+ key('3');key('2');out.kept=[$('#stage .clip').style.clipPath,$('#stage .handle').style.left,$('#stage input[type=range]').value];
+ key('3');out.diff=$$('#stage img').length
+""")
+
+# Tick all with a filter on: only what is shown.
+FILTER_SCRIPT = small_script("""
+ click(boxes()[0]);out.start=$('#count').textContent;out.startButton=$('#tickall').textContent;
+ change($('#fStatus'),'added');
+ out.shown=boxes().length;out.button=$('#tickall').textContent;out.kept=$('#count').textContent;
+ click($('#tickall'));out.ticked=$('#count').textContent;out.checked=boxes().filter(b=>b.checked).length;out.buttonOn=$('#tickall').textContent;
+ click($('#tickall'));out.unticked=$('#count').textContent;out.checkedOff=boxes().filter(b=>b.checked).length;out.buttonOff=$('#tickall').textContent;
+ click($('#tickall'));change($('#fStatus'),'');
+ out.all=boxes().filter(b=>b.checked).length;out.allButton=$('#tickall').textContent;out.allCount=$('#count').textContent
+""")
+
+# A very long selection: tick all, then read the tray.
+LONG_SCRIPT = small_script("""
+ out.button=$('#tickall').textContent;click($('#tickall'));out.cmd=$('#cmd').textContent;out.count=$('#count').textContent;
+ out.px=$$('.row').map(r=>(r.querySelector('.px')||{textContent:''}).textContent).filter(t=>t.indexOf('>')>=0)
+""")
+
+
+def with_test_script(name, directory, ci=None, edit=None, script=None):
+    """A copy of the report in `directory` with the test script; `ci`: result.json's ci in the copy (any value, also
+    a dict with None in it); `edit(result)` may change the whole result first."""
     case = ROOT / name / "expected"
     target = pathlib.Path(directory)
     shutil.copytree(case, target)
     text = (target / "index.html").read_text(encoding="utf-8")
     text, n = re.subn(r"script-src '[^']*'", "script-src 'unsafe-inline'", text)
     assert n == 1
-    if ci:
-        assert '"ci": null' in text
-        text = text.replace('"ci": null', '"ci": ' + json.dumps(ci), 1)
-    text = text.replace("</body>", TEST_SCRIPT + "</body>", 1)
+    if ci is not None or edit:
+        result = json.loads(DATA.search(text).group(2))
+        if ci is not None:
+            assert result["ci"] is None
+            result["ci"] = ci
+        if edit:
+            edit(result)
+        data = json.dumps(result, ensure_ascii=False).replace("<", "\\u003c")
+        text = DATA.sub(lambda m: m.group(1) + data + m.group(3), text, count=1)
+    text = text.replace("</body>", (script or TEST_SCRIPT) + "</body>", 1)
     (target / "index.html").write_text(text, encoding="utf-8")
     return target / "index.html"
 
@@ -184,7 +266,9 @@ def result_of(dom):
 def shell_args(command):
     """What a real shell passes for `command`, and proof that nothing in it ran."""
     with tempfile.TemporaryDirectory() as cwd:
-        out = subprocess.run(["bash", "-c", 'swiftshot() { printf "%s\\0" "$@"; }; ' + command], capture_output=True, cwd=cwd, check=True)
+        # On stdin: a long command is not one argument of bash, which Linux limits to 128 KiB.
+        script = 'swiftshot() { printf "%s\\0" "$@"; }; ' + command
+        out = subprocess.run(["bash", "-s"], input=script.encode("utf-8"), capture_output=True, cwd=cwd, check=True)
         check(os.listdir(cwd) == [], "the command ran something: %s" % command)
     return out.stdout.decode("utf-8").split("\0")[:-1]
 
@@ -228,21 +312,88 @@ def behaviour(browser, profile, tmp):
     check(r["fallback"], "without navigator.clipboard the text is selected")
     check(r["stageImages"] == [40, 40], "the stage's images loaded under the CSP: %s" % r["stageImages"])
 
-    # GitHub: the comment, read as the accept recipe reads it (first line, then one id per line, trimmed).
+    # GitHub on a pull request: the comment names the commit on its first line, then the ids one per line.
+    commit = result["commit"]
     page = with_test_script("hostile-ids", pathlib.Path(tmp) / "github", ci={"buildUrl": "https://example.com/run/1", "provider": "github", "pullRequest": "7"})
     r = result_of(dump(browser, page, profile))
     check("comment to post" in r["empty"], "tray prompt: %s" % r["empty"])
     lines = [line.strip() for line in r["two"].split("\n")]
-    check(lines == ["/swiftshot accept"] + ticks[:2], "comment: %s" % lines)
-    check([line.strip() for line in r["allButton"].split("\n")] == ["/swiftshot accept"] + ticks, "comment, a row can't be ticked: %s" % r["allButton"])
+    check(lines == ["/swiftshot accept " + commit] + ticks[:2], "comment: %s" % lines)
+    check(r["two"].startswith("/swiftshot accept"), "the recipe's trigger matches the comment")
+    check([line.strip() for line in r["allButton"].split("\n")] == ["/swiftshot accept " + commit] + ticks, "comment, a row can't be ticked: %s" % r["allButton"])
+
+    # GitHub without a pull request, or without a commit: nobody can comment, so the command is shown.
+    for what, ci, edit in (("no pull request", {"buildUrl": None, "provider": "github", "pullRequest": None}, None),
+                           ("no commit", {"buildUrl": None, "provider": "github", "pullRequest": "7"}, lambda x: x.update(commit=None)),
+                           ("a commit that is not hex", {"buildUrl": None, "provider": "github", "pullRequest": "7"}, lambda x: x.update(commit="main; ls"))):
+        page = with_test_script("hostile-ids", pathlib.Path(tmp) / ("gh " + what), ci=ci, edit=edit)
+        r = result_of(dump(browser, page, profile))
+        check("command to run" in r["empty"], "%s: tray prompt: %s" % (what, r["empty"]))
+        check(shell_args(r["two"]) == ["accept", "--from", str(page.parent), "--only", ",".join(ticks[:2])], "%s: %s" % (what, r["two"]))
 
     # All rows can be ticked: the bare forms.
     page = with_test_script("added", pathlib.Path(tmp) / "bare")
     r = result_of(dump(browser, page, profile))
     check(shell_args(r["one"]) == ["accept", "--from", str(page.parent)], "all ticked needs no --only: %s" % r["one"])
+    added = json.loads((ROOT / "added/expected/result.json").read_text(encoding="utf-8"))
     page = with_test_script("added", pathlib.Path(tmp) / "bare-github", ci={"buildUrl": None, "provider": "github", "pullRequest": "7"})
     r = result_of(dump(browser, page, profile))
-    check(r["one"] == "/swiftshot accept", "all ticked on GitHub: %s" % r["one"])
+    check(r["one"] == "/swiftshot accept " + added["commit"], "all ticked on GitHub: %s" % r["one"])
+
+    # Tick all means the rows shown. One row is ticked first, outside the filter, and stays ticked.
+    visible = sum(1 for e in entries if e["status"] == "added" and "," not in e["id"])
+    check(0 < visible - 1 and visible < len(ticks) - 1, "the fixture can show the filter (%d of %d)" % (visible, len(ticks)))
+    r = result_of(dump(browser, with_test_script("hostile-ids", pathlib.Path(tmp) / "filter", script=FILTER_SCRIPT), profile))
+    check(r["start"] == "Accept 1 of %d" % len(ticks) and r["startButton"] == "Tick all %d" % len(ticks), "before the filter: %s, %s" % (r["start"], r["startButton"]))
+    check(r["shown"] == visible and r["button"] == "Tick %d shown" % visible, "the button counts the shown rows: %s" % r["button"])
+    check(r["kept"] == r["start"], "a filter changed what is ticked: %s" % r["kept"])
+    check(r["ticked"] == "Accept %d of %d" % (visible + 1, len(ticks)) and r["checked"] == visible, "tick all with a filter: %s, %d boxes" % (r["ticked"], r["checked"]))
+    check(r["buttonOn"] == "Untick %d shown" % visible, "button after: %s" % r["buttonOn"])
+    check(r["unticked"] == r["start"] and r["checkedOff"] == 0 and r["buttonOff"] == r["button"], "untick the shown rows only: %s, %s" % (r["unticked"], r["buttonOff"]))
+    check(r["all"] == visible + 1 and r["allCount"] == "Accept %d of %d" % (visible + 1, len(ticks)), "filter cleared: %d ticked" % r["all"])
+    check(r["allButton"] == "Tick all %d" % len(ticks), "button without a filter: %s" % r["allButton"])
+
+    # The size-change stage and the slider, against result.json.
+    case = json.loads((ROOT / "changed-size/expected/result.json").read_text(encoding="utf-8"))
+    e = next(x for x in case["screenshots"] if x["status"] == "changed")
+    canvas, base, new = e["canvasSize"], e["baselineSize"], e["newSize"]
+    check(base != new, "the fixture changes size")
+    r = result_of(dump(browser, with_test_script("changed-size", pathlib.Path(tmp) / "slider", script=SLIDER_SCRIPT), profile))
+
+    def share(size):
+        return [size[0] / canvas[0] * 100, size[1] / canvas[1] * 100]
+
+    def near(got, want):
+        return len(got) == len(want) and all(abs(float(g.rstrip("%")) - w) < 1e-3 for g, w in zip(got, want))
+    check(r["ar"].replace(" ", "") == "%d/%d" % tuple(canvas), "canvas aspect ratio: %s" % r["ar"])
+    for mode in ("side", "slider"):
+        sizes = r[mode]
+        check(len(sizes) == 2 and near(sizes[0], share(base)) and near(sizes[1], share(new)), "%s: image sizes %s, want %s and %s" % (mode, sizes, share(base), share(new)))
+    check(r["sideShots"] == 2, "two canvases side by side: %s" % r["sideShots"])
+    check(r["range"] and "50%" in r["at50"][0] and r["at50"][1] == "50%", "slider at the middle: %s" % r["at50"])
+    check("25%" in r["at25"][0] and r["at25"][1] == "25%", "slider moved: %s" % r["at25"])
+    check("25%" in r["kept"][0] and r["kept"][1] == "25%" and float(r["kept"][2]) == 25, "slider position kept across modes: %s" % r["kept"])
+    check(r["diff"] == 1, "one diff image: %s" % r["diff"])
+
+    # A long selection: --only is split below the 128 KiB a Linux argument can hold; far too long warns.
+    def synthetic(n):
+        def edit(x):
+            x["screenshots"] = [{"id": "en-US/Pixel 9-%s-%05d" % ("x" * 60, i), "status": "changed", "reason": "pixels", "pixels": 1 + i % 7, "canvasSize": [40, 80]} for i in range(n)]
+            x["screenshots"] += [{"id": "has,comma", "status": "changed", "reason": "pixels", "pixels": 1, "canvasSize": [40, 80]},
+                                 {"id": "en-US/Pixel 9-almost-all", "status": "changed", "reason": "pixels", "pixels": 1999, "canvasSize": [40, 50]}]
+            x["counts"] = dict(x["counts"], changed=len(x["screenshots"]))
+        return edit
+    r = result_of(dump(browser, with_test_script("hostile-ids", pathlib.Path(tmp) / "long", edit=synthetic(3000), script=LONG_SCRIPT), profile))
+    ids = ["en-US/Pixel 9-%s-%05d" % ("x" * 60, i) for i in range(3000)] + ["en-US/Pixel 9-almost-all"]
+    args = shell_args(r["cmd"])
+    only = [a for k, a in zip(args, args[1:]) if k == "--only"]
+    check(args[:3] == ["accept", "--from", str(pathlib.Path(tmp) / "long")] and args.count("--only") == len(only) and len(args) == 3 + 2 * len(only), "long command shape: %s" % args[:6])
+    check(len(only) >= 2 and all(len(a.encode("utf-8")) <= 100000 for a in only), "long list split into %d --only, sizes %s" % (len(only), [len(a) for a in only]))
+    check(",".join(only).split(",") == ids, "the split lists name every id once, in order")
+    check("too long" not in r["count"], "no warning for %d bytes: %s" % (len(r["cmd"]), r["count"]))
+    check(any(">99.9%" in x for x in r["px"]), "1999 of 2000 pixels reads >99.9%%: %s" % r["px"])
+    r = result_of(dump(browser, with_test_script("hostile-ids", pathlib.Path(tmp) / "huge", edit=synthetic(8000), script=LONG_SCRIPT), profile))
+    check(len(r["cmd"].encode("utf-8")) > 400000 and "too long to run as one command" in r["count"], "the warning for %d bytes: %s" % (len(r["cmd"]), r["count"]))
 
 
 def main():

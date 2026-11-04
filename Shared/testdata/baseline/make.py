@@ -643,10 +643,12 @@ MAX_ROWS, MAX_BYTES = 200, 60000
 
 
 def percent(pixels, canvas):
-    """The Pixels column: integers only, one decimal rounded half up, `<0.1%` above zero but below 0.1."""
+    """The Pixels column: integers only, one decimal rounded half up; `<0.1%` above zero but below 0.1, `>99.9%` below the whole canvas but above 99.9."""
     total = canvas[0] * canvas[1]
     if 0 < pixels and pixels * 1000 < total:
         return "<0.1%"
+    if pixels < total and pixels * 1000 > total * 999:
+        return ">99.9%"
     tenths = (pixels * 2000 + total) // (2 * total)
     return "%d.%d%%" % (tenths // 10, tenths % 10)
 
@@ -676,7 +678,7 @@ def summary_md(result):
             blocks.append("\n".join(notes))
         if rows:
             lines = ["| Status | Screenshot | Pixels |", "|---|---|---|"]
-            lines += ["| %s | `%s` | %s |" % (r[2], r[3].replace("|", "\\|").replace("`", "'"), r[4]) if r[4]
+            lines += ["| %s | `%s` | %s |" % (r[2], r[3].replace("|", "\\|").replace("`", "'"), r[4].replace(">", "\\>")) if r[4]
                       else "| %s | `%s` | |" % (r[2], r[3].replace("|", "\\|").replace("`", "'")) for r in rows[:shown]]
             if shown < len(rows):
                 lines.append("| | \u2026and %d more | |" % (len(rows) - shown))

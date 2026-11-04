@@ -424,11 +424,17 @@ own style and script.
 - `--no-html` (`"html": false` in swiftshot.json) means no HTML from this run: neither
   `screenshots.html` nor `index.html`. Everything else in the report stays.
 - Images are referenced only through the paths in `result.json`, each segment percent-encoded.
-- A row is ticked to accept it, and the tray builds the text: with `ci.provider` `github` the comment
-  (`/swiftshot accept`, then ids one per line); otherwise `swiftshot accept --from <report> --only "<id>,<id>"`,
+- A row is ticked to accept it, and the tray builds the text: with `ci.provider` `github`, a `ci.pullRequest` that is not `null` and a `commit` (7 to 64 hex digits)
+  the comment: `/swiftshot accept <commit>` with the report's full `commit`, then, when only some rows
+  are ticked, the ids one per line. The recipe replies that the report is out of date, and accepts
+  nothing, when the commit is not a prefix of the pull request's head; a bare `/swiftshot accept`
+  typed by a person accepts the latest run. Otherwise (no pull request, no commit, another CI)
+  `swiftshot accept --from <report> --only "<id>,<id>"`,
   single-quoted when an id has `$`, a backtick, `\`, `"` or `!`, with `--from` the page's own folder
-  when opened from `file://`. The bare form appears only when every changed, added and removed row is
-  ticked. A row can't be ticked when its id has a comma (`--only` and the comment recipe split or refuse
+  when opened from `file://`. A list over 100,000 bytes is split into repeated `--only` flags (one
+  argument may not pass 128 KiB on Linux); over 400,000 bytes in all the tray warns and says to tick
+  fewer. The bare form appears only when every changed, added and removed row is
+  ticked. "Tick all" ticks only the rows the filters show, and says how many. A row can't be ticked when its id has a comma (`--only` and the comment recipe split or refuse
   on it), a control character or line break, or starts or ends with white space (both trim it). The
   bare form still accepts such a row.
 - `index.html` adds nothing that `accept` reads, and is in `swiftshot-report.zip` like every other file.
@@ -565,8 +571,10 @@ Comment `/swiftshot accept` on this pull request to accept every change, or put 
   in UTF-8 byte order; at most 200 rows, then `| | …and <n> more | |`. In an id, `|` is written `\|`
   and a backtick `'`. Omitted when there are no rows. Errors without id have no row (see the counts).
 - `Pixels`: for `changed` rows, `pixels` as a share of `canvasSize`; blank (`| |`) for other rows. In
-  integers, so both implementations agree: `<0.1%` when `pixels > 0` and `pixels · 1000 < w · h`, else
-  `t = (pixels · 2000 + w · h) / (2 · w · h)` (`/` truncates) written as `<t / 10>.<t % 10>%`.
+  integers, so both implementations agree: `<0.1%` when `pixels > 0` and `pixels · 1000 < w · h`; `>99.9%` when `pixels < w · h` and
+  `pixels · 1000 > w · h · 999` (so only a canvas that changed entirely reads `100.0%`); else
+  `t = (pixels · 2000 + w · h) / (2 · w · h)` (`/` truncates) written as `<t / 10>.<t % 10>%`. In the
+  table the cell is written `\>99.9%`, so Markdown shows the `>` literally; `index.html` shows `>99.9%`.
 - `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table. It links
   to the CI's build, where the report directory is kept: download it and open `index.html`.
 - Accept hint, `failed` only, last. By `ci.provider`; `null` or unknown gets the last text:
