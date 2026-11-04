@@ -140,11 +140,14 @@ CI
                                           --mode device always uses booted simulators.
 
   --config <file>                         JSON config (default ./swiftshot.json if present)
+  --json                                  list, devices, verify: print one JSON document to stdout (logs go to
+                                          stderr); verify prints its result.json
   --verbose
 ```
 
 Exit code: 0 when every screenshot was rendered, non-zero otherwise. Errors are listed at the end of the run and in `swiftshot-report.json`.
 `verify` exits 0 (same), 1 (differences), 2 (errors) or 64 (usage error); `accept` 0, 1 (refused) or 64. How to use them: [[Screenshot testing]]; the files: [[Baseline format]].
+A flag that belongs to another command (`--from`, `--json`…) is a usage error, 64, on every command here.
 
 ## Android
 
@@ -217,10 +220,45 @@ ACCEPT
                                         the CI's branch when HEAD is detached)
 
   --config <file>                       Default: ./swiftshot.json
+  --json                                list, devices, verify: print one JSON document to stdout (logs go
+                                        to stderr); verify prints its result.json
   -v, --verbose
 ```
 
-The same exit codes as on iOS; `verify`, `record` and `accept` as above, see [[Screenshot testing]]. `swiftshot devices` lists every device with its size in px and dp
+The same exit codes as on iOS, except that a flag that belongs to another command is a usage error (64) on `verify`, `record` and `accept`, and exit 1 on the other commands. `verify`, `record` and `accept` as above, see [[Screenshot testing]]. `swiftshot devices` lists every device with its size in px and dp
 and density; `--devices` takes these names, ids (`pixel_9`) or `*` globs. Compose Multiplatform
 flags: [[Compose Multiplatform]]. In a Flutter project `--devices` also takes iPhones and iPads,
 see [[Flutter]].
+
+## JSON output
+
+`--json` works with `list`, `devices` and `verify`, on every platform. Stdout holds one JSON
+document and nothing else; logs, build output and warnings go to stderr. The document has sorted
+keys, indented like the files in [[Baseline format]] (the examples are shortened). On any other command `--json` is a
+usage error.
+
+`list --json`: the previews in the order the text lists them.
+
+```json
+{"previews": [{"name": "Welcome"}, {"name": "Settings"}]}
+```
+
+`devices --json`: `width` and `height` are in points on iOS and dp on Android (rounded to 0.01),
+`scale` is pixels per point or dp, `platform` is `ios`, `watchos` or `android`.
+
+```json
+{"devices": [{"name": "iPhone 17 Pro", "platform": "ios", "width": 402, "height": 874, "scale": 3}],
+ "runtimes": ["26.5", "27.0"]}
+```
+
+`runtimes` (the installed iOS runtimes) is only in the iOS tool's output. Without `--devices`, the
+iOS tool lists every device type the runtimes know, with `--devices` only those. The Android tool lists
+Android Studio's devices, and the iPhones and iPads of [[Flutter]] projects as `ios`.
+
+`verify --json`: stdout is the `result.json` this run wrote, byte for byte ([[Baseline format]]).
+Exit codes are the same as without `--json`. When the run ends without a `result.json`
+(for example a usage error, 64), stdout stays empty.
+
+```
+swiftshot verify --json > result.json
+```

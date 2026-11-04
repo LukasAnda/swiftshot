@@ -67,6 +67,8 @@ stays as above.
 | 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | interrupted |
 | 64 | wrong option or config | wrong option or config | wrong option, or not a valid report |
 
+`verify --json` prints the report's `result.json` to stdout and exits with the same codes, see [[Command line]].
+
 ## Where files go
 
 ```
