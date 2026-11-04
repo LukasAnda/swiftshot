@@ -30,10 +30,26 @@ object Summary {
         "${it["changed"]} changed · ${it["added"]} added · ${it["removed"]} removed · ${it["errors"]} errors · ${it["unchanged"]} unchanged"
     }
 
-    /** The rows a run has to show, as (status, id): errors, changed, added, removed; each by id in UTF-8 byte order. */
-    fun rows(v: Verification): List<Pair<String, String>> =
-        v.entries.filter { it["status"] in ORDER }.mapNotNull { e -> (e["id"] as? String)?.let { e["status"] as String to it } }
-            .sortedWith(compareBy<Pair<String, String>> { ORDER.indexOf(it.first) }.thenComparing({ it.second }, CanonicalJson.utf8))
+    /** The share of the canvas that differs: integers only, one decimal rounded half up, `<0.1%` above zero but below 0.1. */
+    fun percent(pixels: Long, total: Long): String {
+        if (total <= 0) return ""
+        if (pixels > 0 && pixels * 1000 < total) return "<0.1%"
+        val tenths = (pixels * 2000 + total) / (2 * total)
+        return "${tenths / 10}.${tenths % 10}%"
+    }
+
+    /** The Pixels cell of an entry: a changed one's percentage, blank otherwise. */
+    private fun pixels(e: Map<String, Any?>): String {
+        if (e["status"] != "changed") return ""
+        val p = e["pixels"] as? Number ?: return ""
+        val c = e["canvasSize"] as? List<*> ?: return ""
+        return percent(p.toLong(), (c[0] as Number).toLong() * (c[1] as Number).toLong())
+    }
+
+    /** The rows a run has to show, as (status, id, Pixels cell): errors, changed, added, removed; each by id in UTF-8 byte order. */
+    fun rows(v: Verification): List<Triple<String, String, String>> =
+        v.entries.filter { it["status"] in ORDER }.mapNotNull { e -> (e["id"] as? String)?.let { Triple(e["status"] as String, it, pixels(e)) } }
+            .sortedWith(compareBy<Triple<String, String, String>> { ORDER.indexOf(it.first) }.thenComparing({ it.second }, CanonicalJson.utf8))
 
     fun markdown(v: Verification, ci: Ci?): String {
         val notes = v.mismatches.map { "> **Note:** Baseline rendered differently: $it" } +
@@ -47,9 +63,9 @@ object Summary {
             val blocks = mutableListOf("$MARKER\n### ${heading(v.status)}", counts(v))
             if (notes.isNotEmpty()) blocks += notes.joinToString("\n")
             if (rows.isNotEmpty()) {
-                val lines = mutableListOf("| Status | Screenshot |", "|---|---|")
-                for ((status, id) in rows.take(shown)) lines += "| $status | `${id.replace("|", "\\|").replace('`', '\'')}` |"
-                if (shown < rows.size) lines += "| | …and ${rows.size - shown} more |"
+                val lines = mutableListOf("| Status | Screenshot | Pixels |", "|---|---|---|")
+                for ((status, id, pixels) in rows.take(shown)) lines += "| $status | `${id.replace("|", "\\|").replace('`', '\'')}` |${if (pixels.isEmpty()) "" else " $pixels"} |"
+                if (shown < rows.size) lines += "| | …and ${rows.size - shown} more | |"
                 blocks += lines.joinToString("\n")
             }
             blocks += tail

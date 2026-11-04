@@ -5,7 +5,7 @@
 
 > **Note:** Some baseline images were recorded outside CI (local); record or accept them on CI
 
-| Status | Screenshot |
-|---|---|
-| error | `en-US/Pixel 9-Broken` |
-| error | `en-US/Pixel 9-New` |
+| Status | Screenshot | Pixels |
+|---|---|---|
+| error | `en-US/Pixel 9-Broken` | |
+| error | `en-US/Pixel 9-New` | |

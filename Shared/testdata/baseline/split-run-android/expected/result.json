@@ -48,6 +48,10 @@
           1
         ]
       ],
+      "canvasSize": [
+        40,
+        80
+      ],
       "device": "Pixel 9",
       "diff": "images/diff/en-US/Pixel 9-Settings.png",
       "fontScale": 1,

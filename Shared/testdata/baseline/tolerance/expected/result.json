@@ -48,6 +48,10 @@
           1
         ]
       ],
+      "canvasSize": [
+        40,
+        80
+      ],
       "device": "Pixel 9",
       "diff": "images/diff/en-US/Pixel 9-Clock Large.png",
       "fontScale": 1,
@@ -84,6 +88,10 @@
           3,
           2
         ]
+      ],
+      "canvasSize": [
+        40,
+        80
       ],
       "device": "Pixel 9",
       "diff": "images/diff/en-US/Pixel 9-Settings.png",

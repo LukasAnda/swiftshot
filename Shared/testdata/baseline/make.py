@@ -569,6 +569,7 @@ def verify(case):
             entries.append(e)
             continue
         e.update(status="changed", reason="size" if sized else "pixels", pixels=len(mask), boxes=boxes(mask),
+                 canvasSize=[max(bi[0], ni[0]), max(bi[1], ni[1])],
                  baseline="images/baseline/%s.png" % sid, new="images/new/%s.png" % sid, diff="images/diff/%s.png" % sid)
         if sized:
             e.update(baselineSize=bi[:2], newSize=ni[:2])
@@ -638,6 +639,15 @@ ROW_ORDER = ("error", "changed", "added", "removed")
 MAX_ROWS, MAX_BYTES = 200, 60000
 
 
+def percent(pixels, canvas):
+    """The Pixels column: integers only, one decimal rounded half up, `<0.1%` above zero but below 0.1."""
+    total = canvas[0] * canvas[1]
+    if 0 < pixels and pixels * 1000 < total:
+        return "<0.1%"
+    tenths = (pixels * 2000 + total) // (2 * total)
+    return "%d.%d%%" % (tenths // 10, tenths % 10)
+
+
 def summary_md(result):
     """Reference for docs/wiki/Baseline-format.md "summary.md"."""
     c = result["counts"]
@@ -646,7 +656,8 @@ def summary_md(result):
     notes = ["> **Note:** Baseline rendered differently: %s" % m for m in result["fingerprintMismatch"]]
     if result["localBaseline"]:
         notes.append("> **Note:** Some baseline images were recorded outside CI (local); record or accept them on CI")
-    rows = sorted(((ROW_ORDER.index(e["status"]), key_order(e["id"]), e["status"], e["id"])
+    rows = sorted(((ROW_ORDER.index(e["status"]), key_order(e["id"]), e["status"], e["id"],
+                    percent(e["pixels"], e["canvasSize"]) if e["status"] == "changed" else "")
                    for e in result["screenshots"] if e["status"] in ROW_ORDER))
     tail = []
     if ci and ci["buildUrl"]:
@@ -661,10 +672,11 @@ def summary_md(result):
         if notes:
             blocks.append("\n".join(notes))
         if rows:
-            lines = ["| Status | Screenshot |", "|---|---|"]
-            lines += ["| %s | `%s` |" % (r[2], r[3].replace("|", "\\|").replace("`", "'")) for r in rows[:shown]]
+            lines = ["| Status | Screenshot | Pixels |", "|---|---|---|"]
+            lines += ["| %s | `%s` | %s |" % (r[2], r[3].replace("|", "\\|").replace("`", "'"), r[4]) if r[4]
+                      else "| %s | `%s` | |" % (r[2], r[3].replace("|", "\\|").replace("`", "'")) for r in rows[:shown]]
             if shown < len(rows):
-                lines.append("| | \u2026and %d more |" % (len(rows) - shown))
+                lines.append("| | \u2026and %d more | |" % (len(rows) - shown))
             blocks.append("\n".join(lines))
         blocks += tail
         return "\n\n".join(blocks) + "\n"

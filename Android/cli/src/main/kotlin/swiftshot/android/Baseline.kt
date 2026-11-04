@@ -285,6 +285,7 @@ object Baseline {
         e["baseline"] = "images/baseline/$id.png"
         e["new"] = "images/new/$id.png"
         e["diff"] = "images/diff/$id.png"
+        e["canvasSize"] = listOf(diff.diffImage!!.width, diff.diffImage!!.height)
         diff.baselineSize?.let { e["baselineSize"] = it }
         diff.newSize?.let { e["newSize"] = it }
         write(File(report, "images/baseline/$id.png"), a)

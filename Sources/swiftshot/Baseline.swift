@@ -371,6 +371,7 @@ enum Baseline {
         e["baseline"] = .string("images/baseline/\(id).png")
         e["new"] = .string("images/new/\(id).png")
         e["diff"] = .string("images/diff/\(id).png")
+        e["canvasSize"] = .array([.int(Int64(diff.diffImage!.width)), .int(Int64(diff.diffImage!.height))])
         if let s = diff.baselineSize { e["baselineSize"] = .array(s.map { .int(Int64($0)) }) }
         if let s = diff.newSize { e["newSize"] = .array(s.map { .int(Int64($0)) }) }
         try write(report.appendingPathComponent("images/baseline/\(id).png"), Data(a))
