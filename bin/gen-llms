@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Generates llms-full.txt: every page of docs/wiki, concatenated.
+
+Order: the pages in the order _Sidebar.md links them, then the pages it doesn't list, alphabetically.
+_Sidebar.md itself is left out. Each page follows a heading with its name (its file name without .md).
+
+  bin/gen-llms           write llms-full.txt
+  bin/gen-llms --check   exit 1 if the committed llms-full.txt differs, or if a wiki page has no link
+                         in llms.txt (or llms.txt links a page that doesn't exist)
+
+Needs python3 only.
+"""
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WIKI = os.path.join(ROOT, "docs", "wiki")
+URL = "https://github.com/LukasAnda/swiftshot/wiki/"
+LINK = re.compile(r"\[\[(?:[^\]|]*\|)?([^\]#|]+)(?:#[^\]]*)?\]\]")
+
+
+def pages(wiki):
+    """Page names (file names without .md) in output order."""
+    names = sorted(f[:-3] for f in os.listdir(wiki) if f.endswith(".md") and f != "_Sidebar.md")
+    with open(os.path.join(wiki, "_Sidebar.md"), encoding="utf-8") as f:
+        sidebar = f.read()
+    ordered = []
+    for m in LINK.finditer(sidebar):
+        name = m.group(1).strip().replace(" ", "-")
+        if name not in names:
+            sys.exit("_Sidebar.md links %r, which is not a page in docs/wiki" % name)
+        if name not in ordered:
+            ordered.append(name)
+    return ordered + [n for n in names if n not in ordered]
+
+
+def generate(wiki):
+    parts = []
+    for name in pages(wiki):
+        with open(os.path.join(wiki, name + ".md"), encoding="utf-8", newline="") as f:
+            text = f.read().replace("\r\n", "\n").strip()
+        parts.append("# %s\n\n%s\n" % (name, text))
+    return "\n".join(parts)
+
+
+def check(root, wiki):
+    """Returns a list of problems."""
+    problems = []
+    try:
+        with open(os.path.join(root, "llms-full.txt"), encoding="utf-8", newline="") as f:
+            committed = f.read()
+    except OSError as e:
+        return [str(e)]
+    if committed != generate(wiki):
+        problems.append("llms-full.txt is out of date; run bin/gen-llms and commit it")
+    try:
+        with open(os.path.join(root, "llms.txt"), encoding="utf-8") as f:
+            index = f.read()
+    except OSError as e:
+        return problems + [str(e)]
+    linked = set(re.findall(re.escape(URL) + r"([^)\s#]+)\)", index))
+    names = set(pages(wiki))
+    for name in sorted(names - linked):
+        problems.append("llms.txt has no link to the wiki page %s" % name)
+    for name in sorted(linked - names):
+        problems.append("llms.txt links %s, which is not a wiki page" % name)
+    return problems
+
+
+def main():
+    args = sys.argv[1:]
+    if args == ["--check"]:
+        problems = check(ROOT, WIKI)
+        for p in problems:
+            print("FAIL " + p)
+        if not problems:
+            print("ok   llms-full.txt and llms.txt match docs/wiki")
+        sys.exit(1 if problems else 0)
+    if args:
+        sys.exit(__doc__)
+    with open(os.path.join(ROOT, "llms-full.txt"), "w", encoding="utf-8", newline="") as f:
+        f.write(generate(WIKI))
+
+
+if __name__ == "__main__":
+    main()

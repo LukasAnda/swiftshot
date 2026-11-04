@@ -107,6 +107,9 @@ jobs:
           pipx install "check-jsonschema==$CHECK_JSONSCHEMA"
           PATH="$RUNNER_TEMP:$PATH" bin/check-recipes
           PATH="$RUNNER_TEMP:$PATH" bin/check-recipes --self-test
+      # llms-full.txt is docs/wiki concatenated, and llms.txt links every page.
+      - name: llms files
+        run: bin/gen-llms --check
 
   # Jetpack Compose previews on a free Linux runner: every device type, five languages, both
   # appearances; size checks, a byte-identical second run and the time budget.
