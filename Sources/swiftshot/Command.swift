@@ -1,7 +1,7 @@
 import Foundation
 
 /// A command line, start to exit status. verify and record: 0/1/2 as docs/wiki/Baseline-format.md says, 64 for
-/// usage errors; accept: 0 applied, 1 refused, 64 usage or invalid report; every other command 0 or 1.
+/// usage errors; accept: 0 applied, 1 refused, 2 interrupted, 64 usage or invalid report; every other command 0 or 1.
 enum Command {
     static func run(_ arguments: [String]) async -> Int32 {
         let baselineCommand = ["verify", "record", "accept"].contains(Options.command(arguments))
@@ -15,7 +15,7 @@ enum Command {
         case "accept":
             return Accept.run(from: options.from, only: options.only, push: options.push, author: options.author,
                               baseline: URL(fileURLWithPath: options.baselineDirectory), log: Console(),
-                              branch: options.branch, env: ProcessInfo.processInfo.environment)
+                              branch: options.branch, env: ProcessInfo.processInfo.environment, handleSignals: true)
         case "verify", "record":
             return await baseline(options)
         default:
@@ -68,7 +68,11 @@ enum Command {
             let code = try Baseline.verify(output: output, baseline: baseline, report: reportDir, config: CompareConfig.from(options),
                                            env: BaselineEnv.detect(cwd, env: processEnv), log: console, processEnv: processEnv,
                                            out: json ? { FileHandle.standardError.write(Data(($0 + "\n").utf8)) } : { print($0) }, projectDir: cwd)
-            if json, let result = try? Data(contentsOf: reportDir.appendingPathComponent("result.json")) { stdout.write(result) }
+            if json, let result = try? Data(contentsOf: reportDir.appendingPathComponent("result.json")) {
+                // A reader that closed early (`| head -1`) must not take the exit code along: no SIGPIPE, and a failed write is only logged.
+                signal(SIGPIPE, SIG_IGN)
+                do { try stdout.write(contentsOf: result) } catch { console.error("couldn't write the result to stdout: \(error.localizedDescription)") }
+            }
             return code
         } catch {
             // No result: nothing of an earlier verify may stay behind to be read as this one's.

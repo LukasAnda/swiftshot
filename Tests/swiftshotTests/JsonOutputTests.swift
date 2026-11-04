@@ -19,6 +19,15 @@ final class JsonOutputTests: XCTestCase {
         XCTAssertTrue(json.pretty().hasSuffix("}\n"))
     }
 
+    func testUsageAndVersionGoToStderrWithJson() {
+        var out: [String] = [], err: [String] = []
+        Options.info("usage", json: true, stdout: { out.append($0) }, stderr: { err.append($0) })
+        XCTAssertEqual(out, [])
+        XCTAssertEqual(err, ["usage"])
+        Options.info("usage", json: false, stdout: { out.append($0) }, stderr: { err.append($0) })
+        XCTAssertEqual(out, ["usage"])
+    }
+
     func testNoRuntimesIsAnEmptyList() {
         XCTAssertEqual(JsonOutput.devices([], runtimes: []).compact(), #"{"devices":[],"runtimes":[]}"#)
     }

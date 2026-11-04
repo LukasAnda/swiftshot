@@ -4,9 +4,9 @@ name: llms
 on:
   push:
     branches: [main]
-    paths: ["docs/wiki/**", "llms.txt", "llms-full.txt", "bin/gen-llms"]
+    paths: ["docs/wiki/**", "llms.txt", "llms-full.txt", "bin/gen-llms", ".github/workflows/llms.yml"]
   pull_request:
-    paths: ["docs/wiki/**", "llms.txt", "llms-full.txt", "bin/gen-llms"]
+    paths: ["docs/wiki/**", "llms.txt", "llms-full.txt", "bin/gen-llms", ".github/workflows/llms.yml"]
 
 permissions:
   contents: read

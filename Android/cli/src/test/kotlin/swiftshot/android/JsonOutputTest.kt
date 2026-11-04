@@ -75,4 +75,24 @@ class JsonOutputTest {
         assertEquals(2, code)
         assertEquals(0, stdout.size())
     }
+
+    /** A reader that closed early: the write fails (PrintStream swallows it) and the exit code survives. */
+    @Test fun verifyKeepsItsExitCodeWhenStdoutIsClosed() {
+        val broken = object : java.io.OutputStream() {
+            override fun write(b: Int) = throw java.io.IOException("Broken pipe")
+            override fun write(b: ByteArray, off: Int, len: Int) = throw java.io.IOException("Broken pipe")
+        }
+        val code = cli(verifyArgs(File(tmp, "report")), Log(false), PrintStream(broken, true)) { _, _ -> throw RuntimeException("boom") }
+        assertEquals(2, code)
+    }
+
+    /** --json anywhere: usage goes to stderr and stdout stays empty. */
+    @Test fun usageGoesToStderrWithJson() {
+        val out = ByteArrayOutputStream(); val err = ByteArrayOutputStream()
+        Options.info("usage text", json = true, out = PrintStream(out, true), err = PrintStream(err, true))
+        assertEquals(0, out.size())
+        assertTrue(String(err.toByteArray()).startsWith("usage text"))
+        Options.info("usage text", json = false, out = PrintStream(out, true), err = PrintStream(err, true))
+        assertTrue(String(out.toByteArray()).startsWith("usage text"))
+    }
 }

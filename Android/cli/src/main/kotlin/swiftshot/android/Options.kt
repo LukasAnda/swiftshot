@@ -2,6 +2,7 @@ package swiftshot.android
 
 import swiftshot.android.shared.Json
 import java.io.File
+import java.io.PrintStream
 
 /** Per-screenshot settings: the first rule whose `preview` matches wins. */
 data class ScreenRule(
@@ -186,6 +187,11 @@ class Options {
               -v, --verbose
         """.trimIndent()
 
+        /** Usage text. With --json on the command line stdout stays empty, so it goes to stderr. */
+        fun info(text: String, json: Boolean, out: PrintStream = System.out, err: PrintStream = System.err) {
+            (if (json) err else out).println(text)
+        }
+
         fun parse(args: List<String>): Options {
             val o = Options()
             var i = 0
@@ -201,7 +207,7 @@ class Options {
                 } else positional += a
                 i++
             }
-            if (flags.any { it.first == "-h" || it.first == "--help" }) { println(usage); kotlin.system.exitProcess(0) }
+            if (flags.any { it.first == "-h" || it.first == "--help" }) { info(usage, flags.any { it.first == "--json" }); kotlin.system.exitProcess(0) }
             positional.firstOrNull()?.let { o.command = it; o.commandArgs += positional.drop(1) }
             o.config = flags.lastOrNull { it.first == "--config" }?.second
             o.projectDir = flags.lastOrNull { it.first == "--project-dir" }?.second ?: "."

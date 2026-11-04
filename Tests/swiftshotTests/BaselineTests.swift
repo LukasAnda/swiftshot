@@ -289,6 +289,16 @@ final class BaselineTests: XCTestCase {
         XCTAssertEqual(try readJSON(sink)["status"], .string("error"))
     }
 
+    /// A reader that closed early: the write fails, the exit code stays.
+    func testVerifyJsonKeepsItsExitCodeWhenStdoutIsClosed() async throws {
+        let (_, o) = try staleRun()
+        var json = o; json.json = true
+        let pipe = Pipe()
+        try pipe.fileHandleForReading.close()
+        let code = await Command.baseline(json, stdout: pipe.fileHandleForWriting) { _ in throw CLIError("boom") }
+        XCTAssertEqual(code, 2)
+    }
+
     /// No result.json for the run (the comparison failed): stdout stays empty.
     func testVerifyJsonWithoutAResultWritesNothing() async throws {
         let (_, o) = try staleRun()

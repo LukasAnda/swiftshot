@@ -324,6 +324,12 @@ struct Options: Codable {
         }
     }
 
+    /// Usage and version text. With --json anywhere on the command line stdout stays empty, so it goes to stderr.
+    static func info(_ text: String, json: Bool, stdout: (String) -> Void = { print($0) },
+                     stderr: (String) -> Void = { FileHandle.standardError.write(Data(($0 + "\n").utf8)) }) {
+        if json { stderr(text) } else { stdout(text) }
+    }
+
     static func parse(_ argv: [String]) throws -> Options {
         var args = argv
         var options = Options()
@@ -419,8 +425,8 @@ struct Options: Codable {
             case "--force", "-f": options.force = true
             case "--verbose", "-v": options.verbose = true
             case "--json": options.json = true
-            case "--help", "-h": print(usage); exit(0)
-            case "--version": print("swiftshot \(swiftshotVersion)"); exit(0)
+            case "--help", "-h": info(usage, json: argv.contains("--json")); exit(0)
+            case "--version": info("swiftshot \(swiftshotVersion)", json: argv.contains("--json")); exit(0)
             default:
                 // emit-table takes calibration files as plain arguments, frame a folder.
                 guard ["emit-table", "frame"].contains(options.command), !args[i].hasPrefix("-") else { throw CLIError("Unknown option \(args[i])\n\n\(usage)") }

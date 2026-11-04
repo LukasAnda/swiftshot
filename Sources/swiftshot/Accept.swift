@@ -2,7 +2,8 @@ import Foundation
 
 /// `accept` (docs/wiki/Baseline-format.md): applies verify reports to the baseline without rendering. Changed and
 /// added ids get the report's new image, removed ids lose theirs; nothing else in the baseline is touched.
-/// Exit 0 applied (or nothing to do), 64 usage or invalid report, 1 refused (stale report, push failed).
+/// Exit 0 applied (or nothing to do), 64 usage or invalid report, 1 refused (stale report, push failed), 2 interrupted
+/// (SIGINT or SIGTERM: the baseline may be partly updated, as on Android).
 enum Accept {
     static let defaultAuthor = "swiftshot <swiftshot@users.noreply.github.com>"
     /// The trailer that marks a commit made by `accept`; its value is the verified commit.
@@ -10,6 +11,23 @@ enum Accept {
 
     /// A refusal (exit 1): the report doesn't fit the branch, or git couldn't finish.
     struct Refused: Error, CustomStringConvertible { let description: String }
+
+    /// Set by SIGINT or SIGTERM; accept looks at it between steps. A second signal ends the process at once.
+    final class Interruption: @unchecked Sendable {
+        private let lock = NSLock()
+        private var flag = false
+        var isSet: Bool { lock.lock(); defer { lock.unlock() }; return flag }
+        func set() { lock.lock(); flag = true; lock.unlock() }
+    }
+
+    /// accept was interrupted (exit 2).
+    struct Interrupted: Error {}
+
+    /// The exit status for an error: an interrupted accept is 2 whatever the step it stopped in failed with.
+    static func exitCode(for error: Error, interrupted: Bool) -> Int32 {
+        if interrupted || error is Interrupted { return 2 }
+        return error is UsageError ? 64 : 1
+    }
 
     /// What one report does to one id: a new image (changed, added) or none (removed).
     struct Change {
@@ -36,22 +54,51 @@ enum Accept {
     }
 
     static func run(from: [String], only: Set<String>?, push: Bool, author: String?, baseline: URL, log: Console,
-                    branch: String? = nil, env: [String: String] = [:], gitEnv: [String: String] = [:]) -> Int32 {
+                    branch: String? = nil, env: [String: String] = [:], gitEnv: [String: String] = [:],
+                    interruption: Interruption = Interruption(), handleSignals: Bool = false) -> Int32 {
         var temps: [URL] = []
-        defer { for t in temps { try? FileManager.default.removeItem(at: t) } }
+        let sources = handleSignals ? watchSignals(interruption) : []
+        defer {
+            for s in sources { s.cancel() }
+            for sig in handleSignals ? [SIGINT, SIGTERM] : [] { signal(sig, SIG_DFL) }
+            for t in temps { try? FileManager.default.removeItem(at: t) }
+        }
         do {
-            return try apply(from: from, only: only, push: push, author: author, baseline: baseline.standardizedFileURL, log: log, branch: branch, env: env, gitEnv: gitEnv, temps: &temps)
-        } catch let e as UsageError {
-            log.error(e.description); return 64
-        } catch let e as Refused {
-            log.error(e.description); return 1
+            return try apply(from: from, only: only, push: push, author: author, baseline: baseline.standardizedFileURL, log: log, branch: branch, env: env, gitEnv: gitEnv, temps: &temps, interruption: interruption)
         } catch {
-            log.error((error as NSError).localizedDescription); return 1
+            let code = exitCode(for: error, interrupted: interruption.isSet)
+            if code == 2 {
+                log.error("accept was interrupted; the baseline may be partly updated (git status shows what changed)")
+            } else if let e = error as? UsageError {
+                log.error(e.description)
+            } else if let e = error as? Refused {
+                log.error(e.description)
+            } else {
+                log.error((error as NSError).localizedDescription)
+            }
+            return code
         }
     }
 
+    /// The first SIGINT or SIGTERM sets the flag; the next one restores the default and ends the process.
+    private static func watchSignals(_ interruption: Interruption) -> [DispatchSourceSignal] {
+        [SIGINT, SIGTERM].map { sig in
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .global())
+            source.setEventHandler {
+                if interruption.isSet { signal(sig, SIG_DFL); raise(sig) } else { interruption.set() }
+            }
+            source.resume()
+            return source
+        }
+    }
+
+    private static func check(_ interruption: Interruption) throws {
+        if interruption.isSet { throw Interrupted() }
+    }
+
     private static func apply(from: [String], only: Set<String>?, push: Bool, author: String?, baseline: URL, log: Console, branch: String?,
-                              env: [String: String], gitEnv: [String: String], temps: inout [URL]) throws -> Int32 {
+                              env: [String: String], gitEnv: [String: String], temps: inout [URL], interruption: Interruption) throws -> Int32 {
         func v(_ k: String) -> String? { env[k].flatMap { $0.isEmpty ? nil : $0 } }
         let token = v("SWIFTSHOT_ARTIFACT_TOKEN")
         if from.isEmpty { throw UsageError("accept needs --from <report directory, .zip or URL>") }
@@ -73,6 +120,7 @@ enum Accept {
         }
 
         let reports = try from.map { try load($0, token: token, env: env, temps: &temps) }
+        try check(interruption)
         var changes: [String: [Change]] = [:]
         for c in reports.flatMap(\.changes) { changes[c.id, default: []].append(c) }
         if let only {
@@ -94,7 +142,7 @@ enum Accept {
             log.ok("Nothing to accept: the report has no changed, added or removed screenshots\(only != nil ? " among --only" : "")")
             return 0
         }
-        let written = try write(baseline, selected)
+        let written = try write(baseline, selected, interruption)
         let counts = ["changed", "added", "removed"].map { k in selected.filter { $0.kind == k }.count }
         if counts[2] == selected.count { log.warn("Every change in the report is a removal (\(count(counts[2], "screenshot"))); check the run rendered what you expected") }
         let summary = message(changed: counts[0], added: counts[1], removed: counts[2])
@@ -110,6 +158,7 @@ enum Accept {
         // A deleted file git never knew can't be staged; leave it out.
         let tracked = Set(git.run("ls-files", "-z", "--", ":(literal)" + (prefix.isEmpty ? "." : prefix)).out.split(separator: "\0").map(String.init))
         let specs = ours.filter { FileManager.default.fileExists(atPath: topPath + "/" + $0) || tracked.contains($0) }.map { ":(literal)" + $0 }
+        try check(interruption)
         _ = try git.must("add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul", input: specs.joined(separator: "\0"))
         let staged = try git.must("-c", "core.quotePath=false", "diff", "--cached", "--name-only", "--no-renames", "-z")
             .split(separator: "\0").map(String.init).filter { ours.contains($0) }
@@ -192,7 +241,7 @@ enum Accept {
     }
 
     /// Writes the images, then baseline.json (temp file + rename); the paths it wrote or deleted, relative to the baseline.
-    private static func write(_ baseline: URL, _ selected: [Change]) throws -> [String] {
+    private static func write(_ baseline: URL, _ selected: [Change], _ interruption: Interruption) throws -> [String] {
         let fm = FileManager.default
         let jsonFile = baseline.appendingPathComponent("baseline.json")
         var json: [String: JSON]?
@@ -213,6 +262,7 @@ enum Accept {
             throw UsageError("\(c.id): outside the baseline directory")
         }
         for c in selected {
+            try check(interruption)
             let target = root.appendingPathComponent(c.id + ".png")
             if let png = c.png {
                 try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)

@@ -33,8 +33,9 @@ swiftshot run
 
 `init` detects the scheme or modules, languages and devices; it stops if `swiftshot.json` exists
 unless `--force` is given. `list` shows which previews were found: if one is missing, see
-*Common failures*. `run` writes PNGs and `screenshots.html` to `screenshots/`. Options:
-[[Configuration]] and [[Command line]].
+*Common failures*. `run` writes PNGs and `screenshots.html` to `<output_directory>` (default
+`screenshots`; `init` may choose another, e.g. `fastlane/screenshots`). Options: [[Configuration]]
+and [[Command line]].
 
 ## Previews that render well
 
@@ -55,18 +56,20 @@ animations that are not finished when the screenshot is taken give unstable resu
 swiftshot verify --json > result.json
 ```
 
-Stdout is the `result.json` of this run and nothing else; logs go to stderr. `--json` also works
+Stdout is the `result.json` of this run and nothing else; logs go to stderr. Exit 2 can also come
+with empty stdout and no `result.json` (a malformed `swiftshot-report.json`, a failed PNG copy; the
+error is on stderr): check that stdout is not empty before parsing it. `--json` also works
 with `list` and `devices`, see [[Command line]]. The files `verify` writes are in
-`screenshots-report/`: [[Baseline format]] describes every field.
+`<output_directory>-report`: [[Baseline format]] describes every field.
 
 ## Read result.json
 
 - `status`: `passed`, `failed` (differences) or `error`. The exit code is 0, 1 or 2.
 - `counts`: `unchanged`, `changed`, `added`, `removed`, `errors`.
-- `screenshots`: one entry per screenshot, `id` and `status` first. For every status other than
-  `unchanged`, look at it:
+- `screenshots`: one entry per screenshot; its keys are sorted, so read `id` and `status` by name.
+  For every status other than `unchanged`, look at it:
   - `changed`: `reason` and `pixels`, `boxes` (where it differs, `[x, y, w, h]`), and the images
-    `baseline`, `new` and `diff`, as paths inside `screenshots-report/`.
+    `baseline`, `new` and `diff`, as paths inside `<output_directory>-report`.
   - `added`, `removed`: the preview has no baseline yet, or its baseline has no preview.
   - `error`: `message` says what failed.
 - `errors`: render errors, with the `id` they belong to when known.
@@ -81,8 +84,9 @@ After a person has looked at the report, accepting happens on CI: for example th
 `/swiftshot accept` on a pull request (GitHub), or the manual job `swiftshot-accept` (GitLab). The
 recipes are listed below. Don't try to accept from your own machine.
 
-A first baseline is recorded on CI too: run `swiftshot record` there (the GitHub Action takes
-`command: record`) and commit the `screenshots-baseline` folder it produces.
+The first baseline is made the same way: with no baseline yet, `verify` on CI reports every
+screenshot as `added` (exit 1), and a person accepts that report. The accept commits the PNGs and
+`baseline.json` with its fingerprints.
 
 ## Exit codes
 
@@ -110,7 +114,7 @@ exits 1 for it, except `record` and `accept`, which exit 64. Details: [[Command 
 | `… has no androidx.compose.ui:ui-tooling on its debug classpath` | add `debugImplementation("androidx.compose.ui:ui-tooling")`. |
 | `swiftshot needs a JDK 21 or later` | install a JDK 21+, or set `JAVA_HOME`, `SWIFTSHOT_JAVA_HOME` or `--java-home`. |
 | iOS renders instead of Android | pass `--platform android` or `--project-dir` to the Gradle project. |
-| a runtime or device is missing (iOS) | `swiftshot devices` lists what is installed; `--download-missing-runtimes`, or `--allow-unsupported-devices`. |
+| a runtime or device is missing (iOS) | `swiftshot devices` lists the devices from `--devices`, the config or the defaults, and the installed runtimes; an unknown name exits 1 with `Unknown device`; `--download-missing-runtimes`, or `--allow-unsupported-devices`. |
 | unfinished images or animations | load sample data synchronously, or `--delay <seconds>`. |
 | a long list is cut off | `--full-length`, or `"full_length": true` for that screen. |
 | `verify` exits 2 | read `errors` and the entries with `status` `error` in `result.json`. |
@@ -139,7 +143,8 @@ More: [[Troubleshooting]].
 - Previews are the test cases. Add a public preview per screen state, with sample data loaded
   synchronously; iOS builds must be Debug.
 - See the screens: `swiftshot run`. Compare: `swiftshot verify --json > result.json`
-  (exit 0 same, 1 differences, 2 errors, 64 usage error).
+  (exit 0 same, 1 differences, 2 errors, 64 usage error). With exit 2, stdout can be empty (the
+  error is on stderr): don't parse an empty `result.json`.
 - Read result.json: `status`, `counts`, and every entry of `screenshots` whose `status` is not
   `unchanged` (`changed` has `diff`, `boxes`, `pixels`; `error` has `message`).
 - Fix unintended differences. Never run `swiftshot record` or `swiftshot accept` locally and never

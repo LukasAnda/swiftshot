@@ -2,7 +2,7 @@
 
 > Renders screenshots of the SwiftUI, UIKit, Jetpack Compose, Compose Multiplatform and Flutter previews a project already has, for every device, language and appearance, and compares them with a committed baseline.
 
-Install with `brew install lukasanda/tap/swiftshot` (Mac or Linux), then run `swiftshot init` in the project folder to write `swiftshot.json`, `swiftshot` to render every preview into `screenshots/`, and `swiftshot verify` to compare with the baseline in `screenshots-baseline/`. `verify` exits 0 (same), 1 (differences), 2 (errors) or 64 (usage error) and writes `result.json` to `screenshots-report/`; `--json` prints it to stdout. Baselines are recorded and accepted on CI, and a person triggers the accept.
+Install with `brew install lukasanda/tap/swiftshot` (Mac or Linux), then run `swiftshot init` in the project folder to write `swiftshot.json`, `swiftshot` to render every preview into `<output_directory>` (default `screenshots`), and `swiftshot verify` to compare with the baseline in `screenshots-baseline/`. `verify` exits 0 (same), 1 (differences), 2 (errors) or 64 (usage error) and writes `result.json` to `<output_directory>-report`; `--json` prints it to stdout (with exit 2 it can be empty). Baselines are recorded and accepted on CI, and a person triggers the accept.
 
 ## Start
 
