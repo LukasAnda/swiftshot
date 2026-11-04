@@ -528,6 +528,8 @@ every platform, the [Android](https://github.com/LukasAnda/swiftshot/wiki/Androi
 [Flutter](https://github.com/LukasAnda/swiftshot/wiki/Flutter) guides, CI
 recipes, migration guides from fastlane and troubleshooting.
 
+Coding agents: [llms.txt](llms.txt) lists the docs, and the [Agents](https://github.com/LukasAnda/swiftshot/wiki/Agents) page says how to use Swiftshot in a project.
+
 ## Contributing
 
 Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
