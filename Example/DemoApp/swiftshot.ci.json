@@ -1,0 +1,9 @@
+{
+  "project": "DemoApp.xcodeproj",
+  "scheme": "DemoApp",
+  "devices": ["iPhone 17 Pro Max"],
+  "ios_versions": ["27.0"],
+  "languages": ["en-US", "ar"],
+  "appearances": ["light", "dark"],
+  "previews": ["Stats", "Settings", "Habit list"]
+}
