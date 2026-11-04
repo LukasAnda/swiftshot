@@ -15,7 +15,7 @@ and the JVM CLI) follow this page exactly and are tested against the fixtures in
   result.json
   junit.xml
   summary.md
-  index.html
+  index.html                          the same result for people (see index.html); not with --no-html
   manifest.json
   timings.json                        {"compareSeconds": 0.25}: how long the comparison took
   images/baseline/<id>.png            changed and removed
@@ -404,8 +404,34 @@ Fixtures: `Shared/testdata/ci/` (one file per case) and the baseline case `ci-gi
   otherwise from the `images` entry (removed, and `error` ids not in `screenshots`); an `error` id
   in neither has only `id`, `status`, `message`. Present only when they apply: `message` (error),
   `reason`,
-  `pixels`, `boxes`, `baselineSize`, `newSize`, and the image paths (relative to the report
+  `pixels`, `boxes`, `canvasSize`, `baselineSize`, `newSize`, and the image paths (relative to the report
   directory, not URL-encoded): `baseline` (changed, removed), `new` (changed, added), `diff` (changed).
+- `canvasSize`: `[w, h]` of the canvas (see Comparison), on every `changed` entry; `pixels` of `w × h`
+  is the share that changed. Added without changing `schema`: it stays 1, because readers ignore
+  unknown keys and nothing in `accept` reads it.
+
+## index.html
+
+One page for people to read `result.json`: a list by status, the images side by side, on a slider or
+as the diff image, filters, and a tray that builds the accept text. It works from `file://` in a
+downloaded report: no network, no external files, and a Content-Security-Policy that allows only its
+own style and script.
+
+- The page is `Shared/report.html` with one change: `__SWIFTSHOT_RESULT_JSON__` is replaced by the bytes
+  of `result.json`, each `<` written as `\u003c`. So the file is the same from both implementations.
+  The Swift binary compiles the template in and the JVM jar has it as a resource; there are no copies.
+  `make.py` refreshes the policy's hashes, so run it after editing the template.
+- `--no-html` (`"html": false` in swiftshot.json) means no HTML from this run: neither
+  `screenshots.html` nor `index.html`. Everything else in the report stays.
+- Images are referenced only through the paths in `result.json`, each segment percent-encoded.
+- A row is ticked to accept it, and the tray builds the text: with `ci.provider` `github` the comment
+  (`/swiftshot accept`, then ids one per line); otherwise `swiftshot accept --from <report> --only "<id>,<id>"`,
+  single-quoted when an id has `$`, a backtick, `\`, `"` or `!`, with `--from` the page's own folder
+  when opened from `file://`. The bare form appears only when every changed, added and removed row is
+  ticked. A row can't be ticked when its id has a comma (`--only` and the comment recipe split or refuse
+  on it), a control character or line break, or starts or ends with white space (both trim it). The
+  bare form still accepts such a row.
+- `index.html` adds nothing that `accept` reads, and is in `swiftshot-report.zip` like every other file.
 
 ## manifest.json
 
@@ -519,10 +545,10 @@ text). UTF-8, `\n` line ends, one final `\n`. Blocks are separated by one blank 
 
 > **Note:** Baseline rendered differently: android host: baseline linux-x64, this run macos-arm64
 
-| Status | Screenshot |
-|---|---|
-| changed | `en-US/Pixel 9-Home` |
-| added | `en-US/Pixel 9-New` |
+| Status | Screenshot | Pixels |
+|---|---|---|
+| changed | `en-US/Pixel 9-Home` | 1.9% |
+| added | `en-US/Pixel 9-New` | |
 
 [Full report](https://github.com/acme/app/actions/runs/9876543210)
 
@@ -536,9 +562,13 @@ Comment `/swiftshot accept` on this pull request to accept every change, or put 
   <entry>`), then, when `localBaseline`, `Some baseline images were recorded outside CI (local);
   record or accept them on CI`. Omitted when empty.
 - Table: one row per `error`, `changed`, `added` or `removed` entry, in that status order, then by id
-  in UTF-8 byte order; at most 200 rows, then `| | …and <n> more |`. In an id, `|` is written `\|`
+  in UTF-8 byte order; at most 200 rows, then `| | …and <n> more | |`. In an id, `|` is written `\|`
   and a backtick `'`. Omitted when there are no rows. Errors without id have no row (see the counts).
-- `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table.
+- `Pixels`: for `changed` rows, `pixels` as a share of `canvasSize`; blank (`| |`) for other rows. In
+  integers, so both implementations agree: `<0.1%` when `pixels > 0` and `pixels · 1000 < w · h`, else
+  `t = (pixels · 2000 + w · h) / (2 · w · h)` (`/` truncates) written as `<t / 10>.<t % 10>%`.
+- `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table. It links
+  to the CI's build, where the report directory is kept: download it and open `index.html`.
 - Accept hint, `failed` only, last. By `ci.provider`; `null` or unknown gets the last text:
   - `github`: Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.
   - `gitlab`: Run the manual `swiftshot-accept` job in this pipeline to accept the changes.

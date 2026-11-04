@@ -33,7 +33,8 @@ pipelines:
 
 A changed screenshot fails the step (`junit.xml` is copied to `test-results/` for the Tests tab).
 The after-script uploads the report to the repository's Downloads as
-`swiftshot-report-<commit>.zip`, because Bitbucket has no API for a pipeline's artifacts.
+`swiftshot-report-<commit>.zip`, because Bitbucket has no API for a pipeline's artifacts. Unzip it
+and open `index.html`; the comment's **Full report** link goes to the pipeline.
 
 ## Accept
 

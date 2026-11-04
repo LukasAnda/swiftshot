@@ -72,7 +72,7 @@ OUTPUT
   --output <dir>                          Default: ./screenshots (fastlane/deliver layout: <dir>/<lang>/<device>-<preview>.png)
   --format png|jpeg                       Default: png
   --clear                                 Delete previous screenshots first
-  --no-html                               Do not write screenshots.html
+  --no-html                               Do not write screenshots.html, or index.html in a verify report
   --no-status-bar                         Leave out the system status bar (9:41, full battery), which is
                                           drawn like on a device by default
 
@@ -194,7 +194,7 @@ OUTPUT
   --output <dir>                        Default: screenshots
   --layout swiftshot|fastlane           fastlane: <output>/<locale>/images/<type>Screenshots
   --clear                               Delete existing screenshots first
-  --no-html                             Do not write screenshots.html
+  --no-html                             Do not write screenshots.html, or index.html in a verify report
   --full-length                         Grow scrolling screens to their whole content
   --delay <seconds>                     Advance the clock before capture (animations)
   --system-ui preview|always|never      Status and navigation bars (default: as the preview says)

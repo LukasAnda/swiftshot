@@ -38,7 +38,8 @@ jobs:
 
 The action runs `swiftshot verify`, comments the result on the pull request, posts a `swiftshot`
 commit status, writes the summary and the annotations to the run, and uploads the report as the
-artifact `swiftshot-report`. Android and Compose: use `ubuntu-latest` and `actions/setup-java`.
+artifact `swiftshot-report`: download it and open `index.html`. The comment's **Full report** link
+goes to the run. Android and Compose: use `ubuntu-latest` and `actions/setup-java`.
 
 ## Accept
 

@@ -78,7 +78,7 @@ own: keys only iOS knows, such as `scheme`, are rejected.
 | `output_directory` | `screenshots` | |
 | `layout` | `swiftshot` | `fastlane`: `<locale>/images/phoneScreenshots/…` for `fastlane supply` |
 | `clear_previous_screenshots` | `false` | |
-| `html` | `true` | write `screenshots.html` |
+| `html` | `true` | write `screenshots.html`, and `index.html` in a verify report |
 | `full_length` | `false` | grow scrolling screens to their whole content |
 | `delay` | `0` | seconds to advance the clock before capture |
 | `system_ui` | `preview` | status and navigation bars: as `showSystemUi` says, `always`, `never` |

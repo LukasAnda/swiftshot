@@ -27,7 +27,8 @@ verify:
 ```
 
 A changed screenshot fails the job. `junit.xml` fills the merge request's test summary, `expose_as`
-links the report in the merge request, and `summary.md` is in the report folder.
+links the report in the merge request, and `summary.md` is in the report folder. Download the
+artifacts and open `index.html`; the comment's **Full report** link goes to the job.
 
 ## Accept
 

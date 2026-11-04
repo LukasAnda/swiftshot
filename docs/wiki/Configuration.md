@@ -76,7 +76,7 @@ iOS:
 | `output_directory` | `screenshots` | |
 | `format` | `png` | `png`, `jpeg` |
 | `clear_previous_screenshots` | `false` | |
-| `html` | `true` | write `screenshots.html` |
+| `html` | `true` | write `screenshots.html`, and `index.html` in a verify report |
 | `status_bar` | `true` | draw the 9:41 status bar |
 | `delay` | `0` | seconds to wait before each capture |
 | `settle_frames` | `3` | run-loop frames to wait before capture |
@@ -193,7 +193,7 @@ so `fastlane deliver` uploads it unchanged.
 | `output_directory` | `screenshots` | |
 | `layout` | `swiftshot` | `swiftshot` or `fastlane` (below) |
 | `clear_previous_screenshots` | `false` | |
-| `html` | `true` | write `screenshots.html` |
+| `html` | `true` | write `screenshots.html`, and `index.html` in a verify report |
 | `system_ui` | `preview` | status bar and gesture handle: as `showSystemUi` says, `always`, `never` |
 | `frame` | `none` | `plain` or `none`, see [[Device frames]] |
 | `round_corners` | `black` | outside round watch screens: `black`, `transparent` |

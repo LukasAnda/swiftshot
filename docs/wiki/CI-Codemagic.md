@@ -33,7 +33,8 @@ workflows:
 
 `test_report` shows the differences in the build's test results. The script zips the report before
 it exits with verify's exit code, so a build with differences fails and still has the zip.
-The workflow runs on pull request branches.
+The workflow runs on pull request branches. Unzip the report and open `index.html`; Codemagic gives
+no build URL, so the comment has no **Full report** link.
 
 ## Accept
 

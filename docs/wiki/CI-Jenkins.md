@@ -29,6 +29,10 @@ stage('Verify') {
 }
 ```
 
+`archiveArtifacts` keeps the report with the build, which the comment's **Full report** link goes to.
+Download it and open `index.html`: Jenkins's default Content-Security-Policy stops the page's script
+when it is viewed in place.
+
 ## Accept
 
 ```groovy

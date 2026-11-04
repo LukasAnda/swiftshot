@@ -67,12 +67,24 @@ stays as above.
 | 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | interrupted |
 | 64 | wrong option or config | wrong option or config | wrong option, or not a valid report |
 
+## The report
+
+`verify` writes `screenshots-report/index.html`. Open it: it lists what changed, was added or
+removed, and what failed, and shows each screenshot side by side with its baseline, on a slider, or
+as the differences. Tick what you want to keep and it builds the accept command, or on GitHub the
+comment to post. `j` and `k` move through the list; `1`, `2`, `3` switch the view. It needs no server
+and no network, so a downloaded report works too. `--no-html` leaves it out.
+
+On a pull request, the comment's **Full report** link goes to the CI build, where the report is kept:
+download it and open `index.html`. The comment's `Pixels` column is the share of the image that
+changed.
+
 ## Where files go
 
 ```
 screenshots/               what this run rendered (output_directory)
 screenshots-baseline/      the approved screenshots and baseline.json: commit this
-screenshots-report/        what verify found: result.json, junit.xml, images/
+screenshots-report/        what verify found: index.html, result.json, junit.xml, images/
 ```
 
 Change them with `baseline_directory` and `report_directory` in [[Configuration]], or
