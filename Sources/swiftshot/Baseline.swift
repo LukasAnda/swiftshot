@@ -39,37 +39,35 @@ struct CompareConfig {
     }
 }
 
-/// Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else git; nil when unknown.
+/// Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else the CI's, else git; nil when unknown.
 struct GitInfo {
     var commit: String?
     var branch: String?
 
-    static func detect(_ dir: URL) -> GitInfo {
+    static func detect(_ dir: URL, env: [String: String], ci: Ci?) -> GitInfo {
         func git(_ args: String...) -> String? {
             let r = Proc.run(["git"] + args, cwd: dir)
             let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
             return r.code == 0 && !out.isEmpty ? out : nil
         }
-        let env = ProcessInfo.processInfo.environment
-        let commit = env["SWIFTSHOT_COMMIT"] ?? git("rev-parse", "HEAD")
-        let branch = env["SWIFTSHOT_BRANCH"] ?? git("rev-parse", "--abbrev-ref", "HEAD").flatMap { $0 == "HEAD" ? nil : $0 }
+        func set(_ k: String) -> String? { env[k].flatMap { $0.isEmpty ? nil : $0 } }
+        let commit = set("SWIFTSHOT_COMMIT") ?? ci?.commit ?? git("rev-parse", "HEAD")
+        let branch = set("SWIFTSHOT_BRANCH") ?? ci?.branch ?? git("rev-parse", "--abbrev-ref", "HEAD").flatMap { $0 == "HEAD" ? nil : $0 }
         return GitInfo(commit: commit, branch: branch)
     }
 }
 
-/// What a verify run records about where it ran.
+/// What a verify run records about where it ran; `ci` is nil when it wasn't on a CI.
 struct BaselineEnv {
     var git: GitInfo
     var version: String
-    var ci: Bool
+    var ci: Ci?
 
-    static func detect(_ dir: URL) -> BaselineEnv { BaselineEnv(git: GitInfo.detect(dir), version: Fingerprints.version(), ci: ci()) }
-
-    /// `SWIFTSHOT_CI` (true/false), else `CI` set to true.
-    static func ci() -> Bool {
-        let env = ProcessInfo.processInfo.environment
-        if let v = env["SWIFTSHOT_CI"] { return v.lowercased() == "true" || v == "1" }
-        return env["CI"].map { $0.lowercased() == "true" || $0 == "1" } ?? false
+    /// `env` is the process environment, read once by the caller.
+    static func detect(_ dir: URL, env: [String: String], readFile: (String) -> String? = defaultRead, version: String = Fingerprints.version()) -> BaselineEnv {
+        let ci = Ci.detect(env, readFile: readFile)
+        let found = ci.isCi ? ci : nil
+        return BaselineEnv(git: GitInfo.detect(dir, env: env, ci: found), version: version, ci: found)
     }
 }
 
@@ -111,6 +109,8 @@ enum Baseline {
         let failed: [String: String]
         let failedOrder: [String]
         let unattributed: [JSON]
+        /// A report with no screenshots and no errors: verify says so (an error without id) instead of reporting every image removed.
+        let rendersNothing: Bool
         let scope: [String: JSON]
         let fingerprint: [String: JSON]
 
@@ -118,21 +118,28 @@ enum Baseline {
             let file = output.appendingPathComponent("swiftshot-report.json")
             guard FileManager.default.fileExists(atPath: file.path) else { throw CLIError("No swiftshot-report.json in \(output.path)") }
             guard let report = (try? JSON.parse(try Data(contentsOf: file)))?.object else { throw CLIError("\(file.path) is not a report (malformed JSON)") }
+            func list(_ key: String) throws -> [JSON] {
+                guard let v = report[key] else { return [] }
+                guard let a = v.array else { throw CLIError("swiftshot-report.json in \(output.path): \"\(key)\" must be an array") }
+                return a
+            }
+            let shotList = try list("screenshots"), errorList = try list("errors")
             var shots: [String: [String: JSON]] = [:], order: [String] = []
-            for s in report["screenshots"]?.array ?? [] {
+            for s in shotList {
                 guard let o = s.object, let id = o["id"]?.string else { continue }
                 guard Baseline.validId(id) else { throw CLIError("swiftshot-report.json in \(output.path): \"\(id)\" is not a valid screenshot id") }
                 if shots[id] == nil { order.append(id) }
                 shots[id] = o
             }
             self.shots = shots; shotOrder = order
-            let errors: [[String: JSON]] = (report["errors"]?.array ?? []).map { $0.object ?? ["message": .string($0.text)] }
+            let errors: [[String: JSON]] = errorList.map { $0.object ?? ["message": .string($0.text)] }
             var failed: [String: String] = [:], failedOrder: [String] = []
             for e in errors { if let id = e["id"]?.string, failed[id] == nil { failed[id] = e["message"]?.text ?? "null"; failedOrder.append(id) } }
             self.failed = failed; self.failedOrder = failedOrder
             unattributed = errors.filter { $0["id"]?.string == nil }.map { e in
                 .object(["message": e["message"].map { $0.isNull ? .null : .string($0.text) } ?? .null])
             }
+            rendersNothing = shotList.isEmpty && errorList.isEmpty
             scope = report["scope"]?.object ?? [:]
             fingerprint = report["fingerprint"]?.object ?? [:]
         }
@@ -239,9 +246,12 @@ enum Baseline {
     }
 
     /// Compares the run in `output` with `baseline`, writes the report directory and says what it found; the exit code.
-    static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console) throws -> Int32 {
+    static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console,
+                       processEnv: [String: String] = [:], out: (String) -> Void = { print($0) },
+                       projectDir: URL? = nil, http: Http = URLSessionHttp()) throws -> Int32 {
         let start = Date()
         let v = try evaluate(output: output, baseline: baseline, report: report, config: config, env: env)
+        for w in env.ci?.warnings ?? [] { log.warn(w) }
         try BaselineReport.writeTimings(compareSeconds: Date().timeIntervalSince(start), report: report)
         for (kind, line) in BaselineReport.summary(v, report: report) {
             switch kind {
@@ -251,6 +261,8 @@ enum Baseline {
             default: log.plain(line)
             }
         }
+        NativeOutput.write(v, ci: env.ci, reportDir: report, env: processEnv, out: out, log: log)
+        PullRequestComment.post(Summary.markdown(v, ci: env.ci), ci: env.ci, env: processEnv, projectDir: projectDir, log: log, http: http)
         return v.exitCode
     }
 
@@ -258,6 +270,7 @@ enum Baseline {
     static func evaluate(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv) throws -> Verification {
         let run = try Run(output)
         let stored = try Stored(baseline)
+        let unattributed: [JSON] = run.rendersNothing ? [.object(["message": .string("The run rendered no screenshots")])] : run.unattributed
         let stray = stored.files.subtracting(stored.images.keys)
         let ids = Set(run.shots.keys).union(stored.images.keys).union(run.failed.keys).union(stray.intersection(run.shots.keys)).sorted(by: utf8Less)
         try BaselineReport.clear(report)
@@ -272,7 +285,7 @@ enum Baseline {
         var local = false
         for id in ids {
             let b = stored.images[id], o = run.shots[id]
-            if o == nil && run.failed[id] == nil && (!inScope(b!, run.scope) || !run.unattributed.isEmpty) { continue }
+            if o == nil && run.failed[id] == nil && (!inScope(b!, run.scope) || !unattributed.isEmpty) { continue }
             if let b {
                 compared.append((o ?? b, b))
                 if b["local"] == .bool(true) { local = true }
@@ -326,9 +339,9 @@ enum Baseline {
             for m in Fingerprints.mismatches(baseline: fp, run: Fingerprints.forImage(mine, image)) where seen.insert(m).inserted { mismatches.append(m) }
         }
         mismatches.sort(by: utf8Less)
-        let errors: [JSON] = entries.filter { $0["status"] == .string("error") }.map { .object(["id": $0["id"]!, "message": $0["message"]!]) } + run.unattributed
+        let errors: [JSON] = entries.filter { $0["status"] == .string("error") }.map { .object(["id": $0["id"]!, "message": $0["message"]!]) } + unattributed
         let listed = Set(entries.compactMap { $0["id"]?.string })
-        let v = Verification(entries: entries, errors: errors, unattributed: run.unattributed, fingerprint: run.fingerprint, mismatches: mismatches,
+        let v = Verification(entries: entries, errors: errors, unattributed: unattributed, fingerprint: run.fingerprint, mismatches: mismatches,
                              localBaseline: local, strays: stray.subtracting(listed).count, env: env, configHash: config.hash())
         try BaselineReport.write(v, report: report)
         return v

@@ -1,0 +1,36 @@
+{
+  "branch": "feature/x",
+  "ci": null,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 1,
+    "removed": 0,
+    "unchanged": 0
+  },
+  "errors": [
+    {
+      "message": "The run rendered no screenshots"
+    }
+  ],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "linux-x64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [],
+  "status": "error",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

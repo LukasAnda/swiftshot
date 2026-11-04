@@ -5,7 +5,20 @@ import XCTest
 /// every case gives exactly the expected result.json, junit.xml, manifest.json, images and exit code.
 final class BaselineTests: XCTestCase {
     var tmp: URL!
-    let env = BaselineEnv(git: GitInfo(commit: "0123456789abcdef0123456789abcdef01234567", branch: "feature/x"), version: "1.0.0-test", ci: false)
+    let env = BaselineEnv(git: GitInfo(commit: "0123456789abcdef0123456789abcdef01234567", branch: "feature/x"), version: "1.0.0-test", ci: nil)
+
+    /// The environment of a case: the standard one, then the case's env.json (null removes a variable; paths are relative to the case).
+    func envFor(_ c: URL) throws -> BaselineEnv {
+        var vars = ["SWIFTSHOT_COMMIT": "0123456789abcdef0123456789abcdef01234567", "SWIFTSHOT_BRANCH": "feature/x", "SWIFTSHOT_CI": "false"]
+        let f = c.appendingPathComponent("env.json")
+        if FileManager.default.fileExists(atPath: f.path) {
+            for (k, v) in try readJSON(f).object! { vars[k] = v.string }
+        }
+        return BaselineEnv.detect(tmp, env: vars, readFile: { p in
+            let u = p.hasPrefix("/") ? URL(fileURLWithPath: p) : c.appendingPathComponent(p)
+            return try? String(contentsOf: u, encoding: .utf8)
+        }, version: "1.0.0-test")
+    }
     override func setUp() { tmp = temporaryDirectory("swiftshot-baseline") }
     override func tearDown() { try? FileManager.default.removeItem(at: tmp) }
 
@@ -18,7 +31,7 @@ final class BaselineTests: XCTestCase {
     @discardableResult
     func verify(_ c: URL, report: URL? = nil) throws -> Verification {
         try Baseline.evaluate(output: c.appendingPathComponent("output"), baseline: c.appendingPathComponent("baseline"),
-                              report: report ?? tmp.appendingPathComponent(c.lastPathComponent), config: try config(c), env: env)
+                              report: report ?? tmp.appendingPathComponent(c.lastPathComponent), config: try config(c), env: try envFor(c))
     }
 
     func ids(_ dir: URL) throws -> [String] {
@@ -27,14 +40,14 @@ final class BaselineTests: XCTestCase {
 
     func testEveryFixtureCaseMatchesByteForByte() throws {
         let all = fixtureCases()
-        XCTAssertEqual(all.count, 23, "fixture cases")
+        XCTAssertEqual(all.count, 26, "fixture cases")
         var problems: [String] = []
         var passed: [String] = []
         for c in all {
             let report = tmp.appendingPathComponent(c.lastPathComponent)
             let v = try verify(c, report: report)
             var ok = true
-            for name in ["result.json", "junit.xml", "manifest.json"] {
+            for name in ["result.json", "junit.xml", "manifest.json", "summary.md"] {
                 let want = try String(contentsOf: c.appendingPathComponent("expected/\(name)"), encoding: .utf8)
                 let got = try? String(contentsOf: report.appendingPathComponent(name), encoding: .utf8)
                 if got != want { ok = false; problems.append("\(c.lastPathComponent)/\(name) differs:\n--- want\n\(want)--- got\n\(got ?? "nil")") }
@@ -172,6 +185,37 @@ final class BaselineTests: XCTestCase {
         XCTAssertEqual(try Baseline.record(output: out, baseline: base, ci: true, log: console), 2)
         XCTAssertEqual(files(base).mapValues(bytes), before)
         XCTAssertTrue(console.text.contains("Nothing rendered"), console.text)
+    }
+
+    func testBaselineJsonNullImagesIsInvalid() throws {
+        let base = tmp.appendingPathComponent("base-null-images")
+        try copyTree(fixture("removed").appendingPathComponent("baseline"), base)
+        let out = try output("removed")
+        let original = try baselineJson(fixture("removed").appendingPathComponent("baseline")).object!
+        for key in ["images", "fingerprints"] {
+            var json = original
+            json[key] = .null
+            try Data(JSON.object(json).pretty().utf8).write(to: base.appendingPathComponent("baseline.json"))
+            XCTAssertThrowsError(try Baseline.evaluate(output: out, baseline: base, report: tmp.appendingPathComponent("null-report"), config: CompareConfig(tolerance: nil, rules: []), env: env)) {
+                XCTAssertTrue($0 is UsageError && "\($0)".contains("\"\(key)\" must be an object"), "\($0)")
+            }
+            XCTAssertThrowsError(try Baseline.record(output: out, baseline: base, ci: true, log: Console(capture: true))) { XCTAssertTrue($0 is UsageError, "\($0)") }
+        }
+    }
+
+    func testReportScreenshotsNotArrayIsError() throws {
+        let out = try output("removed")
+        let original = try readJSON(fixture("removed").appendingPathComponent("output/swiftshot-report.json")).object!
+        for key in ["screenshots", "errors"] {
+            var r = original
+            r[key] = .object([:])
+            try Data(JSON.object(r).pretty().utf8).write(to: out.appendingPathComponent("swiftshot-report.json"))
+            XCTAssertThrowsError(try Baseline.evaluate(output: out, baseline: fixture("removed").appendingPathComponent("baseline"), report: tmp.appendingPathComponent("array-report"),
+                                                       config: CompareConfig(tolerance: nil, rules: []), env: env)) {
+                XCTAssertTrue($0 is CLIError, "\($0)")
+                XCTAssertEqual("\($0)", "swiftshot-report.json in \(out.path): \"\(key)\" must be an array")
+            }
+        }
     }
 
     func testInvalidBaselineJsonIsAUsageError() throws {

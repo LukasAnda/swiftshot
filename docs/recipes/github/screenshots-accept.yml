@@ -1,0 +1,143 @@
+# Comment "/swiftshot accept" on a pull request to commit its new screenshots to the baseline.
+# Only people with write access can; pull requests from forks are refused.
+#   /swiftshot accept                 accepts every difference
+#   /swiftshot accept                 accepts only these, one id per line
+#   en-US/Pixel 9-Home
+#   en-US/Pixel 9-Settings
+# Save this file on the default branch (issue_comment workflows run from there) and keep the
+# runner and setup steps the same as in screenshots.yml, which must be saved under that file name
+# (this workflow looks up its runs by it). The verify at the end posts the "swiftshot" status on
+# the new head; it does not update the pull request comment (an issue_comment event has no pull
+# request number for it).
+name: screenshots-accept
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+  actions: read
+
+concurrency:
+  group: swiftshot-accept-${{ github.event.issue.number }}
+
+jobs:
+  accept:
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/swiftshot accept')
+    runs-on: macos-latest
+    steps:
+      - name: Check the commenter and find the report
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          ACTOR: ${{ github.event.comment.user.login }}
+          COMMENT: ${{ github.event.comment.body }}
+        run: |
+          reply() { gh api "repos/$REPO/issues/$PR/comments" -f body="$1" > /dev/null; }
+          refuse() { reply "$1"; echo "proceed=false" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          first=$(printf '%s\n' "$COMMENT" | head -n 1 | tr -d '\r')
+          case "$first" in
+            "/swiftshot accept" | "/swiftshot accept "*) ;;
+            *) echo "proceed=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+
+          permission=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>/dev/null || echo none)
+          case "$permission" in
+            admin | maintain | write) ;;
+            *) refuse "@$ACTOR only people with write access can accept screenshots." ;;
+          esac
+
+          pr=$(gh api "repos/$REPO/pulls/$PR")
+          sha=$(jq -r .head.sha <<< "$pr")
+          ref=$(jq -r .head.ref <<< "$pr")
+          head_repo=$(jq -r '.head.repo.full_name // empty' <<< "$pr")
+          [ "$head_repo" = "$REPO" ] || refuse "This pull request comes from a fork, so swiftshot can't push to it. Download the report and run \`swiftshot accept --from <report>\` in the fork."
+
+          run=$(gh api "repos/$REPO/actions/workflows/screenshots.yml/runs?head_sha=$sha&event=pull_request&status=completed&per_page=1" --jq '.workflow_runs[0].id // empty')
+          [ -n "$run" ] || refuse "No finished screenshots run for ${sha:0:7} yet. Wait for it, or push again."
+          url=$(gh api "repos/$REPO/actions/runs/$run/artifacts?name=swiftshot-report" --jq '[.artifacts[] | select(.expired == false)][0].archive_download_url // empty')
+          [ -n "$url" ] || refuse "The report of the screenshots run for ${sha:0:7} is missing or expired. Push again to render a new one."
+
+          # The ids: text after the command on its first line, then one id per line (ids contain spaces).
+          ids=()
+          rest=${first#"/swiftshot accept"}
+          rest=$(printf '%s' "$rest" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          [ -z "$rest" ] || ids+=("$rest")
+          while IFS= read -r line; do
+            line=$(printf '%s' "$line" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+            [ -z "$line" ] || ids+=("$line")
+          done < <(printf '%s\n' "$COMMENT" | tail -n +2)
+          # Quoted for the action, which reads its args like a shell line. --only splits on commas.
+          args=$(printf '%q ' --push --branch "$ref")
+          for id in "${ids[@]}"; do
+            case "$id" in *,*) refuse "An id can't contain a comma: \`$id\`" ;; esac
+            args+=$(printf '%q %q ' --only "$id")
+          done
+
+          {
+            echo "proceed=true"
+            echo "url=$url"
+            echo "ref=$ref"
+            echo "args=$args"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.prepare.outputs.proceed == 'true'
+        with:
+          ref: ${{ steps.prepare.outputs.ref }}
+
+      # Pushes with the credentials checkout persisted; do not set SWIFTSHOT_HOST_TOKEN here.
+      - name: Accept
+        id: accept
+        if: steps.prepare.outputs.proceed == 'true'
+        uses: LukasAnda/swiftshot@v1.0.0
+        with:
+          command: accept
+          from: ${{ steps.prepare.outputs.url }}
+          args: ${{ steps.prepare.outputs.args }}
+        env:
+          SWIFTSHOT_ARTIFACT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: New head
+        id: head
+        if: steps.prepare.outputs.proceed == 'true'
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # A push with GITHUB_TOKEN starts no workflow: render once more here, which posts the
+      # "swiftshot" status on the new commit. An issue_comment run sees the default branch's commit
+      # and name, so the pull request's are given. Differences left after a partial accept fail
+      # the status, not this job.
+      - name: Verify the new baseline
+        if: steps.prepare.outputs.proceed == 'true'
+        continue-on-error: true
+        uses: LukasAnda/swiftshot@v1.0.0
+        with:
+          command: verify
+          report-name: swiftshot-report-accepted
+        env:
+          SWIFTSHOT_COMMIT: ${{ steps.head.outputs.sha }}
+          SWIFTSHOT_BRANCH: ${{ steps.prepare.outputs.ref }}
+
+      - name: Thumbs up
+        if: steps.accept.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" -f content='+1' > /dev/null || echo "::warning::Could not react to the comment"
+
+      - name: Reply with the error
+        # Only when checking or accepting failed; a refusal already replied and exited 0.
+        if: failure() && (steps.prepare.outcome == 'failure' || steps.accept.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api "repos/$REPO/issues/$PR/comments" -f body="Accepting failed, see the log: $RUN_URL" > /dev/null

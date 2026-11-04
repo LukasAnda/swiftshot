@@ -1,0 +1,51 @@
+{
+  "env": {
+    "CI": "true",
+    "GITHUB_ACTIONS": "true",
+    "GITHUB_BASE_REF": "main",
+    "GITHUB_EVENT_NAME": "pull_request",
+    "GITHUB_EVENT_PATH": "/home/runner/work/_temp/_github_workflow/event.json",
+    "GITHUB_HEAD_REF": "feature/x",
+    "GITHUB_REF": "refs/pull/7/merge",
+    "GITHUB_REF_NAME": "7/merge",
+    "GITHUB_REPOSITORY": "acme/app",
+    "GITHUB_RUN_ID": "9876543210",
+    "GITHUB_SERVER_URL": "https://github.com",
+    "GITHUB_SHA": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081",
+    "SWIFTSHOT_CI": "false"
+  },
+  "expected": {
+    "branch": null,
+    "buildUrl": null,
+    "commit": null,
+    "fork": null,
+    "isCi": false,
+    "provider": null,
+    "pullRequest": null,
+    "repository": null,
+    "warnings": []
+  },
+  "files": {
+    "/home/runner/work/_temp/_github_workflow/event.json": {
+      "action": "synchronize",
+      "number": 7,
+      "pull_request": {
+        "base": {
+          "ref": "main",
+          "repo": {
+            "full_name": "acme/app"
+          },
+          "sha": "9fceb02d0ae598e95dc970b74767f19372d61724"
+        },
+        "head": {
+          "ref": "feature/x",
+          "repo": {
+            "full_name": "acme/app"
+          },
+          "sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        },
+        "number": 7
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "env": {
+    "GITHUB_ACTIONS": "true",
+    "GITHUB_BASE_REF": "main",
+    "GITHUB_EVENT_NAME": "pull_request",
+    "GITHUB_EVENT_PATH": "/home/runner/work/_temp/_github_workflow/event.json",
+    "GITHUB_HEAD_REF": "feature/x",
+    "GITHUB_REF": "refs/pull/7/merge",
+    "GITHUB_REF_NAME": "7/merge",
+    "GITHUB_REPOSITORY": "acme/app",
+    "GITHUB_RUN_ID": "9876543210",
+    "GITHUB_SERVER_URL": "https://github.com",
+    "GITHUB_SHA": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081"
+  },
+  "expected": {
+    "branch": "feature/x",
+    "buildUrl": "https://github.com/acme/app/actions/runs/9876543210",
+    "commit": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081",
+    "fork": null,
+    "isCi": true,
+    "provider": "github",
+    "pullRequest": null,
+    "repository": "https://github.com/acme/app",
+    "warnings": [
+      "GITHUB_EVENT_PATH unreadable; recording GITHUB_SHA, which is a merge commit on pull requests"
+    ]
+  }
+}

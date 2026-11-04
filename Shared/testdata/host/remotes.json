@@ -1,0 +1,350 @@
+[
+  {
+    "remote": "https://github.com/a/b.git",
+    "env": {},
+    "expected": {
+      "kind": "github",
+      "api": "https://api.github.com",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "https://github.com/a/b",
+    "env": {},
+    "expected": {
+      "kind": "github",
+      "api": "https://api.github.com",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "https://octocat@github.com/a/b.git",
+    "env": {},
+    "expected": {
+      "kind": "github",
+      "api": "https://api.github.com",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "ssh://git@github.com/a/b.git",
+    "env": {},
+    "expected": {
+      "kind": "github",
+      "api": "https://api.github.com",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "git@github.com:a/b.git",
+    "env": {},
+    "expected": {
+      "kind": "github",
+      "api": "https://api.github.com",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "git@github.com:a/b",
+    "env": {},
+    "expected": {
+      "kind": "github",
+      "api": "https://api.github.com",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "https://github.com/a/b.git",
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "GITHUB_SERVER_URL": "https://github.com",
+      "GITHUB_API_URL": "https://api.github.com"
+    },
+    "expected": {
+      "kind": "github",
+      "api": "https://api.github.com",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "git@ghe.example.com:a/b.git",
+    "env": {
+      "GITHUB_ACTIONS": "true",
+      "GITHUB_SERVER_URL": "https://ghe.example.com",
+      "GITHUB_API_URL": "https://ghe.example.com/api/v3"
+    },
+    "expected": {
+      "kind": "github",
+      "api": "https://ghe.example.com/api/v3",
+      "project": "a/b",
+      "web": "https://ghe.example.com/a/b"
+    }
+  },
+  {
+    "remote": "git@ghe.example.com:a/b.git",
+    "env": {
+      "GITHUB_API_URL": "https://ghe.example.com/api/v3"
+    },
+    "expected": null
+  },
+  {
+    "remote": "https://bitbucket.org/ws/repo.git",
+    "env": {},
+    "expected": {
+      "kind": "bitbucket",
+      "api": "https://api.bitbucket.org/2.0",
+      "project": "ws/repo",
+      "web": "https://bitbucket.org/ws/repo"
+    }
+  },
+  {
+    "remote": "https://alice@bitbucket.org/ws/repo",
+    "env": {},
+    "expected": {
+      "kind": "bitbucket",
+      "api": "https://api.bitbucket.org/2.0",
+      "project": "ws/repo",
+      "web": "https://bitbucket.org/ws/repo"
+    }
+  },
+  {
+    "remote": "ssh://git@bitbucket.org/ws/repo.git",
+    "env": {},
+    "expected": {
+      "kind": "bitbucket",
+      "api": "https://api.bitbucket.org/2.0",
+      "project": "ws/repo",
+      "web": "https://bitbucket.org/ws/repo"
+    }
+  },
+  {
+    "remote": "git@bitbucket.org:ws/repo.git",
+    "env": {},
+    "expected": {
+      "kind": "bitbucket",
+      "api": "https://api.bitbucket.org/2.0",
+      "project": "ws/repo",
+      "web": "https://bitbucket.org/ws/repo"
+    }
+  },
+  {
+    "remote": "git@bitbucket.org:ws/repo",
+    "env": {},
+    "expected": {
+      "kind": "bitbucket",
+      "api": "https://api.bitbucket.org/2.0",
+      "project": "ws/repo",
+      "web": "https://bitbucket.org/ws/repo"
+    }
+  },
+  {
+    "remote": "https://gitlab.com/g/n.git",
+    "env": {},
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gitlab.com/api/v4",
+      "project": "g/n",
+      "web": "https://gitlab.com/g/n"
+    }
+  },
+  {
+    "remote": "https://gitlab.com/g/n",
+    "env": {},
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gitlab.com/api/v4",
+      "project": "g/n",
+      "web": "https://gitlab.com/g/n"
+    }
+  },
+  {
+    "remote": "ssh://git@gitlab.com/g/n.git",
+    "env": {},
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gitlab.com/api/v4",
+      "project": "g/n",
+      "web": "https://gitlab.com/g/n"
+    }
+  },
+  {
+    "remote": "git@gitlab.com:g/n.git",
+    "env": {},
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gitlab.com/api/v4",
+      "project": "g/n",
+      "web": "https://gitlab.com/g/n"
+    }
+  },
+  {
+    "remote": "git@gitlab.com:g/s/n.git",
+    "env": {},
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gitlab.com/api/v4",
+      "project": "g/s/n",
+      "web": "https://gitlab.com/g/s/n"
+    }
+  },
+  {
+    "remote": "https://gitlab.com/g/s/t/n",
+    "env": {},
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gitlab.com/api/v4",
+      "project": "g/s/t/n",
+      "web": "https://gitlab.com/g/s/t/n"
+    }
+  },
+  {
+    "remote": "git@git.corp.example:g/s/n.git",
+    "env": {
+      "CI_API_V4_URL": "https://git.corp.example/api/v4"
+    },
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://git.corp.example/api/v4",
+      "project": "g/s/n",
+      "web": "https://git.corp.example/g/s/n"
+    }
+  },
+  {
+    "remote": "https://git.corp.example:8443/g/n.git",
+    "env": {
+      "CI_API_V4_URL": "https://git.corp.example:8443/api/v4"
+    },
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://git.corp.example:8443/api/v4",
+      "project": "g/n",
+      "web": "https://git.corp.example:8443/g/n"
+    }
+  },
+  {
+    "remote": "ssh://git@git.corp.example:2222/g/n.git",
+    "env": {
+      "CI_API_V4_URL": "https://git.corp.example/api/v4"
+    },
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://git.corp.example/api/v4",
+      "project": "g/n",
+      "web": "https://git.corp.example/g/n"
+    }
+  },
+  {
+    "remote": "https://gitlab.com/g/n.git",
+    "env": {
+      "CI_API_V4_URL": "https://other.example/api/v4"
+    },
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gitlab.com/api/v4",
+      "project": "g/n",
+      "web": "https://gitlab.com/g/n"
+    }
+  },
+  {
+    "remote": "https://git.corp.example/g/n.git",
+    "env": {},
+    "expected": null
+  },
+  {
+    "remote": "https://git.corp.example/g/n.git",
+    "env": {
+      "CI_API_V4_URL": "https://other.example/api/v4"
+    },
+    "expected": null
+  },
+  {
+    "remote": null,
+    "env": {},
+    "expected": null
+  },
+  {
+    "remote": "not a url",
+    "env": {},
+    "expected": null
+  },
+  {
+    "remote": "https://github.com/onlyowner",
+    "env": {},
+    "expected": null
+  },
+  {
+    "remote": "https://git.corp.example/g/n.git",
+    "env": {
+      "SWIFTSHOT_GIT_HOST": "gitlab"
+    },
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://git.corp.example/api/v4",
+      "project": "g/n",
+      "web": "https://git.corp.example/g/n"
+    }
+  },
+  {
+    "remote": "https://git.corp.example/a/b.git",
+    "env": {
+      "SWIFTSHOT_GIT_HOST": "github"
+    },
+    "expected": {
+      "kind": "github",
+      "api": "https://git.corp.example/api/v3",
+      "project": "a/b",
+      "web": "https://git.corp.example/a/b"
+    }
+  },
+  {
+    "remote": "https://git.corp.example/ws/repo.git",
+    "env": {
+      "SWIFTSHOT_GIT_HOST": "bitbucket"
+    },
+    "expected": {
+      "kind": "bitbucket",
+      "api": "https://api.bitbucket.org/2.0",
+      "project": "ws/repo",
+      "web": "https://git.corp.example/ws/repo"
+    }
+  },
+  {
+    "remote": "https://git.corp.example/a/b.git",
+    "env": {
+      "SWIFTSHOT_GIT_HOST": "svn"
+    },
+    "expected": null
+  },
+  {
+    "remote": "https://github.com/a/b.git",
+    "env": {
+      "SWIFTSHOT_HOST_API": "http://127.0.0.1:8080/api/"
+    },
+    "expected": {
+      "kind": "github",
+      "api": "http://127.0.0.1:8080/api",
+      "project": "a/b",
+      "web": "https://github.com/a/b"
+    }
+  },
+  {
+    "remote": "https://git.corp.example/g/n.git",
+    "env": {
+      "SWIFTSHOT_GIT_HOST": "gitlab",
+      "SWIFTSHOT_HOST_API": "https://gl.example/api/v4"
+    },
+    "expected": {
+      "kind": "gitlab",
+      "api": "https://gl.example/api/v4",
+      "project": "g/n",
+      "web": "https://git.corp.example/g/n"
+    }
+  }
+]

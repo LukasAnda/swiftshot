@@ -12,9 +12,9 @@ open class Log(val verbose: Boolean) {
     private fun c(code: String, s: String) = if (tty) "\u001b[${code}m$s\u001b[0m" else s
     fun step(s: String) = System.err.println("${c("2", t())} ${c("36", "▸")} $s")
     open fun ok(s: String) = System.err.println("${c("2", t())} ${c("32", "✔")} $s")
-    fun warn(s: String) = System.err.println("${c("2", t())} ${c("33", "!")} $s")
+    open fun warn(s: String) = System.err.println("${c("2", t())} ${c("33", "!")} $s")
     /** A line under the last step, indented to its text. */
-    fun plain(s: String) = System.err.println("          $s")
+    open fun plain(s: String) = System.err.println("          $s")
     fun error(s: String) = System.err.println("${c("31", "error:")} $s")
     val seconds get() = (System.nanoTime() - start) / 1e9
 }
@@ -46,7 +46,7 @@ class Runner(private val o: Options, private val log: Log) {
         // used if the classpath comes out the same.
         val warm = if (o.command != "list") warmPools(budgetAll) else emptyMap()
         // Not on a Mac: iOS targets aren't prepared (Kotlin/Native can't build them here either).
-        if (!Host.mac) {
+        if (!Machine.mac) {
             if ("ios" in o.platforms) throw CliError(iosOnly(null))
             if (o.platforms.isEmpty()) o.platforms = listOf("android", "desktop")
         }
@@ -64,7 +64,7 @@ class Runner(private val o: Options, private val log: Log) {
         val scanned = prepared.filter { !it.ios }
         val modules = scanned.filter { o.platforms.isEmpty() || it.platform in o.platforms }
         log.ok("Built ${(modules + iosModules).joinToString(", ") { it.label }} in ${"%.1f".format(Locale.ROOT, log.seconds)}s")
-        if (!Host.mac && prepared.any { it.desktop || it.json["multiplatform"] == true }) log.step("Compose Multiplatform iOS targets need a Mac with Xcode; skipped here")
+        if (!Machine.mac && prepared.any { it.desktop || it.json["multiplatform"] == true }) log.step("Compose Multiplatform iOS targets need a Mac with Xcode; skipped here")
         val allFound = scanned.associateWith { m -> PreviewScanner(m.classDirs + m.classpath).scan(m.classDirs) }
             .filterValues { it.isNotEmpty() }
         val found = allFound.filterKeys { it in modules }

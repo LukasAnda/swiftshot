@@ -1,0 +1,22 @@
+{
+  "env": {
+    "BRANCH_NAME": "main",
+    "BUILD_NUMBER": "3",
+    "BUILD_URL": "https://jenkins.example.com/job/app/job/main/3/",
+    "GIT_BRANCH": "origin/main",
+    "GIT_COMMIT": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "GIT_URL": "https://github.com/acme/app.git",
+    "JENKINS_URL": "https://jenkins.example.com/"
+  },
+  "expected": {
+    "branch": "main",
+    "buildUrl": "https://jenkins.example.com/job/app/job/main/3/",
+    "commit": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "fork": null,
+    "isCi": true,
+    "provider": "jenkins",
+    "pullRequest": null,
+    "repository": "https://github.com/acme/app.git",
+    "warnings": []
+  }
+}

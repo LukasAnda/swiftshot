@@ -31,15 +31,40 @@ since, run `verify` again first.
 
 A baseline recorded on your own machine is marked as local, and `verify` reminds you of it. Fonts
 and rendering can differ slightly between machines, so the baseline is best recorded where verify
-runs. CI support for this is coming next.
+runs; see *On CI* below.
+
+## On CI
+
+`verify` knows GitHub Actions, GitLab, Bitbucket, Bitrise, Codemagic, CircleCI, Azure Pipelines and
+Jenkins. There it comments the result on the pull request, shows it in the CI's own results, and
+tells how to accept. Copy the recipe for your CI: [[GitHub Actions|CI-GitHub-Actions]],
+[[GitLab|CI-GitLab]], [[Bitbucket|CI-Bitbucket]], [[Bitrise|CI-Bitrise]], [[Codemagic|CI-Codemagic]],
+[[CircleCI|CI-CircleCI]], [[Azure Pipelines|CI-Azure-Pipelines]], [[Jenkins|CI-Jenkins]].
+
+`accept --from` takes a folder, a `.zip` or an `https` URL. `--push` commits and pushes to the
+pull request's branch (never from a fork); `--branch <name>` names it when the checkout is
+detached and the CI doesn't say.
+
+| variable | |
+|---|---|
+| `SWIFTSHOT_HOST_TOKEN` | a token for the git host (GitHub, GitLab, Bitbucket): posts the comment, and pushes to an `https` remote |
+| `SWIFTSHOT_ARTIFACT_TOKEN` | a token to download the `--from` URL; sent only to that URL's host |
+| `SWIFTSHOT_ARTIFACT_HEADER` | the header to send it in, `Name: value` with `{token}` in the value, e.g. `PRIVATE-TOKEN: {token}`; default per host |
+| `SWIFTSHOT_GIT_HOST` | `github`, `gitlab` or `bitbucket`, when the remote's host isn't one of the usual |
+| `SWIFTSHOT_HOST_API` | the host's API URL, for a self-hosted one |
+| `SWIFTSHOT_COMMIT`, `SWIFTSHOT_BRANCH` | the commit and branch to record, when the CI's own are not the pull request's |
+| `SWIFTSHOT_CI` | `false` ignores the CI |
+
+Tokens are never printed and never put in a URL. A failed comment is a warning; the exit code
+stays as above.
 
 ## Exit codes
 
 | | `verify` | `record` | `accept` |
 |---|---|---|---|
 | 0 | no differences | recorded | applied, or nothing to apply |
-| 1 | differences | | refused (the report isn't from this commit) |
-| 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | |
+| 1 | differences | | refused (the report isn't from this commit, or `--push` can't push) |
+| 2 | errors (a screen failed to render, a file is missing) | errors (screens that failed keep their baseline), or nothing rendered | interrupted |
 | 64 | wrong option or config | wrong option or config | wrong option, or not a valid report |
 
 ## Where files go

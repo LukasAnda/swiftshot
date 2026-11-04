@@ -1,0 +1,27 @@
+{
+  "env": {
+    "CI_COMMIT_SHA": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "CI_JOB_URL": "https://gitlab.com/acme/app/-/jobs/4815162342",
+    "CI_MERGE_REQUEST_IID": "12",
+    "CI_MERGE_REQUEST_PROJECT_ID": "42",
+    "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME": "feature/x",
+    "CI_MERGE_REQUEST_SOURCE_BRANCH_SHA": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "CI_MERGE_REQUEST_SOURCE_PROJECT_ID": "77",
+    "CI_MERGE_REQUEST_TARGET_BRANCH_NAME": "main",
+    "CI_PIPELINE_SOURCE": "merge_request_event",
+    "CI_PROJECT_ID": "42",
+    "CI_PROJECT_URL": "https://gitlab.com/acme/app",
+    "GITLAB_CI": "true"
+  },
+  "expected": {
+    "branch": "feature/x",
+    "buildUrl": "https://gitlab.com/acme/app/-/jobs/4815162342",
+    "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "fork": true,
+    "isCi": true,
+    "provider": "gitlab",
+    "pullRequest": "12",
+    "repository": "https://gitlab.com/acme/app",
+    "warnings": []
+  }
+}

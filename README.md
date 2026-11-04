@@ -176,6 +176,20 @@ compares with it (exit 1 when something changed), and `swiftshot accept --from s
 takes intended changes into the baseline. See the
 [Screenshot testing](https://github.com/LukasAnda/swiftshot/wiki/Screenshot-testing) wiki page.
 
+On CI, `verify` comments the result on the pull request and shows it in the CI's own results; a
+person accepts the changes the way the CI allows. Recipes:
+
+| CI | accept with |
+|---|---|
+| [GitHub Actions](https://github.com/LukasAnda/swiftshot/wiki/CI-GitHub-Actions) | a `/swiftshot accept` comment |
+| [GitLab](https://github.com/LukasAnda/swiftshot/wiki/CI-GitLab) | the manual `swiftshot-accept` job |
+| [Bitbucket](https://github.com/LukasAnda/swiftshot/wiki/CI-Bitbucket) | the `swiftshot-accept` custom pipeline |
+| [Bitrise](https://github.com/LukasAnda/swiftshot/wiki/CI-Bitrise) | the `swiftshot-accept` workflow |
+| [Codemagic](https://github.com/LukasAnda/swiftshot/wiki/CI-Codemagic) | the `swiftshot-accept` workflow |
+| [CircleCI](https://github.com/LukasAnda/swiftshot/wiki/CI-CircleCI) | the `accept-screenshots` approval |
+| [Azure Pipelines](https://github.com/LukasAnda/swiftshot/wiki/CI-Azure-Pipelines) | the `Accept screenshots` stage |
+| [Jenkins](https://github.com/LukasAnda/swiftshot/wiki/CI-Jenkins) | the `Accept screenshots` stage |
+
 ## CI
 
 iOS needs a Mac with Xcode and the runtimes you render; it runs on the free `macos-26` and

@@ -82,6 +82,32 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: true
 
+  # Every workflow and recipe, linted with a pinned, checksum-verified actionlint and schemas.
+  workflow-lint:
+    name: Workflow lint
+    if: ${{ !inputs.tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: actionlint
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/actionlint_${VERSION}_linux_amd64.tar.gz"
+          echo "$SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color .github/workflows/*.yml docs/recipes/github/*.yml
+      # The CI pages' YAML against the vendored schemas (Shared/ci-schemas), then a deliberately broken copy.
+      - name: CI recipes
+        env:
+          CHECK_JSONSCHEMA: 0.36.2
+        run: |
+          pipx install "check-jsonschema==$CHECK_JSONSCHEMA"
+          PATH="$RUNNER_TEMP:$PATH" bin/check-recipes
+          PATH="$RUNNER_TEMP:$PATH" bin/check-recipes --self-test
+
   # Jetpack Compose previews on a free Linux runner: every device type, five languages, both
   # appearances; size checks, a byte-identical second run and the time budget.
   android:
@@ -105,6 +131,68 @@ jobs:
         run: Android/ci/migration.sh "$RUNNER_TEMP/android-migration"
       - name: Screenshot testing (record, verify, accept)
         run: Android/ci/baseline.sh "$RUNNER_TEMP/android-baseline"
+      # The GitHub Action from this checkout (command record, then verify) on a copy of the demo,
+      # running the CLI baseline.sh just built. Status posting is off: fork pull requests get a
+      # read-only token.
+      - name: Action (local swiftshot)
+        run: |
+          jar="$PWD/Android/cli/build/libs/swiftshot-android.jar"
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/action-demo"
+          printf '#!/bin/sh\nexec java -jar "%s" "$@"\n' "$jar" > "$RUNNER_TEMP/bin/swiftshot"
+          chmod +x "$RUNNER_TEMP/bin/swiftshot"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          (cd Example/AndroidDemo && tar cf - --exclude=./build --exclude='./*/build' --exclude=./.gradle --exclude=./.kotlin --exclude=./local.properties .) | (cd "$RUNNER_TEMP/action-demo" && tar xf -)
+          if [ -f Example/AndroidDemo/local.properties ]; then cp Example/AndroidDemo/local.properties "$RUNNER_TEMP/action-demo/"; fi
+      - name: Action record
+        uses: ./
+        with:
+          command: record
+          version: local
+          working-directory: ${{ runner.temp }}/action-demo
+          args: --devices "Pixel 10 Pro" --languages en-US --appearances light --previews "Welcome,Settings"
+      - name: Action verify (passes)
+        id: same
+        uses: ./
+        with:
+          command: verify
+          version: local
+          status: "false"
+          report-name: action-report-same
+          working-directory: ${{ runner.temp }}/action-demo
+          args: --devices "Pixel 10 Pro" --languages en-US --appearances light --previews "Welcome,Settings"
+      - name: Change one colour
+        run: sed -i 's/listOf(glow.copy(alpha = 0.55f)/listOf(Color(0xFF2E6BFF).copy(alpha = 0.55f)/' "$RUNNER_TEMP/action-demo/app/src/main/java/com/swiftshot/demo/ui/welcome/WelcomeScreen.kt"
+      - name: Action verify (fails)
+        id: changed
+        continue-on-error: true
+        uses: ./
+        with:
+          command: verify
+          version: local
+          status: "false"
+          report-name: action-report-changed
+          working-directory: ${{ runner.temp }}/action-demo
+          args: --devices "Pixel 10 Pro" --languages en-US --appearances light --previews "Welcome,Settings"
+      - name: Check the action's outputs
+        env:
+          SAME: ${{ steps.same.outputs.status }}
+          CHANGED: ${{ steps.changed.outputs.status }}
+          CHANGED_OUTCOME: ${{ steps.changed.outcome }}
+          REPORT: ${{ steps.changed.outputs.report }}
+        run: |
+          [ "$SAME" = passed ] || { echo "unchanged verify status: $SAME"; exit 1; }
+          [ "$CHANGED" = failed ] || { echo "changed verify status: $CHANGED"; exit 1; }
+          [ "$CHANGED_OUTCOME" = failure ] || { echo "changed verify step outcome: $CHANGED_OUTCOME"; exit 1; }
+          test -f "$REPORT/result.json" -a -f "$REPORT/summary.md"
+      # The report artifacts exist (the upload step ran inside the action; the API lists them).
+      - name: Check the uploaded reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in action-report-same action-report-changed; do
+            c=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$n" --jq '.total_count')
+            [ "$c" = 1 ] || { echo "artifact $n: $c found"; exit 1; }
+          done
       - uses: actions/upload-artifact@v7
         if: always()
         with:

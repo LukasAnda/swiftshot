@@ -26,7 +26,7 @@ object Accept {
     /** Download and extracted-zip size limit. */
     private const val MAX_BYTES = 2L * 1024 * 1024 * 1024
     private const val MAX_ENTRIES = 200_000
-    private val LOOPBACK = setOf("localhost", "127.0.0.1", "[::1]", "::1")
+    internal val LOOPBACK = setOf("localhost", "127.0.0.1", "[::1]", "::1")
 
     /** A refusal (exit 1): the report doesn't fit the branch, or git couldn't finish. */
     private class Refused(message: String) : Exception(message)
@@ -47,12 +47,11 @@ object Accept {
 
     fun run(
         from: List<String>, only: Set<String>?, push: Boolean, author: String?, baseline: File, log: Log,
-        token: String? = System.getenv("SWIFTSHOT_ARTIFACT_TOKEN")?.takeIf { it.isNotEmpty() },
-        gitEnv: Map<String, String> = emptyMap(),
+        branch: String? = null, env: Map<String, String> = emptyMap(), gitEnv: Map<String, String> = emptyMap(),
     ): Int {
         val temps = mutableListOf<File>()
         return try {
-            apply(from, only, push, author, baseline.absoluteFile.normalize(), log, token, gitEnv, temps)
+            apply(from, only, push, author, baseline.absoluteFile.normalize(), log, branch, env, gitEnv, temps)
         } catch (e: IllegalArgumentException) {
             log.error(e.message ?: "invalid input"); 64
         } catch (e: Refused) {
@@ -61,7 +60,7 @@ object Accept {
             log.error(e.message ?: e.toString()); 1
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            log.error("accept was interrupted; the baseline may be partly updated (git status shows what changed)"); 1
+            log.error("accept was interrupted; the baseline may be partly updated (git status shows what changed)"); 2
         } catch (e: Exception) {
             log.error("$e (the baseline may be partly updated; git status shows what changed)"); 1
         } finally {
@@ -71,7 +70,9 @@ object Accept {
 
     private fun usage(message: String): Nothing = throw UsageError(message)
 
-    private fun apply(from: List<String>, only: Set<String>?, push: Boolean, author: String?, baseline: File, log: Log, token: String?, gitEnv: Map<String, String>, temps: MutableList<File>): Int {
+    private fun apply(from: List<String>, only: Set<String>?, push: Boolean, author: String?, baseline: File, log: Log, branch: String?, env: Map<String, String>, gitEnv: Map<String, String>, temps: MutableList<File>): Int {
+        fun v(k: String) = env[k]?.takeIf { it.isNotEmpty() }
+        val token = v("SWIFTSHOT_ARTIFACT_TOKEN")
         if (from.isEmpty()) usage("accept needs --from <report directory, .zip or URL>")
         val identity = parseAuthor(author ?: DEFAULT_AUTHOR)
         val top = Git(generateSequence(baseline) { it.parentFile }.first { it.isDirectory }, gitEnv).out("rev-parse", "--show-toplevel")
@@ -79,7 +80,14 @@ object Accept {
         val git = Git(File(top), gitEnv)
         val head = git.out("rev-parse", "HEAD") ?: usage("The repository at $top has no commits")
 
-        val reports = from.map { load(it, token, temps) }
+        // Refuse before downloading or writing anything: a fork's branch can't be pushed to, and a detached HEAD needs a name.
+        val ci = Ci.detect(env)
+        val target = if (push) {
+            if (ci.fork == true) throw Refused("This pull request comes from a fork; download the report and run swiftshot accept --from <report> in the fork")
+            pushTarget(git, branch, v("SWIFTSHOT_BRANCH") ?: ci.branch)
+        } else emptyList()
+
+        val reports = from.map { load(it, token, env, temps) }
         val changes = reports.flatMap { it.changes }.groupBy { it.id }
         only?.let { o ->
             val unknown = (o - changes.keys).sortedWith(CanonicalJson.utf8)
@@ -99,6 +107,7 @@ object Accept {
         }
         val written = write(baseline, selected)
         val counts = listOf("changed", "added", "removed").map { k -> selected.count { it.kind == k } }
+        if (counts[2] == selected.size) log.warn("Every change in the report is a removal (${counts[2]} screenshot${if (counts[2] == 1) "" else "s"}); check the run rendered what you expected")
         val summary = message(counts[0], counts[1], counts[2])
         log.ok("${summary.removePrefix("Update screenshot baseline (").removeSuffix(")")} → $baseline")
         if (!push) return 0
@@ -120,22 +129,70 @@ object Accept {
         git.must("-c", "user.name=${identity.first}", "-c", "user.email=${identity.second}", "commit", "-q",
             "--author", "${identity.first} <${identity.second}>", "-m", summary, "-m", trailers, "--pathspec-from-file=-", "--pathspec-file-nul", input = staged.joinToString("\u0000") { ":(literal)$it" })
         val commit = git.out("rev-parse", "HEAD")
-        val branch = git.out("symbolic-ref", "--short", "-q", "HEAD")
-        val remote = branch?.let { git.out("config", "branch.$it.remote") }
-        val merge = branch?.let { git.out("config", "branch.$it.merge") }
-        val target = if (remote != null && merge != null) listOf(remote, "HEAD:$merge") else listOf("origin", "HEAD")
-        val pushed = git.run("push", *target.toTypedArray())
+        val header = pushHeader(git, target[0], env, log)
+        val (args, headerEnv) = pushCommand(target, header, System.getenv() + gitEnv)
+        val pushGit = if (header == null) git else Git(File(top), gitEnv + headerEnv, secrets(header, v("SWIFTSHOT_HOST_TOKEN")))
+        val pushed = pushGit.run(*args.toTypedArray())
         if (pushed.code != 0) throw Refused("Committed $commit, but git push ${target.joinToString(" ")} failed:\n${pushed.err.trim()}")
         log.ok("Committed $commit and pushed to ${target.joinToString(" ")}")
         return 0
     }
+
+    /** What `git push` gets: `--branch`, else the upstream, else (detached) the CI's branch, else `origin HEAD`. */
+    private fun pushTarget(git: Git, branch: String?, ciBranch: String?): List<String> {
+        val current = git.out("symbolic-ref", "--short", "-q", "HEAD")
+        val remote = current?.let { git.out("config", "branch.$it.remote") }
+        val merge = current?.let { git.out("config", "branch.$it.merge") }
+        fun named(name: String): List<String> {
+            if (git.run("check-ref-format", "refs/heads/$name").code != 0) usage("\"$name\" is not a valid branch name")
+            return listOf(remote ?: "origin", "HEAD:refs/heads/$name")
+        }
+        return when {
+            branch != null -> named(branch)
+            remote != null && merge != null -> listOf(remote, "HEAD:$merge")
+            current != null -> listOf("origin", "HEAD")
+            ciBranch != null -> named(ciBranch)
+            else -> throw Refused("HEAD is detached and no branch is known; pass --branch <the pull request branch>")
+        }
+    }
+
+    /**
+     * `git push` [target] and the environment that carries [header] to that one command: `GIT_CONFIG_*` entries after
+     * any [processEnv] already has, so the token is never on git's command line or in the git config.
+     */
+    internal fun pushCommand(target: List<String>, header: String?, processEnv: Map<String, String>): Pair<List<String>, Map<String, String>> {
+        val args = listOf("push") + target
+        if (header == null) return args to emptyMap()
+        val n = processEnv["GIT_CONFIG_COUNT"]?.toIntOrNull()?.takeIf { it >= 0 } ?: 0
+        return args to mapOf("GIT_CONFIG_COUNT" to "${n + 1}", "GIT_CONFIG_KEY_$n" to "http.extraHeader", "GIT_CONFIG_VALUE_$n" to header)
+    }
+
+    /**
+     * The `http.extraHeader` for pushing to [remote] with `SWIFTSHOT_HOST_TOKEN`; null when there is no token, or (with
+     * a warning) when the remote isn't https (or this machine) or its host is unknown.
+     */
+    private fun pushHeader(git: Git, remote: String, env: Map<String, String>, log: Log): String? {
+        val token = env["SWIFTSHOT_HOST_TOKEN"]?.takeIf { it.isNotEmpty() } ?: return null
+        val url = git.out("remote", "get-url", "--push", remote)
+        val uri = url?.let { runCatching { URI(it) }.getOrNull() }
+        if (url == null || uri == null || !(uri.scheme.equals("https", true) || uri.scheme.equals("http", true) && uri.host?.lowercase() in LOOPBACK)) {
+            log.warn("SWIFTSHOT_HOST_TOKEN is not used: $remote is not an https remote (a token push needs one)")
+            return null
+        }
+        val host = Host.detect(url, env)
+        if (host == null) log.warn("SWIFTSHOT_HOST_TOKEN is not used: the git host of $remote is unknown (set SWIFTSHOT_GIT_HOST to github, gitlab or bitbucket)")
+        return host?.pushHeader(token, env["CI_JOB_TOKEN"]?.takeIf { it.isNotEmpty() })
+    }
+
+    /** What git output must never show: the header, its base64 credential and the token. */
+    private fun secrets(header: String, token: String?) = listOfNotNull(header, header.substringAfter("Basic ", "").takeIf { it.isNotEmpty() }, token)
 
     /** The baseline files and baseline.json for [selected]; nothing else. */
     /** Writes the images, then baseline.json (temp file + rename); the paths it wrote or deleted, relative to [baseline]. */
     private fun write(baseline: File, selected: List<Change>): List<String> {
         val jsonFile = File(baseline, "baseline.json")
         val json = jsonFile.takeIf { it.isFile }?.let { runCatching { Json.parse(it.readText()) as Map<*, *> }.getOrElse { _ -> usage("$jsonFile is not valid JSON") } }
-        fun map(key: String): Map<*, *>? = json?.get(key)?.let { v ->
+        fun map(key: String): Map<*, *>? = if (json == null || !json.containsKey(key)) null else json[key].let { v ->
             if (v !is Map<*, *> || v.values.any { it !is Map<*, *> }) usage("$jsonFile: \"$key\" must be an object of objects")
             v
         }
@@ -195,12 +252,12 @@ object Accept {
 
     // Reports
 
-    private fun load(from: String, token: String?, temps: MutableList<File>): Report {
+    private fun load(from: String, token: String?, env: Map<String, String>, temps: MutableList<File>): Report {
         val dir = when {
             from.startsWith("http://", true) || from.startsWith("https://", true) -> {
                 val tmp = Files.createTempDirectory("swiftshot-accept").toFile().also(temps::add)
                 val zip = File(tmp, "report.zip")
-                download(from, zip, token)
+                download(from, zip, token, env)
                 extracted(zip, File(tmp, "report"), from)
             }
             File(from).isDirectory -> File(from)
@@ -238,7 +295,9 @@ object Accept {
         if (manifest["schema"] != 1 && (manifest["schema"] as? Number)?.toDouble() != 1.0) usage("$label: manifest.json schema ${manifest["schema"]} is not supported")
         val commit = manifest["commit"] as? String ?: usage("$label: manifest.json has no commit (verify ran outside a git checkout)")
         if (!Regex("[0-9a-f]{7,64}").matches(commit)) usage("$label: manifest.json commit \"$commit\" is not a commit hash")
-        val ci = manifest["ci"] as? Boolean ?: usage("$label: manifest.json has no ci")
+        // null (not a CI) or an object (which CI); a manifest of the earlier boolean form, or none, is refused.
+        if (!manifest.containsKey("ci") || manifest["ci"].let { it != null && it !is Map<*, *> }) usage("$label: manifest.json has no ci")
+        val local = manifest["ci"] == null
         val fingerprint = manifest["fingerprint"] as? Map<*, *> ?: usage("$label: manifest.json has no fingerprint")
         val ids = manifest["ids"] as? Map<*, *> ?: usage("$label: manifest.json has no ids")
         val result = json("result.json")
@@ -258,7 +317,7 @@ object Accept {
                 if (!png.isFile) usage("$label: images/new/$id.png is missing")
                 val platform = shot["platform"] as? String ?: usage("$label: $id has no platform in result.json")
                 val fp = (fingerprint[platform] as? Map<*, *>)?.let { Fingerprints.forImage(it, shot) } ?: usage("$label: manifest.json has no $platform fingerprint for $id")
-                val entry: Map<String, Any?> = Baseline.describe(shot) + ("local" to !ci) + ("fingerprint" to Fingerprints.id(fp))
+                val entry: Map<String, Any?> = Baseline.describe(shot) + ("local" to local) + ("fingerprint" to Fingerprints.id(fp))
                 changes += Change(id, kind, label, png, entry, fp)
             }
         }
@@ -272,18 +331,19 @@ object Accept {
 
     // Downloads and zips
 
-    private fun download(url: String, dest: File, token: String?) {
+    private fun download(url: String, dest: File, token: String?, env: Map<String, String>) {
         val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(30)).build()
         val origin = runCatching { URI(url) }.getOrElse { usage("--from $url: not a valid URL") }
         // A bearer token in plain text is anyone's on the way; this machine's own server (tests, a local proxy) is no way.
         if (token != null && !origin.scheme.equals("https", true) && origin.host?.lowercase() !in LOOPBACK)
             usage("--from $url: SWIFTSHOT_ARTIFACT_TOKEN is sent only over https; use an https URL or unset the token")
+        val auth = token?.let { artifactHeader(origin, it, env) }
         var uri = origin
         repeat(10) {
             val request = HttpRequest.newBuilder(uri).GET().header("User-Agent", "swiftshot").timeout(Duration.ofMinutes(10))
             // The token goes only to the host it was given for, never along a redirect to storage elsewhere.
             if (token != null && uri.scheme.equals(origin.scheme, true) && uri.host.equals(origin.host, true) && uri.port == origin.port)
-                request.header("Authorization", "Bearer $token")
+                request.header(auth!!.first, auth.second)
             val response = try {
                 client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream())
             } catch (e: IOException) {
@@ -303,6 +363,30 @@ object Accept {
             }
         }
         usage("--from $url: too many redirects")
+    }
+
+    /**
+     * The header that carries the artifact [token] to [url]: `SWIFTSHOT_ARTIFACT_HEADER` ("Name: value", `{token}` in the value) wins,
+     * else the host's own (docs/wiki/Baseline-format.md, "accept"), else Bearer.
+     */
+    internal fun artifactHeader(url: URI, token: String, env: Map<String, String>): Pair<String, String> {
+        env["SWIFTSHOT_ARTIFACT_HEADER"]?.takeIf { it.isNotEmpty() }?.let { template ->
+            val name = template.substringBefore(':').trim()
+            if (':' !in template || name.isEmpty()) usage("SWIFTSHOT_ARTIFACT_HEADER: \"Name: value\" with {token} in the value")
+            return name to template.substringAfter(':').trim().replace("{token}", token)
+        }
+        fun hostOf(key: String) = env[key]?.let { runCatching { URI(it).host?.lowercase() }.getOrNull() }
+        fun basic(s: String) = "Basic " + java.util.Base64.getEncoder().encodeToString(s.toByteArray())
+        val host = url.host?.lowercase().orEmpty()
+        return when {
+            host == "api.github.com" || host == hostOf("GITHUB_API_URL") -> "Authorization" to "Bearer $token"
+            host == "gitlab.com" || host == hostOf("CI_API_V4_URL") ->
+                (if (token == env["CI_JOB_TOKEN"]) "JOB-TOKEN" else "PRIVATE-TOKEN") to token
+            host == "circleci.com" || host.endsWith(".circleci.com") -> "Circle-Token" to token
+            host == "dev.azure.com" || host.endsWith(".visualstudio.com") -> "Authorization" to basic(":$token")
+            ':' in token -> "Authorization" to basic(token)
+            else -> "Authorization" to "Bearer $token"
+        }
     }
 
     private fun capped(input: InputStream, dest: File, label: String, budget: LongArray = longArrayOf(MAX_BYTES)) {
@@ -383,7 +467,10 @@ object Accept {
 
     private class Result(val code: Int, val out: String, val err: String)
 
-    private class Git(val dir: File, val env: Map<String, String>) {
+    /** [secrets] never appear in the output of a run: each is replaced with `***`. */
+    private class Git(val dir: File, val env: Map<String, String>, val secrets: List<String> = emptyList()) {
+        private fun hide(s: String) = secrets.sortedByDescending { it.length }.fold(s) { acc, secret -> acc.replace(secret, "***") }
+
         fun run(vararg args: String, input: String? = null): Result {
             val p = ProcessBuilder(listOf("git") + args).directory(dir)
             p.environment().putAll(env)
@@ -394,7 +481,7 @@ object Accept {
                 val proc = p.start()
                 proc.outputStream.use { if (input != null) it.write(input.toByteArray()) }
                 val out = proc.inputStream.bufferedReader().readText()
-                return Result(proc.waitFor(), out, err.readText())
+                return Result(proc.waitFor(), hide(out), hide(err.readText()))
             } finally {
                 err.delete()
             }

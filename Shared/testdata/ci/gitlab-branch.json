@@ -1,0 +1,22 @@
+{
+  "env": {
+    "CI_COMMIT_BRANCH": "main",
+    "CI_COMMIT_SHA": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "CI_JOB_URL": "https://gitlab.com/acme/app/-/jobs/4815162342",
+    "CI_PIPELINE_SOURCE": "push",
+    "CI_PROJECT_ID": "42",
+    "CI_PROJECT_URL": "https://gitlab.com/acme/app",
+    "GITLAB_CI": "true"
+  },
+  "expected": {
+    "branch": "main",
+    "buildUrl": "https://gitlab.com/acme/app/-/jobs/4815162342",
+    "commit": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "fork": null,
+    "isCi": true,
+    "provider": "gitlab",
+    "pullRequest": null,
+    "repository": "https://gitlab.com/acme/app",
+    "warnings": []
+  }
+}

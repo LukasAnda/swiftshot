@@ -1,31 +1,141 @@
 name: Swiftshot Preview Screenshots
-description: SwiftUI, UIKit and Jetpack Compose preview screenshots for every device, language and appearance. No simulator or emulator.
+description: SwiftUI, UIKit and Jetpack Compose preview screenshots for every device, language and appearance, and screenshot tests against a baseline. No simulator or emulator.
 branding:
   icon: camera
   color: blue
 inputs:
+  command:
+    description: "run, verify, record or accept"
+    default: run
   version:
-    description: swiftshot release to install (e.g. 0.1.0), or "latest"
+    description: swiftshot release to install (e.g. 0.1.0), "latest", or "local" to use the swiftshot already on PATH (for testing this action)
     default: latest
   args:
-    description: Arguments for `swiftshot run` (project, scheme or Gradle modules, devices, languages…), or empty to use swiftshot.json
+    description: Arguments after the command (project, scheme or Gradle modules, devices, languages…), or empty to use swiftshot.json
     default: ""
   working-directory:
     description: Where to run (the folder with your project / swiftshot.json)
     default: "."
+  report-name:
+    description: Name of the uploaded report artifact (verify)
+    default: swiftshot-report
+  from:
+    description: "Report to apply (accept): a directory, a zip or an https URL"
+    default: ""
+  status:
+    description: Post the commit status "swiftshot" after verify (needs statuses write permission)
+    default: "true"
+outputs:
+  status:
+    description: "verify: passed, failed or error"
+    value: ${{ steps.run.outputs.status }}
+  report:
+    description: "verify: the report directory"
+    value: ${{ steps.run.outputs.report }}
 runs:
   using: composite
   steps:
     - name: Install swiftshot
+      if: inputs.version != 'local'
       shell: bash
       env:
         SWIFTSHOT_VERSION: ${{ inputs.version }}
         SWIFTSHOT_PREFIX: ${{ runner.temp }}/swiftshot
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        sh "${{ github.action_path }}/install.sh"
-        echo "${{ runner.temp }}/swiftshot/bin" >> "$GITHUB_PATH"
-    - name: Render screenshots
+        sh "$ACTION_PATH/install.sh"
+        echo "$SWIFTSHOT_PREFIX/bin" >> "$GITHUB_PATH"
+    # The exit code is kept until the report is uploaded and the status posted.
+    - name: Run swiftshot
+      id: run
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        COMMAND: ${{ inputs.command }}
+        ARGS: ${{ inputs.args }}
+        FROM: ${{ inputs.from }}
+        REPORT_DEFAULT: ${{ runner.temp }}/swiftshot-report
       run: |
-        swiftshot run ${{ inputs.args }}
+        # The arguments are the workflow author's, quoted as in a shell line.
+        eval "set -- $ARGS"
+        case "$COMMAND" in
+          run|record) cmd=(swiftshot "$COMMAND" "$@") ;;
+          verify)
+            report=$REPORT_DEFAULT
+            prev=
+            for a in "$@"; do
+              [ "$prev" = --report-directory ] && report=$a
+              prev=$a
+            done
+            # Before the user's arguments: a --report-directory in args comes later and wins.
+            cmd=(swiftshot verify --report-directory "$REPORT_DEFAULT" "$@")
+            case $report in /*) ;; *) report=$PWD/$report ;; esac
+            echo "report=$report" >> "$GITHUB_OUTPUT" ;;
+          accept)
+            [ -n "$FROM" ] || { echo "::error::command accept needs the from input"; exit 64; }
+            cmd=(swiftshot accept --from "$FROM" "$@") ;;
+          *) echo "::error::command must be run, verify, record or accept"; exit 64 ;;
+        esac
+        rc=0
+        "${cmd[@]}" || rc=$?
+        if [ "$COMMAND" = verify ]; then
+          status=
+          if [ -f "$report/result.json" ]; then
+            status=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$report/result.json" 2>/dev/null || true)
+          fi
+          if [ -z "$status" ]; then
+            case "$rc" in 0) status=passed ;; 1) status=failed ;; *) status=error ;; esac
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+        fi
+        echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
+    - name: Post commit status
+      if: inputs.command == 'verify' && inputs.status == 'true' && always() && steps.run.outputs.report != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        API: ${{ github.api_url }}
+        REPORT: ${{ steps.run.outputs.report }}
+        RUNNER_TEMP: ${{ runner.temp }}
+        STATUS: ${{ steps.run.outputs.status }}
+      run: |
+        # A missing token permission or result.json is a warning, never a failure.
+        [ -f "$REPORT/result.json" ] || { echo "::warning::No result.json, commit status not posted"; exit 0; }
+        py=$(mktemp)
+        cat > "$py" <<'PY'
+        import json, sys
+        r = json.load(open(sys.argv[1]))
+        c = r["counts"]
+        body = {"state": {"passed": "success", "failed": "failure"}.get(sys.argv[2], "error"),
+                "context": "swiftshot", "target_url": sys.argv[3],
+                "description": "%d changed · %d added · %d removed · %d errors · %d unchanged" % (c["changed"], c["added"], c["removed"], c["errors"], c["unchanged"])}
+        print(r["commit"] or "")
+        print(json.dumps(body, ensure_ascii=False))
+        PY
+        out=$(python3 -I "$py" "$REPORT/result.json" "$STATUS" "$RUN_URL") || { echo "::warning::Could not read result.json, commit status not posted"; exit 0; }
+        sha=$(printf '%s\n' "$out" | sed -n 1p)
+        [ -n "$sha" ] || { echo "::warning::result.json has no commit, commit status not posted"; exit 0; }
+        # The token goes through a private header file, not curl's arguments.
+        hdr=$(mktemp "$RUNNER_TEMP/hdr.XXXXXX")
+        trap 'rm -f "$hdr"' EXIT
+        printf 'Authorization: Bearer %s\n' "$GH_TOKEN" > "$hdr"
+        printf '%s\n' "$out" | sed -n 2p \
+          | curl -fsS -o /dev/null -X POST "$API/repos/$REPO/statuses/$sha" \
+              -H "@$hdr" -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" --data-binary @- \
+          || echo "::warning::Could not post the swiftshot commit status (the token needs statuses: write)"
+    - name: Upload report
+      if: inputs.command == 'verify' && always() && steps.run.outputs.report != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.report-name }}
+        path: ${{ steps.run.outputs.report }}
+        if-no-files-found: warn
+    - name: Exit with swiftshot's code
+      if: always() && steps.run.outputs.exit-code != '' && steps.run.outputs.exit-code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.run.outputs.exit-code }}
+      run: exit "$CODE"

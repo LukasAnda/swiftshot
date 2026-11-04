@@ -1,0 +1,23 @@
+{
+  "env": {
+    "BUILD_BUILDID": "1088",
+    "BUILD_REPOSITORY_URI": "https://dev.azure.com/fabrikamfiber/FabrikamFiber/_git/app",
+    "BUILD_SOURCEBRANCH": "refs/heads/main",
+    "BUILD_SOURCEBRANCHNAME": "main",
+    "BUILD_SOURCEVERSION": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "SYSTEM_COLLECTIONURI": "https://dev.azure.com/fabrikamfiber/",
+    "SYSTEM_TEAMPROJECT": "FabrikamFiber",
+    "TF_BUILD": "true"
+  },
+  "expected": {
+    "branch": "main",
+    "buildUrl": "https://dev.azure.com/fabrikamfiber/FabrikamFiber/_build/results?buildId=1088",
+    "commit": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "fork": null,
+    "isCi": true,
+    "provider": "azure",
+    "pullRequest": null,
+    "repository": "https://dev.azure.com/fabrikamfiber/FabrikamFiber/_git/app",
+    "warnings": []
+  }
+}

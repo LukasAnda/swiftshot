@@ -472,6 +472,8 @@ class OptionsTest {
         val flags = parse("verify", "--baseline-directory", "b", "--report-directory", "r")
         assertEquals(File("b").absoluteFile, flags.baselineDir(flutter = false))
         assertEquals(File("r").absoluteFile, flags.reportDir(flutter = false))
+        // Given twice (the GitHub Action's default, then the user's), the last wins.
+        assertEquals(File("r2").absoluteFile, parse("verify", "--report-directory", "r1", "--report-directory", "r2").reportDir(flutter = false))
         // The report defaults next to the output.
         config("""{"output_directory": "shots"}""")
         assertEquals(File(dir, "shots-report"), parse("verify").reportDir(flutter = false))
@@ -503,6 +505,15 @@ class OptionsTest {
         config("""{"frame": "plain"}""")
         assertEquals("none", parse("verify").frame)
         assertEquals("plain", parse("run").frame)
+    }
+
+    /** Shared/boolean-flags.txt lists every flag either CLI reads without a value; this CLI's flags are among them. */
+    @Test fun booleanFlagsAreInTheSharedFile() {
+        val file = File(System.getProperty("swiftshot.testdata") ?: error("swiftshot.testdata not set")).parentFile.resolve("boolean-flags.txt")
+        val shared = file.readLines()
+        assertEquals(shared.sorted(), shared, "one flag per line, sorted")
+        assertEquals(shared.distinct(), shared)
+        assertTrue(shared.containsAll(Options.BOOLEAN_FLAGS), "missing from $file: ${Options.BOOLEAN_FLAGS - shared.toSet()}")
     }
 
     @Test fun commandSkipsEveryBooleanFlag() {

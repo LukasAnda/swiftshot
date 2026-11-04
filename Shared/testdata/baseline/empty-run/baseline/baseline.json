@@ -1,0 +1,38 @@
+{
+  "fingerprints": {
+    "241d8bd3b005": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "images": {
+    "en-US/Pixel 9-Home": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "241d8bd3b005",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Home"
+    },
+    "en-US/Pixel 9-Legacy": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "241d8bd3b005",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Legacy"
+    }
+  },
+  "schema": 1
+}

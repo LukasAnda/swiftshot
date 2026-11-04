@@ -1,0 +1,42 @@
+{
+  "env": {
+    "GITHUB_ACTIONS": "true",
+    "GITHUB_EVENT_NAME": "issue_comment",
+    "GITHUB_EVENT_PATH": "/home/runner/work/_temp/_github_workflow/event.json",
+    "GITHUB_REF": "refs/heads/main",
+    "GITHUB_REF_NAME": "main",
+    "GITHUB_REF_TYPE": "branch",
+    "GITHUB_REPOSITORY": "acme/app",
+    "GITHUB_RUN_ID": "9876543210",
+    "GITHUB_SERVER_URL": "https://github.com",
+    "GITHUB_SHA": "9fceb02d0ae598e95dc970b74767f19372d61724"
+  },
+  "expected": {
+    "branch": null,
+    "buildUrl": "https://github.com/acme/app/actions/runs/9876543210",
+    "commit": "9fceb02d0ae598e95dc970b74767f19372d61724",
+    "fork": null,
+    "isCi": true,
+    "provider": "github",
+    "pullRequest": null,
+    "repository": "https://github.com/acme/app",
+    "warnings": []
+  },
+  "files": {
+    "/home/runner/work/_temp/_github_workflow/event.json": {
+      "action": "created",
+      "comment": {
+        "body": "/swiftshot accept"
+      },
+      "issue": {
+        "number": 7,
+        "pull_request": {
+          "url": "https://api.github.com/repos/acme/app/pulls/7"
+        }
+      },
+      "repository": {
+        "full_name": "acme/app"
+      }
+    }
+  }
+}

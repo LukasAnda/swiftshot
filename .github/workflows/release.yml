@@ -34,7 +34,7 @@ jobs:
         run: |
           dist/swiftshot/bin/swiftshot --version
           for f in swiftshot-android.jar swiftshot-android-worker.jar swiftshot-desktop-worker.jar; do
-            test -s "dist/swiftshot/bin/$f" && test -s "dist/android/swiftshot/bin/$f" || { echo "missing $f"; exit 1; }
+            if ! test -s "dist/swiftshot/bin/$f" || ! test -s "dist/android/swiftshot/bin/$f"; then echo "missing $f"; exit 1; fi
           done
           JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}" dist/swiftshot/bin/swiftshot-android --version
       - name: Publish

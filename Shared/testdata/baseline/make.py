@@ -2,7 +2,7 @@
 """Regenerates the baseline-comparison fixtures (inputs and expected JSON/JUnit).
 
 Run with `python3 -I make.py` from anywhere. Stdlib only, deterministic. It rewrites each case's
-`config.json`, `baseline/`, `output/` and `expected/{result.json,junit.xml,manifest.json}`.
+`config.json`, `baseline/`, `output/` and `expected/{result.json,junit.xml,manifest.json,summary.md}`.
 `expected/images/` is left alone: the engine generates and commits those, and this script checks
 them (baseline/new byte copies, diff images pixel- and byte-equal to `diff_image` below).
 
@@ -10,6 +10,7 @@ The expected values come from a reference implementation of docs/wiki/Baseline-f
 below, checked against the numbers each synthetic edit is known to produce.
 """
 import hashlib
+import json
 import math
 import os
 import shutil
@@ -21,7 +22,8 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 BRANCH = "feature/x"
 VERSION = "1.0.0-test"
-CI = False
+# The environment every case runs in; a case's env.json is merged over it (null removes a key).
+ENV = {"SWIFTSHOT_COMMIT": COMMIT, "SWIFTSHOT_BRANCH": BRANCH, "SWIFTSHOT_CI": "false"}
 W, H = 40, 80
 
 
@@ -505,6 +507,10 @@ def run_host(run_fps):
 def verify(case):
     """The reference implementation of the format: returns (result, junit, manifest)."""
     report, baseline, config = case["report"], case["baseline_json"], case["config"]
+    env = {k: v for k, v in dict(ENV, **case["env"]).items() if v is not None}
+    ci = ci_detect(env, case["input_files"])
+    commit = env.get("SWIFTSHOT_COMMIT") or ci["commit"]
+    branch = env.get("SWIFTSHOT_BRANCH") or ci["branch"]
     bfiles, ofiles = case["baseline_files"], case["output_files"]
     listed = baseline["images"]
     run_fps = report["fingerprint"]
@@ -515,6 +521,8 @@ def verify(case):
         if "id" in err:
             failed.setdefault(err["id"], err["message"])  # first per id wins
     unattributed = [e for e in report["errors"] if "id" not in e]
+    if not report["screenshots"] and not report["errors"]:  # a run that rendered nothing is an error, not a mass removal
+        unattributed = [{"message": "The run rendered no screenshots"}]
     stray = {sid for sid in bfiles if sid not in listed}
     entries, compared, local = [], [], False
     for sid in sorted(set(out_imgs) | set(listed) | set(failed) | (stray & set(out_imgs)), key=key_order):
@@ -576,13 +584,13 @@ def verify(case):
     counts["errors"] = len(errors)
     status = "error" if errors else "failed" if counts["changed"] + counts["added"] + counts["removed"] else "passed"
     result = {
-        "schema": 1, "status": status, "counts": counts, "commit": COMMIT, "branch": BRANCH, "version": VERSION,
-        "ci": CI, "host": run_host(run_fps),
+        "schema": 1, "status": status, "counts": counts, "commit": commit, "branch": branch, "version": VERSION,
+        "ci": ci_report(ci), "host": run_host(run_fps),
         "fingerprint": run_fps, "fingerprintMismatch": sorted(mism, key=key_order), "localBaseline": local,
         "screenshots": entries, "errors": errors, "strayBaselineFiles": len(stray - {e["id"] for e in entries}),
     }
     manifest = {
-        "schema": 1, "commit": COMMIT, "branch": BRANCH, "ci": CI, "configHash": sha(compact(normalized(config))),
+        "schema": 1, "commit": commit, "branch": branch, "ci": ci_report(ci), "configHash": sha(compact(normalized(config))),
         "fingerprint": run_fps,
         "ids": {k: [e["id"] for e in entries if e["status"] == k] for k in ("changed", "added", "removed")},
     }
@@ -608,7 +616,178 @@ def verify(case):
         lines += ['  <testcase classname="swiftshot" name="error %d">' % i,
                   '    <error message="%s"/>' % xml_attr(err["message"]), "  </testcase>"]
     lines.append("</testsuite>")
-    return result, "\n".join(lines) + "\n", manifest
+    return result, "\n".join(lines) + "\n", manifest, summary_md(result)
+
+
+# ---------------------------------------------------------------- summary.md
+
+MARKER = "<!-- swiftshot -->"
+HEADINGS = {"passed": "Screenshots match the baseline", "failed": "Screenshots differ from the baseline", "error": "Screenshot run had errors"}
+HINTS = {
+    "github": "Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.",
+    "gitlab": "Run the manual `swiftshot-accept` job in this pipeline to accept the changes.",
+    "bitbucket": "Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.",
+    "bitrise": "Run the `swiftshot-accept` workflow on this branch to accept the changes.",
+    "codemagic": "Start the `swiftshot-accept` workflow on this branch to accept the changes.",
+    "circleci": "Approve the `accept-screenshots` job in this workflow to accept the changes.",
+    "azure": "Approve the `Accept screenshots` stage in this run to accept the changes.",
+    "jenkins": "Approve the `Accept screenshots` stage in this build to accept the changes.",
+}
+GENERIC_HINT = "Accept the changes with `swiftshot accept --from <this report>`."
+ROW_ORDER = ("error", "changed", "added", "removed")
+MAX_ROWS, MAX_BYTES = 200, 60000
+
+
+def summary_md(result):
+    """Reference for docs/wiki/Baseline-format.md "summary.md"."""
+    c = result["counts"]
+    ci = result["ci"]
+    status = result["status"]
+    notes = ["> **Note:** Baseline rendered differently: %s" % m for m in result["fingerprintMismatch"]]
+    if result["localBaseline"]:
+        notes.append("> **Note:** Some baseline images were recorded outside CI (local); record or accept them on CI")
+    rows = sorted(((ROW_ORDER.index(e["status"]), key_order(e["id"]), e["status"], e["id"])
+                   for e in result["screenshots"] if e["status"] in ROW_ORDER))
+    tail = []
+    if ci and ci["buildUrl"]:
+        tail.append("[Full report](%s)" % ci["buildUrl"])
+    if status == "failed":
+        tail.append(HINTS.get(ci["provider"] if ci else None, GENERIC_HINT))
+
+    def build(shown):
+        blocks = ["%s\n### %s" % (MARKER, HEADINGS[status]),
+                  "%d changed \u00b7 %d added \u00b7 %d removed \u00b7 %d errors \u00b7 %d unchanged" % (
+                      c["changed"], c["added"], c["removed"], c["errors"], c["unchanged"])]
+        if notes:
+            blocks.append("\n".join(notes))
+        if rows:
+            lines = ["| Status | Screenshot |", "|---|---|"]
+            lines += ["| %s | `%s` |" % (r[2], r[3].replace("|", "\\|").replace("`", "'")) for r in rows[:shown]]
+            if shown < len(rows):
+                lines.append("| | \u2026and %d more |" % (len(rows) - shown))
+            blocks.append("\n".join(lines))
+        blocks += tail
+        return "\n\n".join(blocks) + "\n"
+    shown = min(MAX_ROWS, len(rows))
+    while len(build(shown).encode("utf-8")) > MAX_BYTES and shown > 0:
+        shown -= 1
+    return build(shown)
+
+
+# ---------------------------------------------------------------- CI detection
+
+def ci_detect(env, files):
+    """Reference for docs/wiki/Baseline-format.md "CI detection". env: name -> value; files: path -> text.
+    Returns every Ci field plus isCi and warnings (not written to reports)."""
+    def g(k):
+        return env.get(k) or None
+
+    def first(*v):
+        return next((x for x in v if x), None)
+
+    def is_true(k):
+        return (g(k) or "").lower() == "true"
+
+    def join(fmt, *keys):
+        vals = [g(k) for k in keys]
+        return fmt % tuple(vals) if all(vals) else None
+
+    ci = dict(provider=None, commit=None, branch=None, pullRequest=None, fork=None, buildUrl=None,
+              repository=None, isCi=False, warnings=[])
+    override = g("SWIFTSHOT_CI")
+    if override is not None and override.lower() not in ("true", "1"):
+        return ci
+
+    def done(provider, commit, branch, pr, fork, build_url, repo):
+        ci.update(provider=provider, commit=commit, branch=branch, pullRequest=pr, fork=fork,
+                  buildUrl=build_url, repository=repo, isCi=True)
+        return ci
+
+    if is_true("GITHUB_ACTIONS"):
+        event, path = None, g("GITHUB_EVENT_PATH")
+        if path:
+            try:
+                event = json.loads(files[path])
+                assert isinstance(event, dict)
+            except Exception:
+                event = None
+                ci["warnings"].append("GITHUB_EVENT_PATH unreadable; recording GITHUB_SHA, which is a merge commit on pull requests")
+        pull = (event or {}).get("pull_request")
+        pull = pull if isinstance(pull, dict) else {}
+
+        def dig(o, *ks):
+            for k in ks:
+                o = o.get(k) if isinstance(o, dict) else None
+            return o if isinstance(o, str) and o else None
+        number = pull.get("number")
+        head, base = dig(pull, "head", "repo", "full_name"), dig(pull, "base", "repo", "full_name")
+        # GITHUB_REF_NAME is a branch to push to only on a push of a branch (an issue comment's is the default branch).
+        pushed = g("GITHUB_EVENT_NAME") == "push" and g("GITHUB_REF_TYPE") != "tag"
+        return done("github", first(dig(pull, "head", "sha"), g("GITHUB_SHA")), first(g("GITHUB_HEAD_REF"), g("GITHUB_REF_NAME") if pushed else None),
+                    str(number) if isinstance(number, int) and not isinstance(number, bool) else None,
+                    head != base if head and base else None,
+                    join("%s/%s/actions/runs/%s", "GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"),
+                    join("%s/%s", "GITHUB_SERVER_URL", "GITHUB_REPOSITORY"))
+    if is_true("GITLAB_CI"):
+        src, tgt = g("CI_MERGE_REQUEST_SOURCE_PROJECT_ID"), g("CI_MERGE_REQUEST_PROJECT_ID")
+        return done("gitlab", first(g("CI_MERGE_REQUEST_SOURCE_BRANCH_SHA"), g("CI_COMMIT_SHA")),
+                    first(g("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"), g("CI_COMMIT_BRANCH")), g("CI_MERGE_REQUEST_IID"),
+                    src != tgt if src and tgt else None, g("CI_JOB_URL"), g("CI_PROJECT_URL"))
+    if g("BITBUCKET_BUILD_NUMBER"):
+        pr = g("BITBUCKET_PR_ID")
+        return done("bitbucket", g("BITBUCKET_COMMIT"), g("BITBUCKET_BRANCH"), pr, False if pr else None,
+                    join("%s/pipelines/results/%s", "BITBUCKET_GIT_HTTP_ORIGIN", "BITBUCKET_BUILD_NUMBER"),
+                    g("BITBUCKET_GIT_HTTP_ORIGIN"))
+    if is_true("BITRISE_IO"):
+        fork, repo = g("BITRISEIO_PULL_REQUEST_REPOSITORY_URL"), g("GIT_REPOSITORY_URL")
+        return done("bitrise", first(g("BITRISE_GIT_COMMIT"), g("GIT_CLONE_COMMIT_HASH")), g("BITRISE_GIT_BRANCH"),
+                    g("BITRISE_PULL_REQUEST"), fork != repo if fork and repo else None, g("BITRISE_BUILD_URL"), repo)
+    if g("CM_BUILD_ID"):
+        return done("codemagic", g("CM_COMMIT"), g("CM_BRANCH"),
+                    g("CM_PULL_REQUEST_NUMBER"), None, None, None)
+    if is_true("CIRCLECI"):
+        url = g("CIRCLE_PULL_REQUEST")
+        return done("circleci", g("CIRCLE_SHA1"), g("CIRCLE_BRANCH"), url.rstrip("/").rsplit("/", 1)[-1] if url else None,
+                    True if g("CIRCLE_PR_NUMBER") else False if url else None, g("CIRCLE_BUILD_URL"), g("CIRCLE_REPOSITORY_URL"))
+    if is_true("TF_BUILD"):
+        def heads(v):
+            return v[len("refs/heads/"):] if v and v.startswith("refs/heads/") else v
+        fork = (g("SYSTEM_PULLREQUEST_ISFORK") or "").lower()
+        collection, project, build = g("SYSTEM_COLLECTIONURI"), g("SYSTEM_TEAMPROJECT"), g("BUILD_BUILDID")
+        return done("azure", first(g("SYSTEM_PULLREQUEST_SOURCECOMMITID"), g("BUILD_SOURCEVERSION")),
+                    first(heads(g("SYSTEM_PULLREQUEST_SOURCEBRANCH")), heads(g("BUILD_SOURCEBRANCH")), g("BUILD_SOURCEBRANCHNAME")),
+                    first(g("SYSTEM_PULLREQUEST_PULLREQUESTNUMBER"), g("SYSTEM_PULLREQUEST_PULLREQUESTID")),
+                    True if fork == "true" else False if fork == "false" else None,
+                    "%s/%s/_build/results?buildId=%s" % (collection.rstrip("/"), project, build) if collection and project and build else None,
+                    g("BUILD_REPOSITORY_URI"))
+    if g("JENKINS_URL"):
+        branch = g("GIT_BRANCH")
+        return done("jenkins", g("GIT_COMMIT"),
+                    first(g("CHANGE_BRANCH"), g("BRANCH_NAME"), branch[len("origin/"):] if branch and branch.startswith("origin/") else branch),
+                    g("CHANGE_ID"), True if g("CHANGE_FORK") else False if g("CHANGE_ID") else None, g("BUILD_URL"), g("GIT_URL"))
+    if override is not None or (g("CI") or "").lower() in ("true", "1"):
+        ci["isCi"] = True
+    return ci
+
+
+def ci_report(ci):
+    """The `ci` value of result.json and manifest.json."""
+    if not ci["isCi"]:
+        return None
+    return {k: ci[k] for k in ("buildUrl", "provider", "pullRequest")}
+
+
+def check_ci_fixtures():
+    """Shared/testdata/ci/*.json: every case's `expected` is what the reference above detects."""
+    d = os.path.join(os.path.dirname(ROOT), "ci")
+    names = sorted(n for n in os.listdir(d) if n.endswith(".json"))
+    for n in names:
+        with open(os.path.join(d, n)) as f:
+            c = json.load(f)
+        files = {k: v if isinstance(v, str) else json.dumps(v) for k, v in c.get("files", {}).items()}
+        got = ci_detect(c["env"], files)
+        assert got == c["expected"], (n, got, c["expected"])
+    return len(names)
 
 
 # ---------------------------------------------------------------- fixture building
@@ -703,11 +882,12 @@ def png(item):
 
 
 def case(name, baseline, output, config=None, scope=None, requested=None, errors=None, run_fp=None, base_fps=None,
-         base_run_fp=None, local=(), missing_baseline=(), missing_output=(), stray=()):
+         base_run_fp=None, local=(), missing_baseline=(), missing_output=(), stray=(), env=None, input_files=None):
     """baseline/output: lists of (meta, image or PNG bytes). run_fp: platform -> this run's fingerprint.
     The baseline images' fingerprints: base_fps (platform -> an image fingerprint), else those the run
     base_run_fp (default: this run) gave each image. missing_*: ids listed without a PNG on disk;
-    stray: (id, image) PNGs not in baseline.json."""
+    stray: (id, image) PNGs not in baseline.json. env: changes to the standard ENV (None removes a key), written
+    as env.json; input_files: path (relative to the case directory) -> JSON, written as is."""
     plats = sorted({m["platform"] for m, _ in output})
     host = "macos-arm64" if "ios" in plats else "linux-x64"
     run_fp = run_fp or {p: dict(FP[p], host=host) for p in plats}
@@ -735,7 +915,7 @@ def case(name, baseline, output, config=None, scope=None, requested=None, errors
     bfiles.update({sid: png(img) for sid, img in stray})
     ofiles = {m["id"]: png(img) for m, img in output if m["id"] not in missing_output}
     return {"name": name, "report": report, "baseline_json": bjson, "config": config or {},
-            "baseline_files": bfiles, "output_files": ofiles}
+            "baseline_files": bfiles, "output_files": ofiles, "env": env or {}, "input_files": {k: pretty(v) for k, v in (input_files or {}).items()}}
 
 
 def cases():
@@ -764,6 +944,13 @@ def cases():
     out.append(case("added", imgs, imgs + [(android("Onboarding"), base(9))]))
 
     out.append(case("removed", imgs + [(android("Legacy"), base(9))], imgs))
+
+    # A report with no screenshots and no errors: an error (unattributed), nothing removed.
+    two = [(android("Home"), base(1)), (android("Legacy"), base(9))]
+    empty = case("empty-run", two, two)
+    empty["report"]["screenshots"] = []
+    empty["output_files"] = {}
+    out.append(empty)
 
     # Baseline images outside the run's scope, one dimension each, are not reported.
     imgs = [(ios("Home One"), base(1))]
@@ -900,6 +1087,26 @@ def cases():
                     [(fl("iPhone 17 Pro", "impeller"), base(1)), (fl("Pixel 9", "impeller"), base(2))],
                     run_fp={"flutter": dict(mac, renderers=["impeller"])},
                     base_run_fp={"flutter": dict(mac, renderers=["exact-ios", "impeller"])}))
+
+    # On GitHub Actions, a pull request: no SWIFTSHOT_* overrides, so commit, branch and ci come from the
+    # environment and the event file (event.json, next to env.json). The checkout is a merge commit
+    # (GITHUB_SHA); the report records the head commit.
+    gh_head = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+    event = {"action": "synchronize", "number": 7, "pull_request": {
+        "number": 7, "head": {"ref": "feature/x", "sha": gh_head, "repo": {"full_name": "acme/app"}},
+        "base": {"ref": "main", "sha": "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567", "repo": {"full_name": "acme/app"}}}}
+    imgs = [(android("Home"), base(1))]
+    out.append(case("ci-github", imgs, imgs, input_files={"event.json": event}, env={
+        "SWIFTSHOT_COMMIT": None, "SWIFTSHOT_BRANCH": None, "SWIFTSHOT_CI": None,
+        "GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": "event.json",
+        "GITHUB_SHA": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081", "GITHUB_REF": "refs/pull/7/merge", "GITHUB_REF_NAME": "7/merge",
+        "GITHUB_HEAD_REF": "feature/x", "GITHUB_BASE_REF": "main", "GITHUB_REPOSITORY": "acme/app",
+        "GITHUB_SERVER_URL": "https://github.com", "GITHUB_RUN_ID": "9876543210"}))
+    # 300 added 1x1 images with ~300-byte ids: the table's 200 rows exceed 60,000 bytes, so the byte cap and
+    # "...and N more" both apply. An id is `en-US/<device>-<P*100>/<Q*100><index>`: a path component stays
+    # under the file systems' 255 bytes.
+    tiny = base(1, 1, 1)
+    out.append(case("summary-truncation", [], [(android("P" * 100 + "/" + "Q" * 100 + "%03d" % i, device="D" * 100), tiny) for i in range(300)]))
     return out
 
 
@@ -979,13 +1186,19 @@ def main():
         write(os.path.join(d, "baseline", "baseline.json"), pretty(c["baseline_json"]))
         write(os.path.join(d, "output", "swiftshot-report.json"), pretty(c["report"]))
         write(os.path.join(d, "config.json"), pretty(c["config"]))
-        result, junit, manifest = verify(c)
+        if c["env"]:
+            write(os.path.join(d, "env.json"), pretty(c["env"]))
+        for rel, text in c["input_files"].items():
+            write(os.path.join(d, rel), text)
+        result, junit, manifest, summary = verify(c)
         check(c, result)
         write(os.path.join(d, "expected", "result.json"), pretty(result))
         write(os.path.join(d, "expected", "junit.xml"), junit)
         write(os.path.join(d, "expected", "manifest.json"), pretty(manifest))
+        write(os.path.join(d, "expected", "summary.md"), summary)
         check_images(c, result, d)
         print("%-28s %s %s" % (c["name"], result["status"], dump(result["counts"], indent=None)))
+    print("ci fixtures: %d" % check_ci_fixtures())
 
 
 if __name__ == "__main__":

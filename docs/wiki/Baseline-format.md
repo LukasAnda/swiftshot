@@ -14,6 +14,7 @@ and the JVM CLI) follow this page exactly and are tested against the fixtures in
 <report_directory>/                   default <output_directory>-report
   result.json
   junit.xml
+  summary.md
   index.html
   manifest.json
   timings.json                        {"compareSeconds": 0.25}: how long the comparison took
@@ -46,17 +47,18 @@ Examples below are abbreviated and not in the sorted key order the files use.
 | 2 | errors, with or without differences |
 | 64 | usage error |
 
-`verify` and `record`: a baseline.json that isn't valid (not JSON, `fingerprints` or `images` not an
-object of objects, an `images` id that isn't a relative `/`-separated path without `.` or `..`
-parts) is a usage error. `record`: 2 when the run had errors (images with errors keep their
+`verify` and `record`: a baseline.json that isn't valid (not JSON, `fingerprints` or `images` `null`
+or not an object of objects: `"<key>" must be an object of objects`, an `images` id that isn't a
+relative `/`-separated path without `.` or `..` parts) is a usage error. `record`: 2 when the run had errors (images with errors keep their
 baseline entry), or when it rendered nothing but would remove baseline images (then nothing
 changes); else 0. baseline.json is written last (temp file, then rename).
 
 `accept`: 0 applied (or nothing to apply), 1 refused (the report's commit isn't HEAD and a commit
-other than an `accept` commit followed it, or `git push` failed), 64 usage error or invalid report
-(also: an `--only` id the reports don't list, the same id with different content in two reports, a
-zip entry leaving the report or a symbolic link, a damaged zip, a `--from` that can't be read, a
-malformed manifest.json, result.json or baseline.json). Interrupted: 1.
+other than an `accept` commit followed it, `--push` from a fork's pull request, `--push` with HEAD
+detached and no branch known, or `git push` failed), 64 usage error or invalid report (also: an
+`--only` id the reports don't list, the same id with different content in two reports, a zip entry
+leaving the report or a symbolic link, a damaged zip, a `--from` that can't be read, a malformed
+manifest.json, result.json or baseline.json, `--branch` without `--push`). Interrupted: 2.
 
 ## Serialization
 
@@ -90,7 +92,7 @@ malformed. Any other or malformed PNG is the error `unsupported PNG` for that id
 **Determinism**: `commit`, `branch`, `version` and `ci` come from `SWIFTSHOT_COMMIT`,
 `SWIFTSHOT_BRANCH`, `SWIFTSHOT_VERSION_OVERRIDE` and `SWIFTSHOT_CI` (`true`/`false`) when set (tests
 set them: `0123456789abcdef0123456789abcdef01234567`, `feature/x`, `1.0.0-test`, `false`).
-Otherwise from git/CI detection and the binary; an unknown commit or branch is `null`. The host is
+Otherwise from CI detection (see CI detection), git and the binary; an unknown commit or branch is `null`. The host is
 detected once per run (`SWIFTSHOT_HOST` overrides it) and written into every fingerprint of
 that run.
 
@@ -124,6 +126,9 @@ The run report keeps its current keys and gains:
 - `errors` become objects: `{"id": "<id>", "message": "…"}`, the id being the one the failed shot
   would have had. An error the run can't tie to a shot (e.g. a module that doesn't compile) has
   no `id`. Several errors for one id: the first in report order counts, the rest are ignored.
+
+`screenshots` and `errors` must be arrays when present; anything else is an error
+(`swiftshot-report.json in <dir>: "screenshots" must be an array`, exit 2).
 
 The verify inputs are the report's `screenshots`, `errors`, `scope` and `fingerprint`; the output
 directory is not listed.
@@ -186,7 +191,7 @@ is a difference (the other shown as `none`).
 - iOS images have `textSize` (`"default"` when none) and `runtime`; Android and desktop `module`
   and `fontScale`; Flutter `fontScale` and `renderer`.
 - `local`: `true` when the image was rendered outside CI (`record` on a developer machine;
-  `accept` writes `local = !ci` from the manifest).
+  `accept` writes `local = (ci == null)` from the manifest).
 
 The baseline set is `images`. A PNG under the baseline directory with no `images` entry is
 **stray**: it can't be scope-checked, so it is an error only when its id is in this run's output
@@ -243,6 +248,10 @@ stray PNGs whose id is in `screenshots`. For each id, in this order:
 
 `error` is never `removed`, and `accept` never deletes the baseline image of an `error` id.
 
+A run whose report lists no screenshots and no errors is an error, not a mass removal:
+`status: "error"`, `errors: [{"message": "The run rendered no screenshots"}]` (an error without
+`id`, so removals are suppressed as in step 1; `removed` is 0).
+
 **In scope**: `platform` ∈ `platforms`, `device` ∈ `devices`, `language` ∈ `languages`,
 `appearance` ∈ `appearances`; `module` ∈ `modules`, `runtime` ∈ `runtimes`, `textSize` ∈
 `textSizes`, `fontScale` ∈ `fontScales`, each if the image has that key; and `previewFilter` is
@@ -283,6 +292,73 @@ first; they never change the status.
 **localBaseline**: `true` when the `images` entry of a listed id (any status, `error` included) has
 `local: true`. A warning, never a failure.
 
+## CI detection
+
+The environment is read once at start-up and passed down; nothing below reads it again. An empty
+value counts as unset.
+
+1. `SWIFTSHOT_CI` set to anything but `true` or `1` (case-insensitive), `false` included: not a CI.
+   Every `ci` field is `null`, whatever else is set.
+2. The first row of the table below whose condition holds names the provider.
+3. No row holds but `SWIFTSHOT_CI` or `CI` is `true` or `1`: a CI of unknown provider
+   (`provider: null`, every other field `null`).
+4. Otherwise not a CI.
+
+| provider | detected when | commit (first non-empty) | branch | pullRequest | fork | buildUrl | repository |
+|---|---|---|---|---|---|---|---|
+| `github` | `GITHUB_ACTIONS=true` | `pull_request.head.sha` of the JSON file at `GITHUB_EVENT_PATH`, else `GITHUB_SHA` | `GITHUB_HEAD_REF`, else `GITHUB_REF_NAME` when `GITHUB_EVENT_NAME` is `push` and `GITHUB_REF_TYPE` isn't `tag` | `pull_request.number` of that file | `pull_request.head.repo.full_name` differs from `pull_request.base.repo.full_name` (both present) | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID` | `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY` |
+| `gitlab` | `GITLAB_CI=true` | `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`, else `CI_COMMIT_SHA` | `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, else `CI_COMMIT_BRANCH` | `CI_MERGE_REQUEST_IID` | `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` differs from `CI_MERGE_REQUEST_PROJECT_ID` (both set) | `CI_JOB_URL` | `CI_PROJECT_URL` |
+| `bitbucket` | `BITBUCKET_BUILD_NUMBER` set | `BITBUCKET_COMMIT` | `BITBUCKET_BRANCH` | `BITBUCKET_PR_ID` | `false` on a pull request (fork pull requests run no pipeline), else `null` | `$BITBUCKET_GIT_HTTP_ORIGIN/pipelines/results/$BITBUCKET_BUILD_NUMBER` | `BITBUCKET_GIT_HTTP_ORIGIN` |
+| `bitrise` | `BITRISE_IO=true` | `BITRISE_GIT_COMMIT`, else `GIT_CLONE_COMMIT_HASH` | `BITRISE_GIT_BRANCH` | `BITRISE_PULL_REQUEST` | `BITRISEIO_PULL_REQUEST_REPOSITORY_URL` differs from `GIT_REPOSITORY_URL` (both set) | `BITRISE_BUILD_URL` | `GIT_REPOSITORY_URL` |
+| `codemagic` | `CM_BUILD_ID` set | `CM_COMMIT` | `CM_BRANCH` | `CM_PULL_REQUEST_NUMBER` | `null` | `null` | `null` |
+| `circleci` | `CIRCLECI=true` | `CIRCLE_SHA1` | `CIRCLE_BRANCH` | last path segment of `CIRCLE_PULL_REQUEST` | `true` if `CIRCLE_PR_NUMBER` is set (only forks set it), else `false` if `CIRCLE_PULL_REQUEST` is set, else `null` | `CIRCLE_BUILD_URL` | `CIRCLE_REPOSITORY_URL` |
+| `azure` | `TF_BUILD=true` (case-insensitive) | `SYSTEM_PULLREQUEST_SOURCECOMMITID`, else `BUILD_SOURCEVERSION` | `SYSTEM_PULLREQUEST_SOURCEBRANCH` without `refs/heads/`, else `BUILD_SOURCEBRANCH` without `refs/heads/`, else `BUILD_SOURCEBRANCHNAME` | `SYSTEM_PULLREQUEST_PULLREQUESTNUMBER`, else `SYSTEM_PULLREQUEST_PULLREQUESTID` | `SYSTEM_PULLREQUEST_ISFORK` (`True`/`False`, case-insensitive), else `null` | `$SYSTEM_COLLECTIONURI$SYSTEM_TEAMPROJECT/_build/results?buildId=$BUILD_BUILDID` (one `/` after the collection URI) | `BUILD_REPOSITORY_URI` |
+| `jenkins` | `JENKINS_URL` set | `GIT_COMMIT` | `CHANGE_BRANCH`, else `BRANCH_NAME`, else `GIT_BRANCH` without `origin/` | `CHANGE_ID` | `true` if `CHANGE_FORK` is set, else `false` if `CHANGE_ID` is set, else `null` | `BUILD_URL` | `GIT_URL` |
+
+A field whose variables are not all set is `null`. `pullRequest` is a string (`"7"`). `repository` is
+the clone URL or slug the CI gives; it is not written to a report, `Host` uses it only when the git
+remote is unusable. The azure collection URI ends in `/` in practice.
+
+Then `commit = SWIFTSHOT_COMMIT`, else the CI's commit, else `git rev-parse HEAD`; `branch =
+SWIFTSHOT_BRANCH`, else the CI's branch, else the current git branch (none when detached).
+
+**GitHub event file.** Read through the process's working directory (a relative path) or as given.
+A missing, unreadable or malformed file (not a JSON object) is not an error: `commit` falls back to
+`GITHUB_SHA`, `pullRequest` and `fork` are `null`, and the warning `GITHUB_EVENT_PATH unreadable;
+recording GITHUB_SHA, which is a merge commit on pull requests` is printed. A file without a
+`pull_request` object (a `push`) is fine and gives no warning; so does an unset `GITHUB_EVENT_PATH`.
+
+**Recorded but not derived.** Some CIs check out a merge commit and say nothing reliable about the
+source commit, so a recipe sets `SWIFTSHOT_COMMIT` itself:
+- GitHub `pull_request` checkouts are `refs/pull/N/merge`, and `GITHUB_SHA` is that merge commit;
+  the head commit is only in the event payload
+  ([events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows),
+  [variables](https://docs.github.com/en/actions/reference/workflows-and-actions/variables)).
+- Jenkins multibranch with the "merge" discovery strategy builds a synthetic merge commit, and `GIT_COMMIT`
+  may be it (JENKINS-62783, https://issues.jenkins.io/browse/JENKINS-62783; strategies:
+  https://docs.cloudbees.com/docs/cloudbees-ci/latest/multibranch-pipeline-template-syntax-guide/github).
+- Bitbucket pull request pipelines merge the destination branch before the run, and the docs do not say
+  whether `BITBUCKET_COMMIT` is the source tip
+  (https://support.atlassian.com/bitbucket-cloud/docs/pipeline-start-conditions/).
+- Bitrise (`merge_pr` default) and Codemagic may check out a merge; neither documents which commit
+  `BITRISE_GIT_COMMIT` / `CM_COMMIT` is on that checkout.
+- Azure Repos and GitHub pull request builds use the merge commit as `BUILD_SOURCEVERSION`; the source
+  commit is `SYSTEM_PULLREQUEST_SOURCECOMMITID`, which is why it comes first.
+- Azure `BUILD_SOURCEBRANCHNAME` is only the last path segment (`feature/tools` gives `tools`), so the
+  full `BUILD_SOURCEBRANCH` is used first.
+
+Sources of the variables: GitHub https://docs.github.com/en/actions/reference/workflows-and-actions/variables ·
+GitLab https://docs.gitlab.com/ci/variables/predefined_variables/ ·
+Bitbucket https://support.atlassian.com/bitbucket-cloud/docs/variables-and-secrets/ ·
+Bitrise https://docs.bitrise.io/en/bitrise-ci/references/available-environment-variables.html ·
+Codemagic https://docs.codemagic.io/yaml-basic-configuration/environment-variables/ ·
+CircleCI https://circleci.com/docs/reference/variables/ ·
+Azure https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables ·
+Jenkins https://www.jenkins.io/doc/book/pipeline/jenkinsfile/ and https://www.jenkins.io/doc/book/pipeline/multibranch/.
+On Codemagic `CM_BRANCH` is the pull request's source branch (https://docs.codemagic.io/yaml-basic-configuration/environment-variables/).
+
+Fixtures: `Shared/testdata/ci/` (one file per case) and the baseline case `ci-github`.
+
 ## result.json
 
 ```json
@@ -293,7 +369,7 @@ first; they never change the status.
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "branch": "feature/x",
   "version": "1.0.0-test",
-  "ci": false,
+  "ci": null,
   "host": "linux-x64",
   "fingerprint": {"android": {…}},
   "fingerprintMismatch": [],
@@ -315,9 +391,11 @@ first; they never change the status.
 - `status`: `error` if `errors` is not empty, else `failed` if any changed/added/removed, else
   `passed`. Exit code 2, 1, 0.
 - `counts.errors` = length of `errors` (`error` entries plus errors without id).
-- `ci`: whether this run was on CI (`SWIFTSHOT_CI` overrides detection). `host`: this run's host,
-  the same value as `host` in each of its fingerprints; `null` when the run fingerprint is empty. The detected CI
-  vendor and git host are added later as new keys; readers must ignore unknown keys.
+- `ci`: `null` when this run was not on a CI (see CI detection), else `{"buildUrl", "provider",
+  "pullRequest"}` with sorted keys, each a string or `null` (`provider` is `null` for a CI of unknown
+  provider). `fork` and `repository` are not written. `host`: this run's host, the same value as
+  `host` in each of its fingerprints; `null` when the run fingerprint is empty. Readers must ignore
+  unknown keys.
 - `fingerprint`: the run's, as in the report.
 - `strayBaselineFiles`: stray baseline PNGs whose id is not listed in `screenshots`.
 - `screenshots`: every listed id, sorted by id (UTF-8 bytes). Each has `platform`, `device`,
@@ -331,30 +409,45 @@ first; they never change the status.
 
 ## manifest.json
 
-In the report directory; `accept` checks it against the branch. `ci`: whether the verify run was
-on CI; `accept` writes `local = !ci` into the images it applies. `accept` only touches the ids
+In the report directory; `accept` checks it against the branch. `ci`: `null` when the verify run was
+not on a CI, else the same object as in result.json; `accept` writes `local = (ci == null)` into the
+images it applies. A manifest whose `ci` is neither `null` nor an object is a usage error
+(`manifest.json has no ci`). `accept` only touches the ids
 listed here, so a baseline image of an `error` id is never deleted.
 
 ```json
-{"schema": 1, "commit": "…", "branch": "feature/x", "ci": true, "configHash": "8f36…",
+{"schema": 1, "commit": "…", "branch": "feature/x", "ci": {"buildUrl": "…", "provider": "github", "pullRequest": "7"}, "configHash": "8f36…",
  "fingerprint": {"android": {…}}, "ids": {"added": [], "changed": ["en-US/Pixel 9-Home"], "removed": []}}
 ```
 
 ## accept
 
-`swiftshot accept --from <report> [--from <report>…] [--only <ids>] [--push] [--author "Name <email>"]`
+`swiftshot accept --from <report> [--from <report>…] [--only <ids>] [--push] [--branch <name>] [--author "Name <email>"]`
 renders nothing. `--from` is a report directory, a zip of one (the report at its root or in its only
-top-level directory), or an `http(s)` URL of such a zip (sent `Authorization: Bearer
-$SWIFTSHOT_ARTIFACT_TOKEN` when set, only to that host and only over `https`: a token with an `http`
-URL is a usage error, except to `localhost`, `127.0.0.1` or `::1`). Zips: no entry may leave the target
+top-level directory), or an `http(s)` URL of such a zip (sent with `$SWIFTSHOT_ARTIFACT_TOKEN` when
+set, only to that host and only over `https`: a token with an `http` URL is a usage error, except to
+`localhost`, `127.0.0.1` or `::1`). The header, first that applies:
+
+- `SWIFTSHOT_ARTIFACT_HEADER`, `Name: value` with `{token}` in the value.
+- `api.github.com` or the host of `GITHUB_API_URL`: `Authorization: Bearer <t>`.
+- `gitlab.com` or the host of `CI_API_V4_URL`: `JOB-TOKEN: <t>` when `<t>` is `CI_JOB_TOKEN`, else `PRIVATE-TOKEN: <t>`.
+- `circleci.com`: `Circle-Token: <t>`.
+- `dev.azure.com`, `*.visualstudio.com`: `Authorization: Basic base64(":" + <t>)`.
+- a `<t>` with a `:` (Jenkins `user:apitoken`): `Authorization: Basic base64(<t>)`.
+- otherwise `Authorization: Bearer <t>`.
+
+Bitrise and Codemagic give pre-signed URLs; pass those without a token. Zips: no entry may leave the target
 directory or be a symbolic link, at most 2 GB extracted.
 
 - For each `changed` and `added` id of `manifest.json`: `images/new/<id>.png` is copied into the
   baseline; its `images` entry is the report's `result.json` screenshot entry (the fields of the
   baseline.json example), `fingerprint` the id of the manifest's fingerprint for its platform,
-  `local` = `!ci`. Each `removed` id: its PNG and entry are deleted. Nothing else changes;
+  `local` = `(ci == null)`. Each `removed` id: its PNG and entry are deleted. Nothing else changes;
   unreferenced fingerprints are dropped and baseline.json is rewritten canonically.
 - `--only` (comma-separated, repeatable) restricts to those ids.
+- When every selected change is `removed` (and there is at least one), a warning:
+  `Every change in the report is a removal (N screenshots); check the run rendered what you expected`
+  ("1 screenshot" for one).
 - A report whose `result.json` `status` is `error`: a warning, then its listed ids are applied as
   usual (ids with errors are in none of the lists, so they keep their baseline).
 - Stale: each report's `commit` must be HEAD, or every commit after it up to HEAD must carry the
@@ -364,7 +457,24 @@ directory or be a symbolic link, at most 2 GB extracted.
   directory stay uncommitted), subject `Update screenshot baseline (3
   changed, 1 added)` (non-zero parts of changed, added, removed), a `Swiftshot-Accept: <commit>`
   trailer per report commit, author and committer `swiftshot <swiftshot@users.noreply.github.com>`
-  unless `--author`; then `git push` to the branch's upstream, else `origin HEAD`, never forced.
+  unless `--author`; then `git push`, never forced, to the first that applies:
+  1. `--branch <name>`: `<remote> HEAD:refs/heads/<name>` (`<remote>` is the upstream's, else `origin`).
+  2. The current branch's upstream.
+  3. HEAD detached (a CI checkout): `origin HEAD:refs/heads/<branch>`, `<branch>` being
+     `SWIFTSHOT_BRANCH`, else the CI's branch (`ci.branch`).
+  4. Else `origin HEAD`.
+
+  With HEAD detached and no branch known, exit 1: `HEAD is detached and no branch is known; pass
+  --branch <the pull request branch>`. When the CI says the pull request comes from a fork (`ci.fork`
+  is true), exit 1 before anything is written: `This pull request comes from a fork; download the
+  report and run swiftshot accept --from <report> in the fork`. With `SWIFTSHOT_HOST_TOKEN` set and an
+  `https` push remote (or `http` to this machine; see "Git host" for the header) the header goes to
+  `git push` alone, in its environment (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>=http.extraHeader`,
+  `GIT_CONFIG_VALUE_<n>`, after any `GIT_CONFIG_*` entries already set): never on git's command line
+  or in the git config, and the token, its base64 form and the header are replaced with `***` in
+  git's output and in the refusal message. A token push needs an `https` remote: with an `ssh`, `scp`-style
+  or other remote, one warning `SWIFTSHOT_HOST_TOKEN is not used: <remote> is not an https remote (a
+  token push needs one)` and a plain `git push` with git's own credentials.
   Nothing to apply, or none of those files changed: no commit.
 
 ## junit.xml
@@ -395,3 +505,114 @@ directory or be a symbolic link, at most 2 GB extracted.
   `counts.errors`.
 - Attribute escaping: `&` `<` `>` `"` as `&amp;` `&lt;` `&gt;` `&quot;`; TAB LF CR as `&#9;`
   `&#10;` `&#13;`; other characters below U+0020 dropped. 2-space indent, LF line ends, final `\n`.
+
+## summary.md
+
+The report in a few lines of Markdown: the CI's summary page, and the pull request comment (the same
+text). UTF-8, `\n` line ends, one final `\n`. Blocks are separated by one blank line.
+
+```
+<!-- swiftshot -->
+### Screenshots differ from the baseline
+
+1 changed · 1 added · 0 removed · 0 errors · 3 unchanged
+
+> **Note:** Baseline rendered differently: android host: baseline linux-x64, this run macos-arm64
+
+| Status | Screenshot |
+|---|---|
+| changed | `en-US/Pixel 9-Home` |
+| added | `en-US/Pixel 9-New` |
+
+[Full report](https://github.com/acme/app/actions/runs/9876543210)
+
+Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.
+```
+
+- Heading by `status`: `passed` "Screenshots match the baseline", `failed` "Screenshots differ from
+  the baseline", `error` "Screenshot run had errors".
+- Counts line: all five counts, in the order above, separated by ` · ` (U+00B7).
+- Note block: one `> **Note:** ` line per `fingerprintMismatch` entry (`Baseline rendered differently:
+  <entry>`), then, when `localBaseline`, `Some baseline images were recorded outside CI (local);
+  record or accept them on CI`. Omitted when empty.
+- Table: one row per `error`, `changed`, `added` or `removed` entry, in that status order, then by id
+  in UTF-8 byte order; at most 200 rows, then `| | …and <n> more |`. In an id, `|` is written `\|`
+  and a backtick `'`. Omitted when there are no rows. Errors without id have no row (see the counts).
+- `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table.
+- Accept hint, `failed` only, last. By `ci.provider`; `null` or unknown gets the last text:
+  - `github`: Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.
+  - `gitlab`: Run the manual `swiftshot-accept` job in this pipeline to accept the changes.
+  - `bitbucket`: Run the `swiftshot-accept` custom pipeline on this branch to accept the changes.
+  - `bitrise`: Run the `swiftshot-accept` workflow on this branch to accept the changes.
+  - `codemagic`: Start the `swiftshot-accept` workflow on this branch to accept the changes.
+  - `circleci`: Approve the `accept-screenshots` job in this workflow to accept the changes.
+  - `azure`: Approve the `Accept screenshots` stage in this run to accept the changes.
+  - `jenkins`: Approve the `Accept screenshots` stage in this build to accept the changes.
+  - otherwise: Accept the changes with `swiftshot accept --from <this report>`.
+- Size: the text stays within 60,000 UTF-8 bytes (GitHub allows 65,536 characters). If it is larger,
+  rows are dropped from the end until it fits; the "…and <n> more" count includes them.
+
+## Native CI output
+
+After `verify` has written the report, it adds what the detected CI (`ci.provider`) reads. `verify`
+takes the process environment as given; with `SWIFTSHOT_CI=false` nothing is written. Each part needs
+its variable; a write that fails is one warning and never changes the exit code.
+
+- `github`: appends `summary.md` to the file `GITHUB_STEP_SUMMARY`. Prints to stdout, for the first
+  10 table rows, `::error title=<status> screenshot::<id>`, and for an `error` row
+  `::error title=Render error::<id>: <message>`. Values escape `%` `\r` `\n` as `%25` `%0D` `%0A`, a
+  title also `:` `,` as `%3A` `%2C`.
+- `azure`: prints `##vso[results.publish type=JUnit;mergeResults=false;runTitle=swiftshot;resultFiles=<absolute junit.xml>]`
+  and `##vso[task.uploadsummary]<absolute summary.md>`; when `status` is not `passed` also
+  `##vso[task.logissue type=error]Screenshots: <counts line>`.
+- `bitbucket`: copies `junit.xml` to `$BITBUCKET_CLONE_DIR/test-results/swiftshot/junit.xml`.
+- `bitrise`: with `BITRISE_TEST_RESULT_DIR`, writes `swiftshot/junit.xml` and `swiftshot/test-info.json`
+  (`{"test-name":"swiftshot"}`) there; with `BITRISE_DEPLOY_DIR`, writes `swiftshot-report.zip` there:
+  the report directory's files at the zip's root (what `accept --from` reads), entries sorted by name,
+  every timestamp 1980-01-01 00:00.
+- `gitlab`, `codemagic`, `circleci`, `jenkins`: nothing; their recipes point at `junit.xml` and the
+  report directory.
+
+## Git host
+
+After the native CI output, `verify` comments its `summary.md` on the pull request. It needs
+`SWIFTSHOT_HOST_TOKEN`, a CI run for a pull request (`ci.pullRequest`) and a known host; without the
+token or the pull request it does nothing. The host comes from `git remote get-url origin` in the
+repository containing the project directory (`https://[user@]host[:port]/a/b[.git]`,
+`ssh://git@host[:port]/a/b[.git]`, `git@host:a/b[.git]`):
+
+| host | when | API | token header |
+|---|---|---|---|
+| `github` | `github.com`; or the host of `GITHUB_SERVER_URL` in GitHub Actions (GitHub Enterprise) | `https://api.github.com`; `GITHUB_API_URL` in Actions; else `https://<host>/api/v3` | `Authorization: Bearer <t>` |
+| `gitlab` | `gitlab.com`; or the host of `CI_API_V4_URL` | `CI_API_V4_URL` (when it is the same host), else `https://<host>/api/v4` | `PRIVATE-TOKEN: <t>` |
+| `bitbucket` | `bitbucket.org` | `https://api.bitbucket.org/2.0` | `Authorization: Bearer <t>`, or `Basic base64(<t>)` when `<t>` contains `:` (`email:api-token`) |
+
+`SWIFTSHOT_GIT_HOST` (`github`, `gitlab`, `bitbucket`) names the host kind, and `SWIFTSHOT_HOST_API` the
+API base; when set, each wins over what the remote says (`SWIFTSHOT_HOST` is the renderer host of the
+fingerprint and is not used here). A GitLab project path keeps its subgroups and is URL-encoded in API paths. An unknown
+host sends nothing and prints one line (never the token). A GitLab job token can't write notes: use a
+project or personal access token with the `api` scope.
+
+The comment body is exactly `summary.md`, whose first line is `<!-- swiftshot -->`. The first comment
+whose text starts with that line is updated (GitHub `PATCH`, GitLab and Bitbucket `PUT`); else one is
+created. At most 10 pages of 100 comments are read: GitHub and GitLab go on while a page has 100,
+Bitbucket while its page has `next`. A comment whose `id` isn't a whole number that fits 64 bits is
+skipped.
+
+| host | list and create | update | text |
+|---|---|---|---|
+| `github` | `{api}/repos/{project}/issues/{pr}/comments?per_page=100&page=N` | `…/issues/comments/{id}` | `body` |
+| `gitlab` | `{api}/projects/{project, / as %2F}/merge_requests/{pr}/notes?per_page=100&page=N&sort=asc` | `…/notes/{id}` | `body` |
+| `bitbucket` | `{api}/repositories/{project}/pullrequests/{pr}/comments?pagelen=100&page=N` | `…/comments/{id}` | `content.raw` |
+
+The token is sent only over `https` (or to this machine) and never along a redirect: a 3xx is a
+failure, not followed. Any failure (a status other than 2xx, no reply, a reply that isn't the expected
+JSON, a non-https API) is one warning, `couldn't comment on the pull request (<host> <status>)`
+where status is the code, `no response`, `https only` or `invalid pull request` (`ci.pullRequest`
+isn't 1 to 18 digits); no reply body is printed and the exit code
+stays as it was.
+
+For `git push` (`accept --push`) the same token goes in `http.extraHeader`, never in a URL:
+`Authorization: Basic base64(<user>:<t>)` with user `x-access-token` (`github`), `oauth2` (`gitlab`;
+`gitlab-ci-token` when `<t>` is `CI_JOB_TOKEN`), `x-token-auth` (`bitbucket`; a token with `:` is used
+as it is).

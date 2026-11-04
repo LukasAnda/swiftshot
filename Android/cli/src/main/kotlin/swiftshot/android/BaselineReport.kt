@@ -2,9 +2,9 @@ package swiftshot.android
 
 import java.io.File
 
-/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, timings.json, and the console summary. */
+/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, timings.json, and the console summary. */
 object BaselineReport {
-    private val files = listOf("result.json", "manifest.json", "junit.xml", "timings.json")
+    private val files = listOf("result.json", "manifest.json", "junit.xml", "summary.md", "timings.json")
 
     /** Removes what an earlier verify wrote there (only its own files: the directory may be the user's). */
     fun clear(report: File) {
@@ -23,17 +23,21 @@ object BaselineReport {
         File(report, "result.json").writeText(CanonicalJson.pretty(result(v)))
         File(report, "manifest.json").writeText(CanonicalJson.pretty(manifest(v)))
         File(report, "junit.xml").writeText(junit(v))
+        File(report, "summary.md").writeText(Summary.markdown(v, v.env.ci))
     }
+
+    /** `null` outside a CI, else what the report says about it. */
+    private fun ci(v: Verification): Map<String, Any?>? = v.env.ci?.let { mapOf("buildUrl" to it.buildUrl, "provider" to it.provider, "pullRequest" to it.pullRequest) }
 
     fun result(v: Verification): Map<String, Any?> = mapOf(
         "schema" to 1, "status" to v.status, "counts" to v.counts,
-        "commit" to v.env.git.commit, "branch" to v.env.git.branch, "version" to v.env.version, "ci" to v.env.ci, "host" to v.host,
+        "commit" to v.env.git.commit, "branch" to v.env.git.branch, "version" to v.env.version, "ci" to ci(v), "host" to v.host,
         "fingerprint" to v.fingerprint, "fingerprintMismatch" to v.mismatches, "localBaseline" to v.localBaseline,
         "screenshots" to v.entries, "errors" to v.errors, "strayBaselineFiles" to v.strays,
     )
 
     fun manifest(v: Verification): Map<String, Any?> = mapOf(
-        "schema" to 1, "commit" to v.env.git.commit, "branch" to v.env.git.branch, "ci" to v.env.ci, "configHash" to v.configHash,
+        "schema" to 1, "commit" to v.env.git.commit, "branch" to v.env.git.branch, "ci" to ci(v), "configHash" to v.configHash,
         "fingerprint" to v.fingerprint,
         "ids" to mapOf("changed" to v.ids("changed"), "added" to v.ids("added"), "removed" to v.ids("removed")),
     )

@@ -1,0 +1,16 @@
+{
+  "env": {
+    "SWIFTSHOT_CI": "true"
+  },
+  "expected": {
+    "branch": null,
+    "buildUrl": null,
+    "commit": null,
+    "fork": null,
+    "isCi": true,
+    "provider": null,
+    "pullRequest": null,
+    "repository": null,
+    "warnings": []
+  }
+}

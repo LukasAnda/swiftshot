@@ -119,11 +119,13 @@ BASELINE (verify, record; PNG only, no frames)
 
 ACCEPT
   --from <dir|zip|url>                    A verify report directory, a zip of one, or an http(s) URL of
-                                          the zip (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a
-                                          Bearer token, over https only, to that host only)
+                                          the zip (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as the
+                                          host's auth header, over https only, to that host only)
   --only "<id>,<id>"                      Only these screenshot ids (repeatable)
   --push                                  Commit the baseline ("Update screenshot baseline (…)") and git push
   --author "Name <email>"                 Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+  --branch <name>                         With --push: push HEAD to this branch (default: the upstream, or
+                                          the CI's branch when HEAD is detached)
 
 CI
   --device-set <dir>                      Use an isolated CoreSimulator device set (simctl --set); created
@@ -206,11 +208,13 @@ BASELINE (verify, record; PNG only, no frames)
 
 ACCEPT
   --from <dir|zip|url>                  A verify report directory, a zip of one, or an http(s) URL of the zip
-                                        (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a Bearer token,
-                                        over https only, to that host only)
+                                        (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as the host's
+                                        auth header, over https only, to that host only)
   --only "<id>,<id>"                    Only these screenshot ids (repeatable)
   --push                                Commit the baseline ("Update screenshot baseline (…)") and git push
   --author "Name <email>"               Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+  --branch <name>                       With --push: push HEAD to this branch (default: the upstream, or
+                                        the CI's branch when HEAD is detached)
 
   --config <file>                       Default: ./swiftshot.json
   -v, --verbose

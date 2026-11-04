@@ -1,6 +1,6 @@
 {
   "branch": "feature/x",
-  "ci": false,
+  "ci": null,
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "counts": {
     "added": 1,

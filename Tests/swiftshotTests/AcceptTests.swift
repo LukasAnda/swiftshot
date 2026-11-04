@@ -53,8 +53,12 @@ final class AcceptTests: XCTestCase {
     func images() throws -> [String: JSON] { try readJSON(baseline.appendingPathComponent("baseline.json"))["images"]!.object! }
     func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
 
-    func accept(_ from: URL..., only: Set<String>? = nil, push: Bool = false, author: String? = nil, token: String? = nil, urls: [String] = []) -> Int32 {
-        Accept.run(from: from.map(\.path) + urls, only: only, push: push, author: author, baseline: baseline, log: console, token: token, gitEnv: gitEnv)
+    func accept(_ from: URL..., only: Set<String>? = nil, push: Bool = false, author: String? = nil, token: String? = nil, urls: [String] = [],
+                env: [String: String] = [:], branch: String? = nil, extraGit: [String: String] = [:]) -> Int32 {
+        var env = env
+        if let token { env["SWIFTSHOT_ARTIFACT_TOKEN"] = token }
+        return Accept.run(from: from.map(\.path) + urls, only: only, push: push, author: author, baseline: baseline, log: console,
+                          branch: branch, env: env, gitEnv: gitEnv.merging(extraGit) { $1 })
     }
 
     func status() throws -> String { try git(repo, "status", "--porcelain") }
@@ -106,9 +110,22 @@ final class AcceptTests: XCTestCase {
     func testCiReportWritesNonLocalImages() throws {
         try repoWith("changed-pixels")
         let r = try report("changed-pixels")
-        try setManifest(r) { $0["ci"] = .bool(true) }
+        try setManifest(r) { $0["ci"] = .object(["buildUrl": .null, "provider": .string("github"), "pullRequest": .string("7")]) }
         XCTAssertEqual(accept(r), 0, errors)
         XCTAssertEqual(try images()["en-US/Pixel 9-Home"]!["local"], .bool(false))
+    }
+
+    func testCiMustBeNullOrAnObject() throws {
+        try repoWith("changed-pixels")
+        let r = try report("changed-pixels")
+        let changes: [(String, (inout [String: JSON]) -> Void)] = [
+            ("a boolean", { $0["ci"] = .bool(true) }), ("a string", { $0["ci"] = .string("github") }), ("missing", { $0["ci"] = nil }),
+        ]
+        for (label, change) in changes {
+            try setManifest(r, change)
+            XCTAssertEqual(accept(r), 64, label)
+            XCTAssertTrue(errors.contains("manifest.json has no ci"), "\(label): \(errors)")
+        }
     }
 
     func testAddsNewImages() throws {
@@ -279,6 +296,17 @@ final class AcceptTests: XCTestCase {
         XCTAssertEqual(bytes(fixtures.appendingPathComponent("changed-pixels/output/en-US/Pixel 9-Home.png")), bytes(baseline.appendingPathComponent("en-US/Pixel 9-Home.png")))
     }
 
+    func testBitriseZipIsAcceptable() throws {
+        try repoWith("changed-pixels")
+        let r = try report("changed-pixels")
+        let ci = Ci(provider: "bitrise", commit: nil, branch: nil, pullRequest: nil, fork: nil, buildUrl: nil, repository: nil, isCi: true)
+        let v = Verification(entries: [], errors: [], unattributed: [], fingerprint: [:], mismatches: [], localBaseline: false, strays: 0,
+                             env: BaselineEnv(git: GitInfo(commit: nil, branch: nil), version: "1.0.0-test", ci: ci), configHash: "hash")
+        NativeOutput.write(v, ci: ci, reportDir: r, env: ["BITRISE_DEPLOY_DIR": tmp.appendingPathComponent("deploy").path], out: { _ in }, log: console)
+        XCTAssertEqual(accept(tmp.appendingPathComponent("deploy/swiftshot-report.zip")), 0, errors)
+        XCTAssertEqual(bytes(fixtures.appendingPathComponent("changed-pixels/output/en-US/Pixel 9-Home.png")), bytes(baseline.appendingPathComponent("en-US/Pixel 9-Home.png")))
+    }
+
     func testAcceptsAZipWithOneTopLevelDirectory() throws {
         try repoWith("changed-pixels")
         XCTAssertEqual(accept(try zip(try report("changed-pixels"), tmp.appendingPathComponent("report.zip"), prefix: "screenshots-report/")), 0, errors)
@@ -446,6 +474,36 @@ final class AcceptTests: XCTestCase {
         XCTAssertFalse(errors.contains("secret"))
     }
 
+    func testAcceptWarnsWhenAllRemovals() throws {
+        try repoWith("removed")
+        let r = try report("removed")
+        try setManifest(r) { m in
+            var ids = m["ids"]!.object!
+            ids["removed"] = .array([.string("en-US/Pixel 9-Home"), .string("en-US/Pixel 9-Legacy")])
+            m["ids"] = .object(ids)
+        }
+        XCTAssertEqual(accept(r), 0, errors)
+        XCTAssertTrue(errors.contains("Every change in the report is a removal (2 screenshots); check the run rendered what you expected"), errors)
+        XCTAssertFalse(exists(baseline.appendingPathComponent("en-US/Pixel 9-Legacy.png")))
+    }
+
+    func testAcceptWarnsWhenTheOnlyChangeIsOneRemoval() throws {
+        try repoWith("removed")
+        XCTAssertEqual(accept(try report("removed")), 0, errors)
+        XCTAssertTrue(errors.contains("is a removal (1 screenshot); check"), errors)
+    }
+
+    func testNullImagesInBaselineJsonIsAUsageError() throws {
+        try repoWith("changed-pixels")
+        let bj = baseline.appendingPathComponent("baseline.json")
+        var json = try readJSON(bj).object!
+        json["images"] = .null
+        try JSON.object(json).pretty().write(to: bj, atomically: true, encoding: .utf8)
+        try git(repo, "commit", "-qam", "null images")
+        XCTAssertEqual(accept(try report("changed-pixels")), 64, errors)
+        XCTAssertTrue(errors.contains("\"images\" must be an object"), errors)
+    }
+
     func testReportWithErrorsWarnsAndStillApplies() throws {
         try repoWith("changed-pixels")
         let r = try report("changed-pixels")
@@ -480,6 +538,156 @@ final class AcceptTests: XCTestCase {
         XCTAssertFalse(errors.contains("secret"))
     }
 
+    // MARK: CI checkouts
+
+    let ciEnv = ["GITLAB_CI": "true", "CI_COMMIT_BRANCH": "feature/x"]
+    var bare: URL { tmp.appendingPathComponent("remote.git") }
+
+    func testPushFromDetachedUsesCiBranch() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        try git(repo, "checkout", "-q", "--detach")
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: ciEnv), 0, errors)
+        XCTAssertEqual(try git(bare, "rev-parse", "feature/x"), try head())
+        XCTAssertNotEqual(try git(bare, "rev-parse", "main"), try head())
+    }
+
+    func testPushFromDetachedWithoutBranchRefuses() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        try git(repo, "checkout", "-q", "--detach")
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true), 1)
+        XCTAssertTrue(errors.contains("HEAD is detached and no branch is known; pass --branch <the pull request branch>"), errors)
+        XCTAssertEqual(try status(), "")
+    }
+
+    func testPushFromDetachedOnAGithubCommentRefuses() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        try git(repo, "checkout", "-q", "--detach")
+        // An issue_comment run's GITHUB_REF_NAME is the default branch, never the pull request's.
+        let comment = ["GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "issue_comment", "GITHUB_REF_NAME": "main", "GITHUB_REF_TYPE": "branch"]
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: comment), 1)
+        XCTAssertTrue(errors.contains("HEAD is detached and no branch is known; pass --branch <the pull request branch>"), errors)
+        XCTAssertEqual(try status(), "")
+    }
+
+    func testBranchFlagWins() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        let verified = try head()
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: ciEnv, branch: "pr/1"), 0, errors)
+        XCTAssertEqual(try git(bare, "rev-parse", "pr/1"), try head())
+        XCTAssertEqual(try git(bare, "rev-parse", "main"), verified)
+    }
+
+    func testForkRefusesPush() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        let fork = ciEnv.merging(["CI_MERGE_REQUEST_SOURCE_PROJECT_ID": "2", "CI_MERGE_REQUEST_PROJECT_ID": "1"]) { $1 }
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: fork, branch: "pr/1"), 1)
+        XCTAssertTrue(errors.contains("This pull request comes from a fork; download the report and run swiftshot accept --from <report> in the fork"), errors)
+        XCTAssertEqual(try status(), "")
+        XCTAssertEqual(accept(try report("changed-pixels", name: "again"), env: fork), 0, errors)
+    }
+
+    func testPushFailureHidesToken() throws {
+        try repoWith("changed-pixels")
+        let server = try TestHTTPServer { _ in (403, [:], []) }
+        defer { server.stop() }
+        try git(repo, "remote", "add", "origin", "http://127.0.0.1:\(server.port)/owner/repo.git")
+        let token = "tok-s3cret"
+        let b64 = Data("x-access-token:\(token)".utf8).base64EncodedString()
+        // With redaction off, git traces the request headers, extraHeader included. A GIT_CONFIG_* setting of the
+        // CI's own stays in force next to the header.
+        let ciConfig = ["GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.userAgent", "GIT_CONFIG_VALUE_0": "ci-agent"]
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: ["SWIFTSHOT_GIT_HOST": "github", "SWIFTSHOT_HOST_TOKEN": token],
+                              extraGit: ["GIT_TRACE_CURL": "1", "GIT_TRACE_REDACT": "0"].merging(ciConfig) { $1 }), 1)
+        XCTAssertFalse(server.authorizations.isEmpty)
+        XCTAssertTrue(server.authorizations.allSatisfy { $0 == "Basic \(b64)" }, "\(server.authorizations)")
+        XCTAssertTrue(!server.requests.isEmpty && server.requests.allSatisfy { $0["user-agent"] == "ci-agent" }, "\(server.requests)")
+        XCTAssertTrue(errors.contains("git push origin HEAD failed"), errors)
+        for secret in [token, b64] { XCTAssertFalse(errors.contains(secret), "output has \(secret)") }
+        XCTAssertTrue(errors.contains("***"), errors)
+        XCTAssertFalse(try String(contentsOf: repo.appendingPathComponent(".git/config"), encoding: .utf8).contains(token))
+    }
+
+    func testPushHeaderGoesInTheEnvironmentNotTheCommandLine() {
+        let header = "Authorization: Basic c2VjcmV0"
+        let (args, env) = Accept.pushCommand(["origin", "HEAD:refs/heads/x"], header: header, processEnv: [:])
+        XCTAssertEqual(args, ["push", "origin", "HEAD:refs/heads/x"])
+        XCTAssertFalse(args.contains { $0.contains("c2VjcmV0") })
+        XCTAssertEqual(env, ["GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.extraHeader", "GIT_CONFIG_VALUE_0": header])
+        // The CI's own GIT_CONFIG_* entries stay; the header goes after them.
+        XCTAssertEqual(Accept.pushCommand(["origin", "HEAD"], header: header, processEnv: ["GIT_CONFIG_COUNT": "2"]).env,
+                       ["GIT_CONFIG_COUNT": "3", "GIT_CONFIG_KEY_2": "http.extraHeader", "GIT_CONFIG_VALUE_2": header])
+        let plain = Accept.pushCommand(["origin", "HEAD"], header: nil, processEnv: ["GIT_CONFIG_COUNT": "2"])
+        XCTAssertEqual(plain.args, ["push", "origin", "HEAD"])
+        XCTAssertEqual(plain.env, [:])
+    }
+
+    func testTokenWithANonHttpsRemoteWarnsAndPushesPlainly() throws {
+        try repoWith("changed-pixels")
+        try remote()
+        let token = "tok-s3cret"
+        XCTAssertEqual(accept(try report("changed-pixels"), push: true, env: ["SWIFTSHOT_GIT_HOST": "github", "SWIFTSHOT_HOST_TOKEN": token]), 0, errors)
+        XCTAssertEqual(try git(bare, "rev-parse", "main"), try head())
+        XCTAssertEqual(errors.components(separatedBy: "SWIFTSHOT_HOST_TOKEN is not used: origin is not an https remote").count, 2, errors)
+        XCTAssertFalse(errors.contains(token))
+    }
+
+    func testArtifactAuthHeaderPerHost() {
+        func h(_ url: String, token: String = "t", env: [String: String] = [:]) -> String {
+            let r = try! Download.artifactHeader(URL(string: url)!, token: token, env: env)
+            return "\(r.name): \(r.value)"
+        }
+        func basic(_ s: String) -> String { "Basic " + Data(s.utf8).base64EncodedString() }
+        XCTAssertEqual(h("https://api.github.com/repos/o/r/actions/artifacts/1/zip"), "Authorization: Bearer t")
+        XCTAssertEqual(h("https://ghe.example.com/api/v3/x", env: ["GITHUB_API_URL": "https://ghe.example.com/api/v3"]), "Authorization: Bearer t")
+        XCTAssertEqual(h("https://gitlab.com/api/v4/projects/1/jobs/2/artifacts"), "PRIVATE-TOKEN: t")
+        XCTAssertEqual(h("https://gitlab.com/api/v4/projects/1/jobs/2/artifacts", env: ["CI_JOB_TOKEN": "t"]), "JOB-TOKEN: t")
+        XCTAssertEqual(h("https://gitlab.com/x", env: ["CI_JOB_TOKEN": "other"]), "PRIVATE-TOKEN: t")
+        XCTAssertEqual(h("https://git.corp/api/v4/x", env: ["CI_API_V4_URL": "https://git.corp/api/v4", "CI_JOB_TOKEN": "t"]), "JOB-TOKEN: t")
+        XCTAssertEqual(h("https://circleci.com/api/v2/project/gh/o/r/1/artifacts"), "Circle-Token: t")
+        XCTAssertEqual(h("https://dev.azure.com/org/p/_apis/x"), "Authorization: \(basic(":t"))")
+        XCTAssertEqual(h("https://org.visualstudio.com/p/_apis/x"), "Authorization: \(basic(":t"))")
+        XCTAssertEqual(h("https://jenkins.corp/job/x/artifact/r.zip", token: "user:apitoken"), "Authorization: \(basic("user:apitoken"))")
+        XCTAssertEqual(h("https://example.com/r.zip"), "Authorization: Bearer t")
+        // The host wins over a colon in the token.
+        XCTAssertEqual(h("https://gitlab.com/x", token: "a:b"), "PRIVATE-TOKEN: a:b")
+    }
+
+    func testArtifactAuthHeaderReachesTheServer() throws {
+        try repoWith("changed-pixels")
+        let data = bytes(try zip(try report("changed-pixels"), tmp.appendingPathComponent("report.zip")))
+        let server = try TestHTTPServer { _ in (200, [:], data) }
+        defer { server.stop() }
+        let url = ["http://127.0.0.1:\(server.port)/a.zip"]
+        XCTAssertEqual(accept(token: "secret", urls: url, env: ["GITHUB_API_URL": "http://127.0.0.1:\(server.port)"]), 0, errors)
+        XCTAssertEqual(server.requests.last?["authorization"], "Bearer secret")
+        try git(repo, "checkout", "-q", "--", ".")
+        XCTAssertEqual(accept(token: "secret", urls: url, env: ["CI_API_V4_URL": "http://127.0.0.1:\(server.port)/api/v4", "CI_JOB_TOKEN": "secret"]), 0, errors)
+        XCTAssertEqual(server.requests.last?["job-token"], "secret")
+        XCTAssertNil(server.requests.last?["authorization"])
+        try git(repo, "checkout", "-q", "--", ".")
+        XCTAssertEqual(accept(token: "secret", urls: url, env: ["CI_API_V4_URL": "http://127.0.0.1:\(server.port)/api/v4"]), 0, errors)
+        XCTAssertEqual(server.requests.last?["private-token"], "secret")
+    }
+
+    func testArtifactHeaderOverride() throws {
+        try repoWith("changed-pixels")
+        let data = bytes(try zip(try report("changed-pixels"), tmp.appendingPathComponent("report.zip")))
+        let server = try TestHTTPServer { _ in (200, [:], data) }
+        defer { server.stop() }
+        let url = ["http://127.0.0.1:\(server.port)/a.zip"]
+        let env = ["SWIFTSHOT_ARTIFACT_HEADER": "X-Api-Key: key-{token}", "GITHUB_API_URL": "http://127.0.0.1:\(server.port)"]
+        XCTAssertEqual(accept(token: "secret", urls: url, env: env), 0, errors)
+        XCTAssertEqual(server.requests.last?["x-api-key"], "key-secret")
+        XCTAssertNil(server.requests.last?["authorization"])
+        XCTAssertEqual(accept(token: "secret", urls: url, env: ["SWIFTSHOT_ARTIFACT_HEADER": "no colon"]), 64)
+        XCTAssertFalse(errors.contains("secret"))
+    }
+
     // MARK: options
 
     func testAcceptOptions() throws {
@@ -490,6 +698,11 @@ final class AcceptTests: XCTestCase {
         XCTAssertEqual(o.only, ["x", "y", "z"])
         XCTAssertTrue(o.push)
         XCTAssertEqual(o.author, "A <a@b.c>")
+        XCTAssertEqual(try Options.parse(["--config", config.path, "accept", "--from", "a", "--push", "--branch", "pr"]).branch, "pr")
+        XCTAssertThrowsError(try Options.parse(["--config", config.path, "accept", "--from", "a", "--branch", "pr"])) {
+            XCTAssertTrue($0 is UsageError)
+            XCTAssertEqual("\($0)", "--branch needs --push")
+        }
         XCTAssertThrowsError(try Options.parse(["--config", config.path, "accept"])) { XCTAssertTrue($0 is UsageError) }
         XCTAssertThrowsError(try Options.parse(["--config", config.path, "run", "--push"]))
     }
@@ -549,6 +762,9 @@ final class TestHTTPServer {
     private let fd: Int32
     private let lock = NSLock()
     private var _auth: [String] = []
+    private var _requests: [[String: String]] = []
+    /// Every request's headers, names lowercased.
+    var requests: [[String: String]] { lock.lock(); defer { lock.unlock() }; return _requests }
     var authorizations: [String] {
         get { lock.lock(); defer { lock.unlock() }; return _auth }
         set { lock.lock(); _auth = newValue; lock.unlock() }
@@ -584,6 +800,9 @@ final class TestHTTPServer {
                 let lines = text.components(separatedBy: "\r\n")
                 let path = lines.first?.split(separator: " ").dropFirst().first.map(String.init) ?? "/"
                 let auth = lines.first { $0.lowercased().hasPrefix("authorization:") }.map { String($0.dropFirst("authorization:".count)).trimmingCharacters(in: .whitespaces) } ?? ""
+                var seen: [String: String] = [:]
+                for line in lines.dropFirst() { if let i = line.firstIndex(of: ":") { seen[line[..<i].lowercased()] = line[line.index(after: i)...].trimmingCharacters(in: .whitespaces) } }
+                self?.lock.lock(); self?._requests.append(seen); self?.lock.unlock()
                 if path != "/missing.zip" { self?.lock.lock(); self?._auth.append(auth); self?.lock.unlock() }
                 let (code, headers, body) = handler(Request(path: path, port: port))
                 var head = "HTTP/1.1 \(code) X\r\nContent-Length: \(body.count)\r\nConnection: close\r\n"

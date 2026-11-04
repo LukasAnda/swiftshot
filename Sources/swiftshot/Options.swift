@@ -71,6 +71,8 @@ struct Options: Codable {
     var only: Set<String>?
     var push = false
     var author: String?
+    /// accept --push: the branch to push to (default: the upstream, or the CI's branch on a detached checkout).
+    var branch: String?
 
     /// The comparison settings of one `screens` rule.
     struct ScreenComparison { var tolerance: Tolerance?; var ignoreRegions: [[Double]]? }
@@ -234,11 +236,13 @@ struct Options: Codable {
 
     ACCEPT
       --from <dir|zip|url>                    A verify report directory, a zip of one, or an http(s) URL of
-                                              the zip (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as a
-                                              Bearer token, over https only, to that host only)
+                                              the zip (repeatable; SWIFTSHOT_ARTIFACT_TOKEN is sent as the
+                                              host's auth header, over https only, to that host only)
       --only "<id>,<id>"                      Only these screenshot ids (repeatable)
       --push                                  Commit the baseline ("Update screenshot baseline (…)") and git push
       --author "Name <email>"                 Commit author (default: swiftshot <swiftshot@users.noreply.github.com>)
+      --branch <name>                         With --push: push HEAD to this branch (default: the upstream, or
+                                              the CI's branch when HEAD is detached)
 
     CI
       --device-set <dir>                      Use an isolated CoreSimulator device set (simctl --set); created
@@ -397,6 +401,7 @@ struct Options: Codable {
             case "--only": options.only = (options.only ?? []).union(list(try value()))
             case "--push": options.push = true
             case "--author": options.author = try value()
+            case "--branch": options.branch = try value()
             case "--frame":
                 frameFlag = true
                 // The mode is optional: `--frame` alone means plain.
@@ -433,8 +438,9 @@ struct Options: Codable {
         let command = options.command
         if command == "accept" {
             if options.from.isEmpty { throw UsageError("accept needs --from <report directory, .zip or URL>") }
-        } else if !options.from.isEmpty || options.only != nil || options.push || options.author != nil {
-            throw UsageError("--from, --only, --push and --author are for accept")
+            if options.branch != nil && !options.push { throw UsageError("--branch needs --push") }
+        } else if !options.from.isEmpty || options.only != nil || options.push || options.author != nil || options.branch != nil {
+            throw UsageError("--from, --only, --push, --author and --branch are for accept")
         }
         if command == "verify" || command == "record" {
             if options.format != "png" { throw UsageError("\(command) compares plain PNG screenshots; --format \(options.format) can't be used with it (drop --format, or use run).") }

@@ -2,6 +2,7 @@ package swiftshot.android
 
 import swiftshot.android.shared.Json
 import java.io.File
+import java.io.PrintStream
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -36,32 +37,31 @@ data class CompareConfig(val tolerance: Tolerance?, val rules: List<CompareRule>
     }
 }
 
-/** Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else git; null when unknown. */
+/** Commit and branch: `SWIFTSHOT_COMMIT`/`SWIFTSHOT_BRANCH`, else the CI's, else git; null when unknown. */
 data class GitInfo(val commit: String?, val branch: String?) {
     companion object {
-        fun detect(dir: File): GitInfo {
+        fun detect(dir: File, env: Map<String, String>, ci: Ci?): GitInfo {
             fun git(vararg args: String): String? = runCatching {
                 val p = ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(false).start()
                 p.errorStream.close()
                 val out = p.inputStream.bufferedReader().readText().trim()
                 if (p.waitFor() == 0) out.takeIf { it.isNotEmpty() } else null
             }.getOrNull()
-            val commit = System.getenv("SWIFTSHOT_COMMIT") ?: git("rev-parse", "HEAD")
-            val branch = System.getenv("SWIFTSHOT_BRANCH") ?: git("rev-parse", "--abbrev-ref", "HEAD")?.takeIf { it != "HEAD" }
+            fun set(k: String) = env[k]?.takeIf { it.isNotEmpty() }
+            val commit = set("SWIFTSHOT_COMMIT") ?: ci?.commit ?: git("rev-parse", "HEAD")
+            val branch = set("SWIFTSHOT_BRANCH") ?: ci?.branch ?: git("rev-parse", "--abbrev-ref", "HEAD")?.takeIf { it != "HEAD" }
             return GitInfo(commit, branch)
         }
     }
 }
 
-/** What a verify run records about where it ran. */
-data class BaselineEnv(val git: GitInfo, val version: String, val ci: Boolean) {
+/** What a verify run records about where it ran; [ci] is null when it wasn't on a CI. */
+data class BaselineEnv(val git: GitInfo, val version: String, val ci: Ci?) {
     companion object {
-        fun detect(dir: File) = BaselineEnv(GitInfo.detect(dir), Fingerprints.version(), ci())
-
-        /** `SWIFTSHOT_CI` (`true`/`false`), else `CI` set to true (full CI detection comes later). */
-        fun ci(): Boolean {
-            System.getenv("SWIFTSHOT_CI")?.let { return it.equals("true", true) || it == "1" }
-            return System.getenv("CI").let { it.equals("true", true) || it == "1" }
+        /** [env] is the process environment, read once by the caller. */
+        fun detect(dir: File, env: Map<String, String>, readFile: (String) -> String? = ::defaultRead, version: String = Fingerprints.version()): BaselineEnv {
+            val ci = Ci.detect(env, readFile).takeIf { it.isCi }
+            return BaselineEnv(GitInfo.detect(dir, env, ci), version, ci)
         }
     }
 }
@@ -95,18 +95,23 @@ class Verification(
  */
 object Baseline {
     /** Run inputs, as the report lists them. */
-    private class Run(output: File) {
+    private class Run(private val output: File) {
         val report = File(output, "swiftshot-report.json").let { f ->
             if (!f.isFile) throw CliError("No swiftshot-report.json in $output")
             runCatching { Json.parse(f.readText()) }.getOrNull() as? Map<*, *> ?: throw CliError("$f is not a report (malformed JSON)")
         }
-        val shots: Map<String, Map<*, *>> = (report["screenshots"] as List<*>?).orEmpty().map { it as Map<*, *> }
+        private fun list(key: String): List<*> = if (!report.containsKey(key)) emptyList<Any?>()
+            else report[key] as? List<*> ?: throw CliError("swiftshot-report.json in $output: \"$key\" must be an array")
+        private val shotList = list("screenshots")
+        val shots: Map<String, Map<*, *>> = shotList.map { it as Map<*, *> }
             .filter { it["id"] is String }.associateBy { it["id"] as String }
             .onEach { (id, _) -> if (!validId(id)) throw CliError("swiftshot-report.json in $output: \"$id\" is not a valid screenshot id") }
-        private val errorList = (report["errors"] as List<*>?).orEmpty().map { e -> if (e is Map<*, *>) e else mapOf("message" to e.toString()) }
+        private val errorList = list("errors").map { e -> if (e is Map<*, *>) e else mapOf("message" to e.toString()) }
         /** The first message per id. */
         val failed = LinkedHashMap<String, String>().also { m -> for (e in errorList) (e["id"] as String?)?.let { m.putIfAbsent(it, e["message"].toString()) } }
         val unattributed = errorList.filter { it["id"] !is String }.map { mapOf("message" to it["message"]?.toString()) }
+        /** A report with no screenshots and no errors: verify says so (an error without id) instead of reporting every image removed. */
+        val rendersNothing = shotList.isEmpty() && errorList.isEmpty()
         val scope = report["scope"] as Map<*, *>? ?: emptyMap<String, Any?>()
         @Suppress("UNCHECKED_CAST")
         val fingerprint = (report["fingerprint"] as Map<String, Any?>?) ?: emptyMap()
@@ -117,10 +122,10 @@ object Baseline {
     private class Stored(val dir: File) {
         private val file = File(dir, "baseline.json")
         val json = file.takeIf { it.isFile }?.let { runCatching { Json.parse(it.readText()) }.getOrNull() as? Map<*, *> ?: throw UsageError("$it is not valid JSON") }
-        private fun section(key: String): Map<*, *> = json?.get(key)?.let { v ->
+        private fun section(key: String): Map<*, *> = if (json == null || !json.containsKey(key)) emptyMap<String, Any?>() else json[key].let { v ->
             if (v !is Map<*, *> || v.values.any { it !is Map<*, *> }) throw UsageError("$file: \"$key\" must be an object of objects")
             v
-        } ?: emptyMap<String, Any?>()
+        }
         val fingerprints: Map<*, *> = section("fingerprints")
         val images: Map<String, Map<*, *>> = section("images").entries.associate { (k, v) ->
             val id = k as String
@@ -177,9 +182,13 @@ object Baseline {
     }
 
     /** Compares the run in [output] with [baseline], writes the report directory and says what it found; the exit code. */
-    fun verify(output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log): Int {
+    fun verify(
+        output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log,
+        processEnv: Map<String, String> = emptyMap(), out: PrintStream = System.out, projectDir: File? = null, http: Http = JavaHttp,
+    ): Int {
         val start = System.nanoTime()
         val v = evaluate(output, baseline, report, config, env)
+        env.ci?.warnings?.forEach(log::warn)
         BaselineReport.writeTimings((System.nanoTime() - start) / 1e9, report)
         for ((kind, line) in BaselineReport.summary(v, report)) when (kind) {
             "warn" -> log.warn(line)
@@ -187,6 +196,8 @@ object Baseline {
             "ok" -> log.ok(line)
             else -> log.plain(line)
         }
+        NativeOutput.write(v, env.ci, report, processEnv, out, log)
+        PullRequestComment.post(Summary.markdown(v, env.ci), env.ci, processEnv, projectDir, log, http)
         return v.exitCode
     }
 
@@ -194,6 +205,7 @@ object Baseline {
     fun evaluate(output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv): Verification {
         val run = Run(output)
         val stored = Stored(baseline)
+        val unattributed = if (run.rendersNothing) listOf<Map<String, Any?>>(mapOf("message" to "The run rendered no screenshots")) else run.unattributed
         val stray = stored.files - stored.images.keys
         val ids = (run.shots.keys + stored.images.keys + run.failed.keys + stray.intersect(run.shots.keys)).sortedWith(CanonicalJson.utf8)
         BaselineReport.clear(report)
@@ -206,7 +218,7 @@ object Baseline {
             for (id in ids) {
                 val b = stored.images[id]
                 val o = run.shots[id]
-                if (o == null && id !in run.failed && (!inScope(b!!, run.scope) || run.unattributed.isNotEmpty())) continue
+                if (o == null && id !in run.failed && (!inScope(b!!, run.scope) || unattributed.isNotEmpty())) continue
                 if (b != null) {
                     compared += (o ?: b) to b
                     if (b["local"] == true) local = true
@@ -239,9 +251,9 @@ object Baseline {
                 val fp = stored.fingerprints[b["fingerprint"] as String?] as Map<*, *>? ?: return@flatMap emptyList()
                 (run.fingerprint[fp["platform"] as String?] as Map<*, *>?)?.let { Fingerprints.mismatches(fp, Fingerprints.forImage(it, image)) }.orEmpty()
             }.distinct().sortedWith(CanonicalJson.utf8)
-            val errors = entries.filter { it["status"] == "error" }.map { linkedMapOf("id" to it["id"], "message" to it["message"]) } + run.unattributed
+            val errors = entries.filter { it["status"] == "error" }.map { linkedMapOf("id" to it["id"], "message" to it["message"]) } + unattributed
             val listed = entries.map { it["id"] as String }.toSet()
-            val v = Verification(entries, errors, run.unattributed, run.fingerprint, mismatches, local, (stray - listed).size, env, config.hash())
+            val v = Verification(entries, errors, unattributed, run.fingerprint, mismatches, local, (stray - listed).size, env, config.hash())
             BaselineReport.write(v, report)
             return v
         } finally {

@@ -1,0 +1,25 @@
+{
+  "env": {
+    "BITRISEIO_GIT_BRANCH_DEST": "main",
+    "BITRISEIO_PULL_REQUEST_REPOSITORY_URL": "https://github.com/acme/app.git",
+    "BITRISE_BUILD_URL": "https://app.bitrise.io/build/2f6c1d1b9c0d4c7e",
+    "BITRISE_GIT_BRANCH": "feature/x",
+    "BITRISE_GIT_COMMIT": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "BITRISE_IO": "true",
+    "BITRISE_PULL_REQUEST": "14",
+    "CI": "true",
+    "GIT_CLONE_COMMIT_HASH": "5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081",
+    "GIT_REPOSITORY_URL": "https://github.com/acme/app.git"
+  },
+  "expected": {
+    "branch": "feature/x",
+    "buildUrl": "https://app.bitrise.io/build/2f6c1d1b9c0d4c7e",
+    "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "fork": false,
+    "isCi": true,
+    "provider": "bitrise",
+    "pullRequest": "14",
+    "repository": "https://github.com/acme/app.git",
+    "warnings": []
+  }
+}

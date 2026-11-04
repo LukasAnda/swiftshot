@@ -1,8 +1,8 @@
 import Foundation
 
-/// The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, timings.json, and the console summary.
+/// The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, timings.json, and the console summary.
 enum BaselineReport {
-    static let files = ["result.json", "manifest.json", "junit.xml", "timings.json"]
+    static let files = ["result.json", "manifest.json", "junit.xml", "summary.md", "timings.json"]
 
     /// Removes what an earlier verify wrote there (only its own files: the directory may be the user's).
     static func clear(_ report: URL) throws {
@@ -17,6 +17,7 @@ enum BaselineReport {
         try Data(result(v).pretty().utf8).write(to: report.appendingPathComponent("result.json"))
         try Data(manifest(v).pretty().utf8).write(to: report.appendingPathComponent("manifest.json"))
         try Data(junit(v).utf8).write(to: report.appendingPathComponent("junit.xml"))
+        try Data(Summary.markdown(v, ci: v.env.ci).utf8).write(to: report.appendingPathComponent("summary.md"))
     }
 
     /// timings.json: how long the comparison took (not deterministic, so not part of result.json).
@@ -27,10 +28,16 @@ enum BaselineReport {
 
     static func optional(_ s: String?) -> JSON { s.map { .string($0) } ?? .null }
 
+    /// `null` outside a CI, else what the report says about it.
+    static func ci(_ v: Verification) -> JSON {
+        guard let ci = v.env.ci else { return .null }
+        return .object(["buildUrl": optional(ci.buildUrl), "provider": optional(ci.provider), "pullRequest": optional(ci.pullRequest)])
+    }
+
     static func result(_ v: Verification) -> JSON {
         .object([
             "schema": .int(1), "status": .string(v.status), "counts": .object(v.counts.mapValues { .int(Int64($0)) }),
-            "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "version": .string(v.env.version), "ci": .bool(v.env.ci),
+            "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "version": .string(v.env.version), "ci": ci(v),
             "host": optional(v.host), "fingerprint": .object(v.fingerprint), "fingerprintMismatch": .array(v.mismatches.map { .string($0) }),
             "localBaseline": .bool(v.localBaseline), "screenshots": .array(v.entries.map { .object($0) }), "errors": .array(v.errors),
             "strayBaselineFiles": .int(Int64(v.strays)),
@@ -40,7 +47,7 @@ enum BaselineReport {
     static func manifest(_ v: Verification) -> JSON {
         func ids(_ s: String) -> JSON { .array(v.ids(s).map { .string($0) }) }
         return .object([
-            "schema": .int(1), "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "ci": .bool(v.env.ci),
+            "schema": .int(1), "commit": optional(v.env.git.commit), "branch": optional(v.env.git.branch), "ci": ci(v),
             "configHash": .string(v.configHash), "fingerprint": .object(v.fingerprint),
             "ids": .object(["changed": ids("changed"), "added": ids("added"), "removed": ids("removed")]),
         ])
