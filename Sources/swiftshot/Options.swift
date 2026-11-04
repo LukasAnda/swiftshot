@@ -189,7 +189,7 @@ struct Options: Codable {
       --output <dir>                          Default: ./screenshots (fastlane/deliver layout: <dir>/<lang>/<device>-<preview>.png)
       --format png|jpeg                       Default: png
       --clear                                 Delete previous screenshots first
-      --no-html                               Do not write screenshots.html
+      --no-html                               Do not write screenshots.html, or index.html in a verify report
       --no-status-bar                         Leave out the system status bar (9:41, full battery), which is
                                               drawn like on a device by default
 

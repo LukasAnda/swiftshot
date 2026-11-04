@@ -63,7 +63,7 @@ enum Command {
             let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             let processEnv = ProcessInfo.processInfo.environment
             return try Baseline.verify(output: output, baseline: baseline, report: reportDir, config: CompareConfig.from(options),
-                                       env: BaselineEnv.detect(cwd, env: processEnv), log: Console(), processEnv: processEnv, projectDir: cwd)
+                                       env: BaselineEnv.detect(cwd, env: processEnv), log: Console(), processEnv: processEnv, projectDir: cwd, html: options.html)
         } catch {
             // No result: nothing of an earlier verify may stay behind to be read as this one's.
             if options.command == "verify" { try? BaselineReport.clear(reportDir) }

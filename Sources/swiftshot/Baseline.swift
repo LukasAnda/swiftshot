@@ -248,9 +248,9 @@ enum Baseline {
     /// Compares the run in `output` with `baseline`, writes the report directory and says what it found; the exit code.
     static func verify(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, log: Console,
                        processEnv: [String: String] = [:], out: (String) -> Void = { print($0) },
-                       projectDir: URL? = nil, http: Http = URLSessionHttp()) throws -> Int32 {
+                       projectDir: URL? = nil, http: Http = URLSessionHttp(), html: Bool = true) throws -> Int32 {
         let start = Date()
-        let v = try evaluate(output: output, baseline: baseline, report: report, config: config, env: env)
+        let v = try evaluate(output: output, baseline: baseline, report: report, config: config, env: env, html: html)
         for w in env.ci?.warnings ?? [] { log.warn(w) }
         try BaselineReport.writeTimings(compareSeconds: Date().timeIntervalSince(start), report: report)
         for (kind, line) in BaselineReport.summary(v, report: report) {
@@ -267,7 +267,7 @@ enum Baseline {
     }
 
     /// The comparison: statuses in id order, report files written into `report`.
-    static func evaluate(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv) throws -> Verification {
+    static func evaluate(output: URL, baseline: URL, report: URL, config: CompareConfig, env: BaselineEnv, html: Bool = true) throws -> Verification {
         let run = try Run(output)
         let stored = try Stored(baseline)
         let unattributed: [JSON] = run.rendersNothing ? [.object(["message": .string("The run rendered no screenshots")])] : run.unattributed
@@ -343,7 +343,7 @@ enum Baseline {
         let listed = Set(entries.compactMap { $0["id"]?.string })
         let v = Verification(entries: entries, errors: errors, unattributed: unattributed, fingerprint: run.fingerprint, mismatches: mismatches,
                              localBaseline: local, strays: stray.subtracting(listed).count, env: env, configHash: config.hash())
-        try BaselineReport.write(v, report: report)
+        try BaselineReport.write(v, report: report, html: html)
         return v
     }
 

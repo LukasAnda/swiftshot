@@ -8,6 +8,8 @@ let package = Package(
         .executableTarget(
             name: "swiftshot",
             path: "Sources/swiftshot",
+            // The report template (a link to Shared/report.html), compiled in: the binary stays one file.
+            resources: [.embedInCode("report.html")],
             swiftSettings: [.unsafeFlags(["-Xfrontend", "-disable-availability-checking"])]
         ),
         // Fast, no simulator: options, device data, display table.

@@ -1,8 +1,8 @@
 import Foundation
 
-/// The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, timings.json, and the console summary.
+/// The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, index.html, timings.json, and the console summary.
 enum BaselineReport {
-    static let files = ["result.json", "manifest.json", "junit.xml", "summary.md", "timings.json"]
+    static let files = ["result.json", "manifest.json", "junit.xml", "summary.md", "index.html", "timings.json"]
 
     /// Removes what an earlier verify wrote there (only its own files: the directory may be the user's).
     static func clear(_ report: URL) throws {
@@ -12,12 +12,30 @@ enum BaselineReport {
         try fm.createDirectory(at: report, withIntermediateDirectories: true)
     }
 
-    static func write(_ v: Verification, report: URL) throws {
+    /// `html` false (`--no-html`): no index.html.
+    static func write(_ v: Verification, report: URL, html: Bool = true) throws {
         try FileManager.default.createDirectory(at: report, withIntermediateDirectories: true)
-        try Data(result(v).pretty().utf8).write(to: report.appendingPathComponent("result.json"))
+        let resultJson = result(v).pretty()
+        try Data(resultJson.utf8).write(to: report.appendingPathComponent("result.json"))
+        if html { try page(resultJson).write(to: report.appendingPathComponent("index.html")) }
         try Data(manifest(v).pretty().utf8).write(to: report.appendingPathComponent("manifest.json"))
         try Data(junit(v).utf8).write(to: report.appendingPathComponent("junit.xml"))
         try Data(Summary.markdown(v, ci: v.env.ci).utf8).write(to: report.appendingPathComponent("summary.md"))
+    }
+
+    /// index.html: the template (Shared/report.html) with result.json's exact bytes in it, each `<` as `\u003c`.
+    /// In bytes: a `<` followed by a combining mark is still a `<` here, whatever String comparison makes of it.
+    static func page(_ resultJson: String, template: [UInt8] = PackageResources.report_html) -> Data {
+        let marker = Array("__SWIFTSHOT_RESULT_JSON__".utf8)
+        guard let at = template.indices.first(where: { template[$0...].starts(with: marker) }) else { return Data(template) }
+        var out = Data(capacity: template.count + resultJson.utf8.count)
+        out.append(contentsOf: template[..<at])
+        let escaped = Array("\\u003c".utf8)
+        for byte in resultJson.utf8 {
+            if byte == UInt8(ascii: "<") { out.append(contentsOf: escaped) } else { out.append(byte) }
+        }
+        out.append(contentsOf: template[(at + marker.count)...])
+        return out
     }
 
     /// timings.json: how long the comparison took (not deterministic, so not part of result.json).

@@ -1,0 +1,31 @@
+{
+  "branch": "feature/x",
+  "ci": null,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "configHash": "8f36dfee0cfcc981c95ea8bb102eb44823ed953419c97f19da5fd193b520117a",
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "ids": {
+    "added": [
+      "de-DE/Pixel Tablet-Übersicht 日本語 🙂",
+      "en-US/Pixel 9-\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!"
+    ],
+    "changed": [
+      "en-US/Pixel 9-<img src=x onerror=alert(1)>",
+      "en-US/Pixel 9-one,two"
+    ],
+    "removed": [
+      "en-US/Pixel Tablet-Gone & <i>"
+    ]
+  },
+  "schema": 1
+}

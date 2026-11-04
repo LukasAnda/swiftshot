@@ -48,6 +48,8 @@ class CompareTest {
         Shot("split-run-android", "en-US/Pixel 9-Settings"),
         Shot("device-mode", "en-US/iPhone 17 Pro-Glass", Tolerance(maxChannelDelta = 1), scale = 3.0),
         Shot("device-mode", "en-US/iPhone 17 Pro-Blur", Tolerance(maxChannelDelta = 1), scale = 3.0),
+        Shot("hostile-ids", "en-US/Pixel 9-<img src=x onerror=alert(1)>"),
+        Shot("hostile-ids", "en-US/Pixel 9-one,two"),
     )
 
     private fun entry(case: String, id: String): Map<*, *> {

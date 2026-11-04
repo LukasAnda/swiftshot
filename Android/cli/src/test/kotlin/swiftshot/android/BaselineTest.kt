@@ -45,12 +45,12 @@ class BaselineTest {
 
     @Test fun everyFixtureCaseMatchesByteForByte() {
         val all = cases()
-        assertEquals(26, all.size, "fixture cases")
+        assertEquals(28, all.size, "fixture cases")
         val problems = mutableListOf<String>()
         for (case in all) {
             val report = File(tmp, case.name)
             val v = verify(case, report)
-            for (name in listOf("result.json", "junit.xml", "manifest.json", "summary.md")) {
+            for (name in listOf("result.json", "junit.xml", "manifest.json", "summary.md", "index.html")) {
                 val want = File(case, "expected/$name").readText()
                 val got = File(report, name).takeIf { it.isFile }?.readText()
                 if (got != want) problems += "${case.name}/$name differs:\n--- want\n$want--- got\n$got"
@@ -319,7 +319,7 @@ class BaselineTest {
     /** A report directory holding an earlier verify's files; the command line of a verify into it. */
     private fun staleRun(command: String = "verify"): Pair<File, List<String>> {
         val report = File(tmp, "report").apply { mkdirs() }
-        for (f in listOf("result.json", "manifest.json", "junit.xml")) File(report, f).writeText("stale")
+        for (f in listOf("result.json", "manifest.json", "junit.xml", "index.html")) File(report, f).writeText("stale")
         return report to listOf(command, "--project-dir", tmp.path, "--output", File(tmp, "out").path, "--baseline-directory", File(tmp, "base").path,
             "--report-directory", report.path)
     }
@@ -332,13 +332,27 @@ class BaselineTest {
         assertTrue((r["errors"] as List<*>).single().toString().contains("boom"), r.toString())
         assertFalse("stale" in File(report, "junit.xml").readText())
         assertFalse("stale" in File(report, "manifest.json").readText())
+        assertFalse("stale" in File(report, "index.html").readText())
+    }
+
+    @Test fun noHtmlWritesNoIndexAndClearsAnEarlierOne() {
+        val (report, args) = staleRun()
+        assertEquals(2, cli(args + "--no-html", Log(false)) { _, _ -> throw RuntimeException("boom") })
+        assertTrue(File(report, "result.json").isFile)
+        assertFalse(File(report, "index.html").exists())
+    }
+
+    @Test fun pageEscapesEveryLessThanAndKeepsTheRestAsIs() {
+        val page = BaselineReport.page("{\"a\": \"</script><\u0338\uD83D\uDE42\"}\n")
+        assertFalse("__SWIFTSHOT_RESULT_JSON__" in page)
+        assertTrue("{\"a\": \"\\u003c/script>\\u003c\u0338\uD83D\uDE42\"}\n</script>" in page, page)
     }
 
     @Test fun unexpectedComparisonExceptionExits2WithoutStaleReport() {
         val (report, args) = staleRun()
         val out = File(tmp, "out")
         assertEquals(2, cli(args, Log(false)) { _, _ -> out.mkdirs(); File(out, "swiftshot-report.json").writeText("""{"screenshots": "x"}""") })
-        for (f in listOf("result.json", "manifest.json", "junit.xml")) assertFalse(File(report, f).exists(), f)
+        for (f in listOf("result.json", "manifest.json", "junit.xml", "index.html")) assertFalse(File(report, f).exists(), f)
         // record: the same exception is exit 2 too.
         assertEquals(2, cli(staleRun("record").second, Log(false)) { _, _ -> out.mkdirs(); File(out, "swiftshot-report.json").writeText("""{"screenshots": "x"}""") })
     }

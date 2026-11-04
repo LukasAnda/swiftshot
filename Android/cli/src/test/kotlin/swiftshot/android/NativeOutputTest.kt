@@ -91,7 +91,7 @@ class NativeOutputTest {
         assertEquals("""{"test-name":"swiftshot"}""", File(tmp, "tests/swiftshot/test-info.json").readText())
         val names = ZipFile(File(tmp, "deploy/swiftshot-report.zip")).use { z -> z.entries().asSequence().map { it.name }.toList() }
         assertEquals(names.sortedWith(CanonicalJson.utf8), names)
-        assertTrue("manifest.json" in names && "summary.md" in names && "images/new/en-US/A.png" in names, names.toString())
+        assertTrue("manifest.json" in names && "summary.md" in names && "index.html" in names && "images/new/en-US/A.png" in names, names.toString())
         assertFalse(names.any { it.startsWith("/") || it.endsWith("/") })
     }
 

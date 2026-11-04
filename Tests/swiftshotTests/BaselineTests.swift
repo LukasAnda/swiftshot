@@ -40,14 +40,14 @@ final class BaselineTests: XCTestCase {
 
     func testEveryFixtureCaseMatchesByteForByte() throws {
         let all = fixtureCases()
-        XCTAssertEqual(all.count, 26, "fixture cases")
+        XCTAssertEqual(all.count, 28, "fixture cases")
         var problems: [String] = []
         var passed: [String] = []
         for c in all {
             let report = tmp.appendingPathComponent(c.lastPathComponent)
             let v = try verify(c, report: report)
             var ok = true
-            for name in ["result.json", "junit.xml", "manifest.json", "summary.md"] {
+            for name in ["result.json", "junit.xml", "manifest.json", "summary.md", "index.html"] {
                 let want = try String(contentsOf: c.appendingPathComponent("expected/\(name)"), encoding: .utf8)
                 let got = try? String(contentsOf: report.appendingPathComponent(name), encoding: .utf8)
                 if got != want { ok = false; problems.append("\(c.lastPathComponent)/\(name) differs:\n--- want\n\(want)--- got\n\(got ?? "nil")") }
@@ -245,12 +245,12 @@ final class BaselineTests: XCTestCase {
     }
 
     /// A report directory holding an earlier verify's files; the options of a verify into it.
-    func staleRun(_ command: String = "verify") throws -> (URL, Options) {
+    func staleRun(_ command: String = "verify", extra: [String] = []) throws -> (URL, Options) {
         let report = tmp.appendingPathComponent("report")
         try FileManager.default.createDirectory(at: report, withIntermediateDirectories: true)
-        for f in ["result.json", "manifest.json", "junit.xml"] { try Data("stale".utf8).write(to: report.appendingPathComponent(f)) }
+        for f in ["result.json", "manifest.json", "junit.xml", "index.html"] { try Data("stale".utf8).write(to: report.appendingPathComponent(f)) }
         let o = try Options.parse([command, "--output", tmp.appendingPathComponent("out").path, "--baseline-directory", tmp.appendingPathComponent("base").path,
-                                   "--report-directory", report.path])
+                                   "--report-directory", report.path] + extra)
         return (report, o)
     }
 
@@ -262,6 +262,23 @@ final class BaselineTests: XCTestCase {
         XCTAssertEqual(r["status"], .string("error"))
         XCTAssertTrue(r["errors"]!.text.contains("boom"), r.text)
         XCTAssertFalse(String(decoding: try Data(contentsOf: report.appendingPathComponent("junit.xml")), as: UTF8.self).contains("stale"))
+        XCTAssertFalse(String(decoding: try Data(contentsOf: report.appendingPathComponent("index.html")), as: UTF8.self).contains("stale"))
+    }
+
+    func testNoHtmlWritesNoIndexAndClearsAnEarlierOne() async throws {
+        let (report, o) = try staleRun(extra: ["--no-html"])
+        let code = await Command.baseline(o) { _ in throw CLIError("boom") }
+        XCTAssertEqual(code, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: report.appendingPathComponent("result.json").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: report.appendingPathComponent("index.html").path))
+    }
+
+    func testPageEscapesEveryLessThanByteAndKeepsTheRestAsIs() throws {
+        let json = "{\"a\": \"</script><\u{0338}\u{1F642}\"}\n"
+        let page = String(decoding: BaselineReport.page(json), as: UTF8.self)
+        XCTAssertTrue(page.utf8.elementsEqual(BaselineReport.page(json)))
+        XCTAssertEqual(page.components(separatedBy: "__SWIFTSHOT_RESULT_JSON__").count, 1)
+        XCTAssertTrue(Data(page.utf8).range(of: Data("{\"a\": \"\\u003c/script>\\u003c\u{0338}\u{1F642}\"}\n</script>".utf8)) != nil, page)
     }
 
     func testComparisonErrorExits2WithoutStaleReport() async throws {
@@ -272,7 +289,7 @@ final class BaselineTests: XCTestCase {
             try Data("{\"screenshots\": [".utf8).write(to: out.appendingPathComponent("swiftshot-report.json"))
         }
         XCTAssertEqual(code, 2)
-        for f in ["result.json", "manifest.json", "junit.xml"] { XCTAssertFalse(FileManager.default.fileExists(atPath: report.appendingPathComponent(f).path), f) }
+        for f in ["result.json", "manifest.json", "junit.xml", "index.html"] { XCTAssertFalse(FileManager.default.fileExists(atPath: report.appendingPathComponent(f).path), f) }
     }
 
     func testMultiRuntimeMismatchIsOnlyForTheChangedRuntime() throws {

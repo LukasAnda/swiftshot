@@ -1,0 +1,139 @@
+{
+  "errors": [
+    {
+      "id": "en-US/Pixel 9-Broken",
+      "message": "<script>alert(4)</script> ≮img onerror=alert(5)>"
+    },
+    {
+      "id": "en-US/</script><img src=x onerror=alert(6)>",
+      "message": "</script><img src=x onerror=alert(7)>"
+    }
+  ],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "platform": "android",
+  "scope": {
+    "appearances": [
+      "<svg onload=alert(2)>",
+      "light"
+    ],
+    "devices": [
+      "Pixel 9",
+      "Pixel Tablet"
+    ],
+    "fontScales": [
+      1
+    ],
+    "languages": [
+      "de-DE",
+      "en-US"
+    ],
+    "modules": [
+      ":app"
+    ],
+    "platforms": [
+      "android"
+    ],
+    "previewFilter": [],
+    "previews": [
+      "\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!",
+      "<img src=x onerror=alert(1)>",
+      "Same <b>",
+      "one,two",
+      "Übersicht 日本語 🙂"
+    ],
+    "runtimes": []
+  },
+  "screenshots": [
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.Übersicht日本語🙂Kt.Übersicht日本語🙂Preview",
+      "device": "Pixel Tablet",
+      "file": "de-DE/Pixel Tablet-Übersicht 日本語 🙂.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "de-DE/Pixel Tablet-Übersicht 日本語 🙂",
+      "language": "de-DE",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Übersicht 日本語 🙂",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.\"double\"'single'#1?q=1%41$(touchx)`id`!!Kt.\"double\"'single'#1?q=1%41$(touchx)`id`!!Preview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "<svg onload=alert(2)>",
+      "composable": "com.example.ui.<imgsrc=xonerror=alert(1)>Kt.<imgsrc=xonerror=alert(1)>Preview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-<img src=x onerror=alert(1)>.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-<img src=x onerror=alert(1)>",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "<img src=x onerror=alert(1)>",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.Same<b>Kt.Same<b>Preview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-Same <b>.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-Same <b>",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Same <b>",
+      "scale": 2.625,
+      "width": 40
+    },
+    {
+      "appearance": "light",
+      "composable": "com.example.ui.one,twoKt.one,twoPreview",
+      "device": "Pixel 9",
+      "file": "en-US/Pixel 9-one,two.png",
+      "fontScale": 1,
+      "height": 80,
+      "id": "en-US/Pixel 9-one,two",
+      "language": "en-US",
+      "millis": 120,
+      "module": ":app",
+      "platform": "android",
+      "preview": "one,two",
+      "scale": 2.625,
+      "width": 40
+    }
+  ],
+  "totalSeconds": 1.5
+}
