@@ -23,3 +23,11 @@ final class JsonOutputTests: XCTestCase {
         XCTAssertEqual(JsonOutput.devices([], runtimes: []).compact(), #"{"devices":[],"runtimes":[]}"#)
     }
 }
+
+extension JsonOutputTests {
+    /// Shared/testdata/json/list.json: the bytes both CLIs print for these previews.
+    func testListMatchesTheSharedFixture() throws {
+        let expected = try String(contentsOf: repoRoot.appendingPathComponent("Shared/testdata/json/list.json"), encoding: .utf8)
+        XCTAssertEqual(JsonOutput.list(previews: ["Welcome", "Settings \"dark\"", "Zürich"]).pretty(), expected)
+    }
+}

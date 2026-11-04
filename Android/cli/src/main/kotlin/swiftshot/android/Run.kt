@@ -70,17 +70,18 @@ class Runner(private val o: Options, private val log: Log) {
         val found = allFound.filterKeys { it in modules }
         if (found.isEmpty() && iosModules.isEmpty()) { warm.values.forEach { it.close() }; throw CliError("No @Preview functions found in ${modules.joinToString { it.path }}.") }
         if (o.command == "list") {
+            val names = mutableListOf<String>()
             for ((m, previews) in found) {
-                println("${m.label}${if (m.wear) " (Wear OS)" else ""}")
-                for (p in previews) println("  ${p.name}  ${p.composable}${describe(p)}")
+                if (!o.json) println("${m.label}${if (m.wear) " (Wear OS)" else ""}")
+                for (p in previews) { names += p.name; if (!o.json) println("  ${p.name}  ${p.composable}${describe(p)}") }
             }
             for (m in iosModules) {
                 val shared = allFound.entries.filter { it.key.path == m.path }.sortedBy { if (it.key.desktop) 0 else 1 }.firstOrNull()?.value.orEmpty()
-                if (found.keys.any { it.path == m.path }) { println("${m.label}: the previews of ${m.path} above"); continue }
-                println(m.label)
-                for (p in shared) println("  ${p.name}  ${p.composable}${describe(p)}")
+                if (found.keys.any { it.path == m.path }) { if (!o.json) println("${m.label}: the previews of ${m.path} above"); continue }
+                if (!o.json) println(m.label)
+                for (p in shared) { names += p.name; if (!o.json) println("  ${p.name}  ${p.composable}${describe(p)}") }
             }
-
+            if (o.json) JsonOutput.print(JsonOutput.list(names))
             return 0
         }
         for (m in found.keys) if (!m.hasTooling) throw CliError(
