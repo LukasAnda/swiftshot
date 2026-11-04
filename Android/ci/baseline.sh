@@ -84,6 +84,8 @@ echo "changed: $got"
 [ "$(json "$work/report-changed/result.json" 'sorted(set(s["status"] for s in d["screenshots"] if s["status"] != "unchanged"))')" = "['changed']" ] || bad "differences other than changed"
 [ "$(json "$work/report-changed/manifest.json" '"\n".join(d["ids"]["changed"])')" = "$want" ] || bad "manifest.json does not list exactly the changed ids"
 overhead "$work/report-changed" changed
+# index.html is part of what the budget above measures, and holds the run's result.
+grep -q '"status": "failed"' "$work/report-changed/index.html" || bad "index.html does not hold the run's result"
 
 echo "::group::accept"
 cli accept accept --from "$work/report-changed" --baseline-directory "$baseline"; [ "$rc" = 0 ] || bad "accept exited $rc, expected 0"
