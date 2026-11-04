@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="8" failures="5" errors="2">
+  <testcase classname="android.Pixel Tablet.de-DE" name="de-DE/Pixel Tablet-Übersicht 日本語 🙂">
+    <failure message="added"/>
+  </testcase>
+  <testcase classname="swiftshot" name="en-US/&lt;/script&gt;&lt;img src=x onerror=alert(6)&gt;">
+    <error message="&lt;/script&gt;&lt;img src=x onerror=alert(7)&gt;"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-&quot;double&quot; 'single' #1 ?q=1 %41 $(touch x) `id` !!">
+    <failure message="added"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-&lt;img src=x onerror=alert(1)&gt;">
+    <failure message="changed: 36 pixels"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Broken">
+    <error message="&lt;script&gt;alert(4)&lt;/script&gt; &lt;̸img onerror=alert(5)&gt;"/>
+  </testcase>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Same &lt;b&gt;"/>
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-one,two">
+    <failure message="changed: 4 pixels"/>
+  </testcase>
+  <testcase classname="android.Pixel Tablet.en-US" name="en-US/Pixel Tablet-Gone &amp; &lt;i&gt;">
+    <failure message="removed"/>
+  </testcase>
+</testsuite>

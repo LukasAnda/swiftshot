@@ -46,6 +46,10 @@
           16
         ]
       ],
+      "canvasSize": [
+        40,
+        96
+      ],
       "device": "Pixel 9",
       "diff": "images/diff/en-US/Pixel 9-Profile.png",
       "fontScale": 1,

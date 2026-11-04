@@ -2,17 +2,20 @@
 """Regenerates the baseline-comparison fixtures (inputs and expected JSON/JUnit).
 
 Run with `python3 -I make.py` from anywhere. Stdlib only, deterministic. It rewrites each case's
-`config.json`, `baseline/`, `output/` and `expected/{result.json,junit.xml,manifest.json,summary.md}`.
+`config.json`, `baseline/`, `output/` and `expected/{result.json,junit.xml,manifest.json,summary.md,index.html}`.
+It also refreshes the Content-Security-Policy hashes in `Shared/report.html`, so run it after editing that file.
 `expected/images/` is left alone: the engine generates and commits those, and this script checks
 them (baseline/new byte copies, diff images pixel- and byte-equal to `diff_image` below).
 
 The expected values come from a reference implementation of docs/wiki/Baseline-format.md
 below, checked against the numbers each synthetic edit is known to produce.
 """
+import base64
 import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import struct
 import sys
@@ -569,6 +572,7 @@ def verify(case):
             entries.append(e)
             continue
         e.update(status="changed", reason="size" if sized else "pixels", pixels=len(mask), boxes=boxes(mask),
+                 canvasSize=[max(bi[0], ni[0]), max(bi[1], ni[1])],
                  baseline="images/baseline/%s.png" % sid, new="images/new/%s.png" % sid, diff="images/diff/%s.png" % sid)
         if sized:
             e.update(baselineSize=bi[:2], newSize=ni[:2])
@@ -638,6 +642,17 @@ ROW_ORDER = ("error", "changed", "added", "removed")
 MAX_ROWS, MAX_BYTES = 200, 60000
 
 
+def percent(pixels, canvas):
+    """The Pixels column: integers only, one decimal rounded half up; `<0.1%` above zero but below 0.1, `>99.9%` below the whole canvas but above 99.9."""
+    total = canvas[0] * canvas[1]
+    if 0 < pixels and pixels * 1000 < total:
+        return "<0.1%"
+    if pixels < total and pixels * 1000 > total * 999:
+        return ">99.9%"
+    tenths = (pixels * 2000 + total) // (2 * total)
+    return "%d.%d%%" % (tenths // 10, tenths % 10)
+
+
 def summary_md(result):
     """Reference for docs/wiki/Baseline-format.md "summary.md"."""
     c = result["counts"]
@@ -646,7 +661,8 @@ def summary_md(result):
     notes = ["> **Note:** Baseline rendered differently: %s" % m for m in result["fingerprintMismatch"]]
     if result["localBaseline"]:
         notes.append("> **Note:** Some baseline images were recorded outside CI (local); record or accept them on CI")
-    rows = sorted(((ROW_ORDER.index(e["status"]), key_order(e["id"]), e["status"], e["id"])
+    rows = sorted(((ROW_ORDER.index(e["status"]), key_order(e["id"]), e["status"], e["id"],
+                    percent(e["pixels"], e["canvasSize"]) if e["status"] == "changed" else "")
                    for e in result["screenshots"] if e["status"] in ROW_ORDER))
     tail = []
     if ci and ci["buildUrl"]:
@@ -661,10 +677,11 @@ def summary_md(result):
         if notes:
             blocks.append("\n".join(notes))
         if rows:
-            lines = ["| Status | Screenshot |", "|---|---|"]
-            lines += ["| %s | `%s` |" % (r[2], r[3].replace("|", "\\|").replace("`", "'")) for r in rows[:shown]]
+            lines = ["| Status | Screenshot | Pixels |", "|---|---|---|"]
+            lines += ["| %s | `%s` | %s |" % (r[2], r[3].replace("|", "\\|").replace("`", "'"), r[4].replace(">", "\\>")) if r[4]
+                      else "| %s | `%s` | |" % (r[2], r[3].replace("|", "\\|").replace("`", "'")) for r in rows[:shown]]
             if shown < len(rows):
-                lines.append("| | \u2026and %d more |" % (len(rows) - shown))
+                lines.append("| | \u2026and %d more | |" % (len(rows) - shown))
             blocks.append("\n".join(lines))
         blocks += tail
         return "\n\n".join(blocks) + "\n"
@@ -672,6 +689,37 @@ def summary_md(result):
     while len(build(shown).encode("utf-8")) > MAX_BYTES and shown > 0:
         shown -= 1
     return build(shown)
+
+
+# ---------------------------------------------------------------- index.html
+
+TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.dirname(ROOT)), "report.html")
+PLACEHOLDER = "__SWIFTSHOT_RESULT_JSON__"
+
+
+def csp_hash(text):
+    return "sha256-" + base64.b64encode(hashlib.sha256(text.encode("utf-8")).digest()).decode("ascii")
+
+
+def refresh_template():
+    """Shared/report.html, with its CSP hashes brought up to date: only its own style and script may run."""
+    with open(TEMPLATE_PATH, encoding="utf-8", newline="") as f:
+        text = f.read()
+    assert text.isascii(), "report.html must be ASCII (write \\uXXXX in the script)"
+    assert text.count(PLACEHOLDER) == 1 and "\r" not in text
+    style = re.search(r"<style>(.*?)</style>", text, re.S).group(1)
+    script = re.search(r"<script>(.*?)</script>", text, re.S).group(1)
+    fresh = re.sub(r"style-src '[^']*'", "style-src '%s'" % csp_hash(style), text)
+    fresh = re.sub(r"script-src '[^']*'", "script-src '%s'" % csp_hash(script), fresh)
+    if fresh != text:
+        with open(TEMPLATE_PATH, "w", encoding="utf-8", newline="") as f:
+            f.write(fresh)
+    return fresh
+
+
+def index_html(template, result_json):
+    """The template with result.json's exact bytes in it, every `<` written as \\u003c."""
+    return template.replace(PLACEHOLDER, result_json.replace("<", "\\u003c"), 1)
 
 
 # ---------------------------------------------------------------- CI detection
@@ -1107,6 +1155,27 @@ def cases():
     # under the file systems' 255 bytes.
     tiny = base(1, 1, 1)
     out.append(case("summary-truncation", [], [(android("P" * 100 + "/" + "Q" * 100 + "%03d" % i, device="D" * 100), tiny) for i in range(300)]))
+
+    # Untrusted text in every field index.html shows: markup, quotes, what a URL or a shell treats as special,
+    # non-ASCII, an id accept can't name (a comma); a fingerprint value and error messages too. `<` + U+0338 in a
+    # message: a Unicode-aware replace would miss that `<`.
+    h = lambda p, **kw: android(p, **kw)
+    xss = h("<img src=x onerror=alert(1)>", appearance="<svg onload=alert(2)>", language="en-US", device="Pixel 9")
+    quoted = h("\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!")
+    unicode_ = h("\u00dcbersicht \u65e5\u672c\u8a9e \U0001f642", language="de-DE", device="Pixel Tablet")
+    comma = h("one,two")
+    same = h("Same <b>")
+    gone = h("Gone & <i>", device="Pixel Tablet")
+    hostile_fp = dict(FP["android"], jdk="<img src=x onerror=alert(3)>")
+    out.append(case("hostile-ids",
+                    [(xss, base(1)), (comma, base(2)), (same, base(3)), (gone, base(4)), (h("Broken"), base(6))],
+                    [(xss, fill(copy(base(1)), [4, 8, 6, 6])), (comma, fill(copy(base(2)), [0, 0, 2, 2])), (same, base(3)), (quoted, base(5)), (unicode_, base(7))],
+                    requested={"devices": ["Pixel 9", "Pixel Tablet"]}, local={same["id"]}, base_fps={"android": hostile_fp},
+                    errors=[{"id": h("Broken")["id"], "message": "<script>alert(4)</script> <\u0338img onerror=alert(5)>"},
+                            {"id": "en-US/</script><img src=x onerror=alert(6)>", "message": "</script><img src=x onerror=alert(7)>"}]))
+    # An error without an id, with markup in it.
+    two = [(android("Home"), base(1))]
+    out.append(case("hostile-run-error", two, two, errors=[{"message": "<img src=x onerror=alert(8)>\n\"second line\" & more"}]))
     return out
 
 
@@ -1175,6 +1244,7 @@ def write(path, data):
 
 
 def main():
+    template = refresh_template()
     for c in cases():
         d = os.path.join(ROOT, c["name"])
         for sub in ("baseline", "output"):
@@ -1196,6 +1266,7 @@ def main():
         write(os.path.join(d, "expected", "junit.xml"), junit)
         write(os.path.join(d, "expected", "manifest.json"), pretty(manifest))
         write(os.path.join(d, "expected", "summary.md"), summary)
+        write(os.path.join(d, "expected", "index.html"), index_html(template, pretty(result)))
         check_images(c, result, d)
         print("%-28s %s %s" % (c["name"], result["status"], dump(result["counts"], indent=None)))
     print("ci fixtures: %d" % check_ci_fixtures())

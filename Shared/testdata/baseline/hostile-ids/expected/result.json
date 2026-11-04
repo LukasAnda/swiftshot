@@ -1,0 +1,164 @@
+{
+  "branch": "feature/x",
+  "ci": null,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "counts": {
+    "added": 2,
+    "changed": 2,
+    "errors": 2,
+    "removed": 1,
+    "unchanged": 1
+  },
+  "errors": [
+    {
+      "id": "en-US/</script><img src=x onerror=alert(6)>",
+      "message": "</script><img src=x onerror=alert(7)>"
+    },
+    {
+      "id": "en-US/Pixel 9-Broken",
+      "message": "<script>alert(4)</script> ≮img onerror=alert(5)>"
+    }
+  ],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [
+    "android jdk: baseline <img src=x onerror=alert(3)>, this run 21.0.8"
+  ],
+  "host": "linux-x64",
+  "localBaseline": true,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel Tablet",
+      "fontScale": 1,
+      "id": "de-DE/Pixel Tablet-Übersicht 日本語 🙂",
+      "language": "de-DE",
+      "module": ":app",
+      "new": "images/new/de-DE/Pixel Tablet-Übersicht 日本語 🙂.png",
+      "platform": "android",
+      "preview": "Übersicht 日本語 🙂",
+      "status": "added"
+    },
+    {
+      "id": "en-US/</script><img src=x onerror=alert(6)>",
+      "message": "</script><img src=x onerror=alert(7)>",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!",
+      "language": "en-US",
+      "module": ":app",
+      "new": "images/new/en-US/Pixel 9-\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!.png",
+      "platform": "android",
+      "preview": "\"double\" 'single' #1 ?q=1 %41 $(touch x) `id` !!",
+      "status": "added"
+    },
+    {
+      "appearance": "<svg onload=alert(2)>",
+      "baseline": "images/baseline/en-US/Pixel 9-<img src=x onerror=alert(1)>.png",
+      "boxes": [
+        [
+          4,
+          8,
+          6,
+          6
+        ]
+      ],
+      "canvasSize": [
+        40,
+        80
+      ],
+      "device": "Pixel 9",
+      "diff": "images/diff/en-US/Pixel 9-<img src=x onerror=alert(1)>.png",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-<img src=x onerror=alert(1)>",
+      "language": "en-US",
+      "module": ":app",
+      "new": "images/new/en-US/Pixel 9-<img src=x onerror=alert(1)>.png",
+      "pixels": 36,
+      "platform": "android",
+      "preview": "<img src=x onerror=alert(1)>",
+      "reason": "pixels",
+      "status": "changed"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Broken",
+      "language": "en-US",
+      "message": "<script>alert(4)</script> ≮img onerror=alert(5)>",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Broken",
+      "status": "error"
+    },
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Same <b>",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Same <b>",
+      "status": "unchanged"
+    },
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/Pixel 9-one,two.png",
+      "boxes": [
+        [
+          0,
+          0,
+          2,
+          2
+        ]
+      ],
+      "canvasSize": [
+        40,
+        80
+      ],
+      "device": "Pixel 9",
+      "diff": "images/diff/en-US/Pixel 9-one,two.png",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-one,two",
+      "language": "en-US",
+      "module": ":app",
+      "new": "images/new/en-US/Pixel 9-one,two.png",
+      "pixels": 4,
+      "platform": "android",
+      "preview": "one,two",
+      "reason": "pixels",
+      "status": "changed"
+    },
+    {
+      "appearance": "light",
+      "baseline": "images/baseline/en-US/Pixel Tablet-Gone & <i>.png",
+      "device": "Pixel Tablet",
+      "fontScale": 1,
+      "id": "en-US/Pixel Tablet-Gone & <i>",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Gone & <i>",
+      "status": "removed"
+    }
+  ],
+  "status": "error",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}

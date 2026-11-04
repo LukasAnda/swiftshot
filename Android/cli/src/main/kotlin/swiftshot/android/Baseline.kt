@@ -184,10 +184,10 @@ object Baseline {
     /** Compares the run in [output] with [baseline], writes the report directory and says what it found; the exit code. */
     fun verify(
         output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, log: Log,
-        processEnv: Map<String, String> = emptyMap(), out: PrintStream = System.out, projectDir: File? = null, http: Http = JavaHttp,
+        processEnv: Map<String, String> = emptyMap(), out: PrintStream = System.out, projectDir: File? = null, http: Http = JavaHttp, html: Boolean = true,
     ): Int {
         val start = System.nanoTime()
-        val v = evaluate(output, baseline, report, config, env)
+        val v = evaluate(output, baseline, report, config, env, html)
         env.ci?.warnings?.forEach(log::warn)
         BaselineReport.writeTimings((System.nanoTime() - start) / 1e9, report)
         for ((kind, line) in BaselineReport.summary(v, report)) when (kind) {
@@ -202,7 +202,7 @@ object Baseline {
     }
 
     /** The comparison: statuses in id order, report files written into [report]. */
-    fun evaluate(output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv): Verification {
+    fun evaluate(output: File, baseline: File, report: File, config: CompareConfig, env: BaselineEnv, html: Boolean = true): Verification {
         val run = Run(output)
         val stored = Stored(baseline)
         val unattributed = if (run.rendersNothing) listOf<Map<String, Any?>>(mapOf("message" to "The run rendered no screenshots")) else run.unattributed
@@ -254,7 +254,7 @@ object Baseline {
             val errors = entries.filter { it["status"] == "error" }.map { linkedMapOf("id" to it["id"], "message" to it["message"]) } + unattributed
             val listed = entries.map { it["id"] as String }.toSet()
             val v = Verification(entries, errors, unattributed, run.fingerprint, mismatches, local, (stray - listed).size, env, config.hash())
-            BaselineReport.write(v, report)
+            BaselineReport.write(v, report, html)
             return v
         } finally {
             pool.shutdownNow()
@@ -285,6 +285,7 @@ object Baseline {
         e["baseline"] = "images/baseline/$id.png"
         e["new"] = "images/new/$id.png"
         e["diff"] = "images/diff/$id.png"
+        e["canvasSize"] = listOf(diff.diffImage!!.width, diff.diffImage!!.height)
         diff.baselineSize?.let { e["baselineSize"] = it }
         diff.newSize?.let { e["newSize"] = it }
         write(File(report, "images/baseline/$id.png"), a)

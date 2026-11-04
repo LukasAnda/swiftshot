@@ -67,7 +67,7 @@ enum Command {
             let processEnv = ProcessInfo.processInfo.environment
             let code = try Baseline.verify(output: output, baseline: baseline, report: reportDir, config: CompareConfig.from(options),
                                            env: BaselineEnv.detect(cwd, env: processEnv), log: console, processEnv: processEnv,
-                                           out: json ? { FileHandle.standardError.write(Data(($0 + "\n").utf8)) } : { print($0) }, projectDir: cwd)
+                                           out: json ? { FileHandle.standardError.write(Data(($0 + "\n").utf8)) } : { print($0) }, projectDir: cwd, html: options.html)
             if json, let result = try? Data(contentsOf: reportDir.appendingPathComponent("result.json")) {
                 // A reader that closed early (`| head -1`) must not take the exit code along: no SIGPIPE, and a failed write is only logged.
                 signal(SIGPIPE, SIG_IGN)

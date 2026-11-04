@@ -82,7 +82,7 @@ private fun baselineCommand(o: Options, log: Log, stdout: PrintStream, render: (
     val json = o.json && o.command == "verify"
     return try {
         val code = Baseline.verify(output, baseline, report, CompareConfig.from(o), BaselineEnv.detect(File(o.projectDir), processEnv), log, processEnv,
-            out = if (json) System.err else System.out, projectDir = File(o.projectDir))
+            out = if (json) System.err else System.out, projectDir = File(o.projectDir), html = o.html)
         if (json) File(report, "result.json").takeIf { it.isFile }?.let { stdout.write(it.readBytes()); stdout.flush() }
         code
     } catch (e: Exception) {

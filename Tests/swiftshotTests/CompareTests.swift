@@ -28,6 +28,8 @@ final class CompareTests: XCTestCase {
         Shot(case: "split-run-android", id: "en-US/Pixel 9-Settings"),
         Shot(case: "device-mode", id: "en-US/iPhone 17 Pro-Glass", tolerance: Tolerance(maxChannelDelta: 1), scale: 3),
         Shot(case: "device-mode", id: "en-US/iPhone 17 Pro-Blur", tolerance: Tolerance(maxChannelDelta: 1), scale: 3),
+        Shot(case: "hostile-ids", id: "en-US/Pixel 9-<img src=x onerror=alert(1)>"),
+        Shot(case: "hostile-ids", id: "en-US/Pixel 9-one,two"),
     ]
 
     func entry(_ c: String, _ id: String) throws -> JSON {

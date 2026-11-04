@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="swiftshot" tests="2" failures="0" errors="1">
+  <testcase classname="android.Pixel 9.en-US" name="en-US/Pixel 9-Home"/>
+  <testcase classname="swiftshot" name="error 1">
+    <error message="&lt;img src=x onerror=alert(8)&gt;&#10;&quot;second line&quot; &amp; more"/>
+  </testcase>
+</testsuite>

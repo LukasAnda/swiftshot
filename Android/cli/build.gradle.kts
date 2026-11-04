@@ -29,5 +29,8 @@ tasks.jar {
 
 sourceSets.main { kotlin.srcDir("../shared") }
 
+// The report template, shared with the Swift CLI (which compiles it in).
+tasks.processResources { from(rootProject.file("../Shared/report.html")) }
+
 // The release version (make dist VERSION=…), read back by `swiftshot --version`.
 tasks.jar { manifest { attributes["Implementation-Version"] = (findProperty("swiftshot.version") ?: "dev").toString() } }

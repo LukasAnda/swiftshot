@@ -1,0 +1,71 @@
+{
+  "fingerprints": {
+    "a7af9e2d49a1": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "<img src=x onerror=alert(3)>",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "images": {
+    "en-US/Pixel 9-<img src=x onerror=alert(1)>": {
+      "appearance": "<svg onload=alert(2)>",
+      "device": "Pixel 9",
+      "fingerprint": "a7af9e2d49a1",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "<img src=x onerror=alert(1)>"
+    },
+    "en-US/Pixel 9-Broken": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "a7af9e2d49a1",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Broken"
+    },
+    "en-US/Pixel 9-Same <b>": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "a7af9e2d49a1",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": true,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Same <b>"
+    },
+    "en-US/Pixel 9-one,two": {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fingerprint": "a7af9e2d49a1",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "one,two"
+    },
+    "en-US/Pixel Tablet-Gone & <i>": {
+      "appearance": "light",
+      "device": "Pixel Tablet",
+      "fingerprint": "a7af9e2d49a1",
+      "fontScale": 1,
+      "language": "en-US",
+      "local": false,
+      "module": ":app",
+      "platform": "android",
+      "preview": "Gone & <i>"
+    }
+  },
+  "schema": 1
+}

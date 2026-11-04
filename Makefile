@@ -7,7 +7,7 @@ BUILD := .build/agent
 
 all: bin/swiftshot bin/SwiftshotAgent.dylib bin/SwiftshotAgent-watchOS.dylib bin/SwiftshotNoBoot.dylib bin/SwiftshotNoBoot-watchOS.dylib bin/swiftshot-simhost
 
-bin/swiftshot: Package.swift $(wildcard Sources/swiftshot/*.swift) Shared/JobModel.swift
+bin/swiftshot: Package.swift $(wildcard Sources/swiftshot/*.swift) Shared/JobModel.swift Shared/report.html
 	swift build -c release --product swiftshot
 	mkdir -p bin && rm -f bin/swiftshot && cp .build/release/swiftshot bin/swiftshot
 

@@ -2,9 +2,9 @@ package swiftshot.android
 
 import java.io.File
 
-/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, timings.json, and the console summary. */
+/** The report directory's files (docs/wiki/Baseline-format.md): result.json, manifest.json, junit.xml, summary.md, index.html, timings.json, and the console summary. */
 object BaselineReport {
-    private val files = listOf("result.json", "manifest.json", "junit.xml", "summary.md", "timings.json")
+    private val files = listOf("result.json", "manifest.json", "junit.xml", "summary.md", "index.html", "timings.json")
 
     /** Removes what an earlier verify wrote there (only its own files: the directory may be the user's). */
     fun clear(report: File) {
@@ -18,9 +18,24 @@ object BaselineReport {
         File(report, "timings.json").writeText(CanonicalJson.pretty(mapOf("compareSeconds" to Math.round(compareSeconds * 1000) / 1000.0)))
     }
 
-    fun write(v: Verification, report: File) {
+    /** The report template, from Shared/report.html (processResources). */
+    private val template: String by lazy {
+        BaselineReport::class.java.getResourceAsStream("/report.html")!!.use { String(it.readBytes(), Charsets.UTF_8) }
+    }
+
+    /** index.html: the template with result.json's exact bytes in it, each `<` as `\u003c`. */
+    fun page(resultJson: String): String {
+        val marker = "__SWIFTSHOT_RESULT_JSON__"
+        val at = template.indexOf(marker)
+        return template.substring(0, at) + resultJson.replace("<", "\\u003c") + template.substring(at + marker.length)
+    }
+
+    /** [html] false (`--no-html`): no index.html. */
+    fun write(v: Verification, report: File, html: Boolean = true) {
         report.mkdirs()
-        File(report, "result.json").writeText(CanonicalJson.pretty(result(v)))
+        val resultJson = CanonicalJson.pretty(result(v))
+        File(report, "result.json").writeText(resultJson)
+        if (html) File(report, "index.html").writeText(page(resultJson))
         File(report, "manifest.json").writeText(CanonicalJson.pretty(manifest(v)))
         File(report, "junit.xml").writeText(junit(v))
         File(report, "summary.md").writeText(Summary.markdown(v, v.env.ci))

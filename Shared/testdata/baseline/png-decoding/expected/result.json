@@ -38,6 +38,10 @@
           3
         ]
       ],
+      "canvasSize": [
+        40,
+        80
+      ],
       "device": "iPhone 17 Pro",
       "diff": "images/diff/en-US/iPhone 17 Pro-Rgb Changed.png",
       "id": "en-US/iPhone 17 Pro-Rgb Changed",

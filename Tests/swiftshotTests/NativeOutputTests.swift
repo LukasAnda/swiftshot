@@ -110,7 +110,7 @@ final class NativeOutputTests: XCTestCase {
         XCTAssertEqual(try text(tmp.appendingPathComponent("tests/swiftshot/test-info.json")), #"{"test-name":"swiftshot"}"#)
         let names = try zipNames(tmp.appendingPathComponent("deploy/swiftshot-report.zip"))
         XCTAssertEqual(names, names.sorted(by: utf8Less))
-        XCTAssertTrue(names.contains("manifest.json") && names.contains("summary.md") && names.contains("images/new/en-US/A.png"), "\(names)")
+        XCTAssertTrue(names.contains("manifest.json") && names.contains("summary.md") && names.contains("index.html") && names.contains("images/new/en-US/A.png"), "\(names)")
         XCTAssertFalse(names.contains { $0.hasPrefix("/") || $0.hasSuffix("/") })
     }
 

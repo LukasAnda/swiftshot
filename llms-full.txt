@@ -232,7 +232,7 @@ own: keys only iOS knows, such as `scheme`, are rejected.
 | `output_directory` | `screenshots` | |
 | `layout` | `swiftshot` | `fastlane`: `<locale>/images/phoneScreenshots/…` for `fastlane supply` |
 | `clear_previous_screenshots` | `false` | |
-| `html` | `true` | write `screenshots.html` |
+| `html` | `true` | write `screenshots.html`, and `index.html` in a verify report |
 | `full_length` | `false` | grow scrolling screens to their whole content |
 | `delay` | `0` | seconds to advance the clock before capture |
 | `system_ui` | `preview` | status and navigation bars: as `showSystemUi` says, `always`, `never` |
@@ -730,7 +730,7 @@ iOS:
 | `output_directory` | `screenshots` | |
 | `format` | `png` | `png`, `jpeg` |
 | `clear_previous_screenshots` | `false` | |
-| `html` | `true` | write `screenshots.html` |
+| `html` | `true` | write `screenshots.html`, and `index.html` in a verify report |
 | `status_bar` | `true` | draw the 9:41 status bar |
 | `delay` | `0` | seconds to wait before each capture |
 | `settle_frames` | `3` | run-loop frames to wait before capture |
@@ -847,7 +847,7 @@ so `fastlane deliver` uploads it unchanged.
 | `output_directory` | `screenshots` | |
 | `layout` | `swiftshot` | `swiftshot` or `fastlane` (below) |
 | `clear_previous_screenshots` | `false` | |
-| `html` | `true` | write `screenshots.html` |
+| `html` | `true` | write `screenshots.html`, and `index.html` in a verify report |
 | `system_ui` | `preview` | status bar and gesture handle: as `showSystemUi` says, `always`, `never` |
 | `frame` | `none` | `plain` or `none`, see [[Device frames]] |
 | `round_corners` | `black` | outside round watch screens: `black`, `transparent` |
@@ -1011,7 +1011,7 @@ OUTPUT
   --output <dir>                          Default: ./screenshots (fastlane/deliver layout: <dir>/<lang>/<device>-<preview>.png)
   --format png|jpeg                       Default: png
   --clear                                 Delete previous screenshots first
-  --no-html                               Do not write screenshots.html
+  --no-html                               Do not write screenshots.html, or index.html in a verify report
   --no-status-bar                         Leave out the system status bar (9:41, full battery), which is
                                           drawn like on a device by default
 
@@ -1136,7 +1136,7 @@ OUTPUT
   --output <dir>                        Default: screenshots
   --layout swiftshot|fastlane           fastlane: <output>/<locale>/images/<type>Screenshots
   --clear                               Delete existing screenshots first
-  --no-html                             Do not write screenshots.html
+  --no-html                             Do not write screenshots.html, or index.html in a verify report
   --full-length                         Grow scrolling screens to their whole content
   --delay <seconds>                     Advance the clock before capture (animations)
   --system-ui preview|always|never      Status and navigation bars (default: as the preview says)
@@ -1280,12 +1280,24 @@ stays as above.
 
 `verify --json` prints the report's `result.json` to stdout and exits with the same codes, see [[Command line]].
 
+## The report
+
+`verify` writes `<output_directory>-report/index.html` (`screenshots-report/index.html` by default).
+Open it: it lists what changed, was added or removed, and what failed, and shows each screenshot side by side with its baseline, on a slider, or
+as the differences. Tick what you want to keep and it builds the accept command, or on GitHub the
+comment to post. `j` and `k` move through the list; `1`, `2`, `3` switch the view. It needs no server
+and no network, so a downloaded report works too. `--no-html` leaves it out.
+
+On a pull request, the comment's **Full report** link goes to the CI build, where the report is kept:
+download it and open `index.html`. The comment's `Pixels` column is the share of the image that
+changed.
+
 ## Where files go
 
 ```
 screenshots/               what this run rendered (output_directory)
 screenshots-baseline/      the approved screenshots and baseline.json: commit this
-screenshots-report/        what verify found: result.json, junit.xml, images/
+screenshots-report/        what verify found: index.html, result.json, junit.xml, images/
 ```
 
 Change them with `baseline_directory` and `report_directory` in [[Configuration]], or
@@ -1396,6 +1408,9 @@ with `list` and `devices`, see [[Command line]]. The files `verify` writes are i
   come from that.
 
 A change you made on purpose is for a person to accept; a change you didn't is a bug to fix.
+
+The same folder has `index.html`, the report for a person to review. Point them at it instead of
+summarising images you can't compare.
 
 ## Accept
 
@@ -1675,7 +1690,8 @@ jobs:
 
 The action runs `swiftshot verify`, comments the result on the pull request, posts a `swiftshot`
 commit status, writes the summary and the annotations to the run, and uploads the report as the
-artifact `swiftshot-report`. Android and Compose: use `ubuntu-latest` and `actions/setup-java`.
+artifact `swiftshot-report`: download it and open `index.html`. The comment's **Full report** link
+goes to the run. Android and Compose: use `ubuntu-latest` and `actions/setup-java`.
 
 ## Accept
 
@@ -1686,10 +1702,14 @@ workflows run from there.
 # swiftshot-recipe: github-workflow docs/recipes/github/screenshots-accept.yml
 # Comment "/swiftshot accept" on a pull request to commit its new screenshots to the baseline.
 # Only people with write access can; pull requests from forks are refused.
-#   /swiftshot accept                 accepts every difference
-#   /swiftshot accept                 accepts only these, one id per line
+#   /swiftshot accept                 accepts every difference of the latest run
+#   /swiftshot accept <commit>        the same, but only if <commit> is the pull request's head
+#   /swiftshot accept <commit>        accepts only these, one id per line (the commit may be left out)
 #   en-US/Pixel 9-Home
 #   en-US/Pixel 9-Settings
+# The report's index.html writes the commit (the one it was rendered from, 7 to 64 hex digits, a
+# prefix is enough) so that a comment made from an old report is refused, not applied to a newer
+# push. After the command the first line holds nothing else: anything that isn't a commit is refused.
 # Save this file on the default branch (issue_comment workflows run from there) and keep the
 # runner and setup steps the same as in screenshots.yml, which must be saved under that file name
 # (this workflow looks up its runs by it). The verify at the end posts the "swiftshot" status on
@@ -1738,8 +1758,20 @@ jobs:
             *) refuse "@$ACTOR only people with write access can accept screenshots." ;;
           esac
 
+          # The first line may end in the commit the report was rendered from. It is only ever compared
+          # as text, never run or put in a command, and has to be hex before it is even shown.
+          token=$(printf '%s' "${first#"/swiftshot accept"}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          if [ -n "$token" ]; then
+            case "$token" in
+              *[!0-9a-fA-F]*) refuse "Nothing after \`/swiftshot accept\` on its first line may be anything but the commit of the report (7 or more hex digits). Put screenshot ids one per line below it." ;;
+            esac
+            [ "${#token}" -ge 7 ] && [ "${#token}" -le 64 ] || refuse "The commit after \`/swiftshot accept\` must be 7 to 64 hex digits."
+            token=$(printf '%s' "$token" | tr 'A-F' 'a-f')
+          fi
+
           pr=$(gh api "repos/$REPO/pulls/$PR")
           sha=$(jq -r .head.sha <<< "$pr")
+          [ -z "$token" ] || [[ "$sha" == "$token"* ]] || refuse "That report is out of date: it was rendered from ${token:0:7} and the pull request is now at ${sha:0:7}. Nothing was accepted. Open the report of the latest run and comment again."
           ref=$(jq -r .head.ref <<< "$pr")
           head_repo=$(jq -r '.head.repo.full_name // empty' <<< "$pr")
           [ "$head_repo" = "$REPO" ] || refuse "This pull request comes from a fork, so swiftshot can't push to it. Download the report and run \`swiftshot accept --from <report>\` in the fork."
@@ -1749,11 +1781,8 @@ jobs:
           url=$(gh api "repos/$REPO/actions/runs/$run/artifacts?name=swiftshot-report" --jq '[.artifacts[] | select(.expired == false)][0].archive_download_url // empty')
           [ -n "$url" ] || refuse "The report of the screenshots run for ${sha:0:7} is missing or expired. Push again to render a new one."
 
-          # The ids: text after the command on its first line, then one id per line (ids contain spaces).
+          # The ids: one per line after the first (ids contain spaces).
           ids=()
-          rest=${first#"/swiftshot accept"}
-          rest=$(printf '%s' "$rest" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-          [ -z "$rest" ] || ids+=("$rest")
           while IFS= read -r line; do
             line=$(printf '%s' "$line" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             [ -z "$line" ] || ids+=("$line")
@@ -1834,6 +1863,16 @@ per line below the command. The workflow checks that the commenter has write acc
 pull request is not from a fork and that the report is from the pull request's head, then pushes
 the new baseline to its branch and verifies it again.
 
+The report's `index.html` writes the comment for you, always with the commit it was rendered from
+on the first line: `/swiftshot accept <commit>`, then the ids one per line when you ticked only some.
+If that commit is no longer the pull request's head (someone pushed after the report was made), the
+workflow replies that the report is out of date and accepts nothing, so you never accept changes you
+have not seen. The commit is 7 to 64 hex digits and a prefix of the head is enough. A bare
+`/swiftshot accept`, as the pull request comment suggests, still accepts the latest run's changes.
+Nothing else may follow the command on its first line: the ids go on the lines below, and anything
+on the first line that is not a commit is refused. The commit is only compared as text; it never
+reaches a shell command.
+
 ## Comment
 
 `GITHUB_TOKEN` is enough: the `permissions` above give it `pull-requests: write` (the comment)
@@ -1886,7 +1925,8 @@ verify:
 ```
 
 A changed screenshot fails the job. `junit.xml` fills the merge request's test summary, `expose_as`
-links the report in the merge request, and `summary.md` is in the report folder.
+links the report in the merge request, and `summary.md` is in the report folder. Download the
+artifacts and open `index.html`; the comment's **Full report** link goes to the job.
 
 ## Accept
 
@@ -1976,7 +2016,8 @@ pipelines:
 
 A changed screenshot fails the step (`junit.xml` is copied to `test-results/` for the Tests tab).
 The after-script uploads the report to the repository's Downloads as
-`swiftshot-report-<commit>.zip`, because Bitbucket has no API for a pipeline's artifacts.
+`swiftshot-report-<commit>.zip`, because Bitbucket has no API for a pipeline's artifacts. Unzip it
+and open `index.html`; the comment's **Full report** link goes to the pipeline.
 
 ## Accept
 
@@ -2052,7 +2093,8 @@ workflows:
 
 Start it from a trigger on pull requests. `verify` writes `swiftshot-report.zip` to
 `$BITRISE_DEPLOY_DIR` and its test results to the Test Reports tab itself; the deploy step
-uploads both, also when verify failed.
+uploads both, also when verify failed. Unzip the report and open `index.html`; the comment's
+**Full report** link goes to the build.
 
 ## Accept
 
@@ -2144,7 +2186,8 @@ workflows:
 
 `test_report` shows the differences in the build's test results. The script zips the report before
 it exits with verify's exit code, so a build with differences fails and still has the zip.
-The workflow runs on pull request branches.
+The workflow runs on pull request branches. Unzip the report and open `index.html`; Codemagic gives
+no build URL, so the comment has no **Full report** link.
 
 ## Accept
 
@@ -2237,7 +2280,8 @@ jobs:
 ```
 
 A changed screenshot fails the job. `store_test_results` reads `junit.xml` from the report folder;
-`store_artifacts` keeps the images for the job's Artifacts tab.
+`store_artifacts` keeps the report for the job's Artifacts tab, where `index.html` opens it; the
+comment's **Full report** link goes to the job.
 
 ## Accept
 
@@ -2338,7 +2382,8 @@ stages:
 
 `verify` publishes the JUnit results and the summary to the run itself. Add a
 `PublishTestResults@2` task for `screenshots-report/junit.xml` only if you want it in your own
-test run. For Azure Repos, use a branch policy (build validation) instead of `pr:`.
+test run. For Azure Repos, use a branch policy (build validation) instead of `pr:`. Download the
+`swiftshot-report` artifact and open `index.html`; the comment's **Full report** link goes to the run.
 
 ## Accept
 
@@ -2441,6 +2486,10 @@ stage('Verify') {
 }
 ```
 
+`archiveArtifacts` keeps the report with the build, which the comment's **Full report** link goes to.
+Download it and open `index.html`: Jenkins's default Content-Security-Policy stops the page's script
+when it is viewed in place.
+
 ## Accept
 
 ```groovy
@@ -2521,7 +2570,7 @@ and the JVM CLI) follow this page exactly and are tested against the fixtures in
   result.json
   junit.xml
   summary.md
-  index.html
+  index.html                          the same result for people (see index.html); not with --no-html
   manifest.json
   timings.json                        {"compareSeconds": 0.25}: how long the comparison took
   images/baseline/<id>.png            changed and removed
@@ -2912,8 +2961,40 @@ Fixtures: `Shared/testdata/ci/` (one file per case) and the baseline case `ci-gi
   otherwise from the `images` entry (removed, and `error` ids not in `screenshots`); an `error` id
   in neither has only `id`, `status`, `message`. Present only when they apply: `message` (error),
   `reason`,
-  `pixels`, `boxes`, `baselineSize`, `newSize`, and the image paths (relative to the report
+  `pixels`, `boxes`, `canvasSize`, `baselineSize`, `newSize`, and the image paths (relative to the report
   directory, not URL-encoded): `baseline` (changed, removed), `new` (changed, added), `diff` (changed).
+- `canvasSize`: `[w, h]` of the canvas (see Comparison), on every `changed` entry; `pixels` of `w × h`
+  is the share that changed. Added without changing `schema`: it stays 1, because readers ignore
+  unknown keys and nothing in `accept` reads it.
+
+## index.html
+
+One page for people to read `result.json`: a list by status, the images side by side, on a slider or
+as the diff image, filters, and a tray that builds the accept text. It works from `file://` in a
+downloaded report: no network, no external files, and a Content-Security-Policy that allows only its
+own style and script.
+
+- The page is `Shared/report.html` with one change: `__SWIFTSHOT_RESULT_JSON__` is replaced by the bytes
+  of `result.json`, each `<` written as `\u003c`. So the file is the same from both implementations.
+  The Swift binary compiles the template in and the JVM jar has it as a resource; there are no copies.
+  `make.py` refreshes the policy's hashes, so run it after editing the template.
+- `--no-html` (`"html": false` in swiftshot.json) means no HTML from this run: neither
+  `screenshots.html` nor `index.html`. Everything else in the report stays.
+- Images are referenced only through the paths in `result.json`, each segment percent-encoded.
+- A row is ticked to accept it, and the tray builds the text: with `ci.provider` `github`, a `ci.pullRequest` that is not `null` and a `commit` (7 to 64 hex digits)
+  the comment: `/swiftshot accept <commit>` with the report's full `commit`, then, when only some rows
+  are ticked, the ids one per line. The recipe replies that the report is out of date, and accepts
+  nothing, when the commit is not a prefix of the pull request's head; a bare `/swiftshot accept`
+  typed by a person accepts the latest run. Otherwise (no pull request, no commit, another CI)
+  `swiftshot accept --from <report> --only "<id>,<id>"`,
+  single-quoted when an id has `$`, a backtick, `\`, `"` or `!`, with `--from` the page's own folder
+  when opened from `file://`. A list over 100,000 bytes is split into repeated `--only` flags (one
+  argument may not pass 128 KiB on Linux); over 400,000 bytes in all the tray warns and says to tick
+  fewer. The bare form appears only when every changed, added and removed row is
+  ticked. "Tick all" ticks only the rows the filters show, and says how many. A row can't be ticked when its id has a comma (`--only` and the comment recipe split or refuse
+  on it), a control character or line break, or starts or ends with white space (both trim it). The
+  bare form still accepts such a row.
+- `index.html` adds nothing that `accept` reads, and is in `swiftshot-report.zip` like every other file.
 
 ## manifest.json
 
@@ -3027,10 +3108,10 @@ text). UTF-8, `\n` line ends, one final `\n`. Blocks are separated by one blank 
 
 > **Note:** Baseline rendered differently: android host: baseline linux-x64, this run macos-arm64
 
-| Status | Screenshot |
-|---|---|
-| changed | `en-US/Pixel 9-Home` |
-| added | `en-US/Pixel 9-New` |
+| Status | Screenshot | Pixels |
+|---|---|---|
+| changed | `en-US/Pixel 9-Home` | 1.9% |
+| added | `en-US/Pixel 9-New` | |
 
 [Full report](https://github.com/acme/app/actions/runs/9876543210)
 
@@ -3044,9 +3125,15 @@ Comment `/swiftshot accept` on this pull request to accept every change, or put 
   <entry>`), then, when `localBaseline`, `Some baseline images were recorded outside CI (local);
   record or accept them on CI`. Omitted when empty.
 - Table: one row per `error`, `changed`, `added` or `removed` entry, in that status order, then by id
-  in UTF-8 byte order; at most 200 rows, then `| | …and <n> more |`. In an id, `|` is written `\|`
+  in UTF-8 byte order; at most 200 rows, then `| | …and <n> more | |`. In an id, `|` is written `\|`
   and a backtick `'`. Omitted when there are no rows. Errors without id have no row (see the counts).
-- `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table.
+- `Pixels`: for `changed` rows, `pixels` as a share of `canvasSize`; blank (`| |`) for other rows. In
+  integers, so both implementations agree: `<0.1%` when `pixels > 0` and `pixels · 1000 < w · h`; `>99.9%` when `pixels < w · h` and
+  `pixels · 1000 > w · h · 999` (so only a canvas that changed entirely reads `100.0%`); else
+  `t = (pixels · 2000 + w · h) / (2 · w · h)` (`/` truncates) written as `<t / 10>.<t % 10>%`. In the
+  table the cell is written `\>99.9%`, so Markdown shows the `>` literally; `index.html` shows `>99.9%`.
+- `[Full report](<ci.buildUrl>)`: when `ci.buildUrl` is set, for every status, after the table. It links
+  to the CI's build, where the report directory is kept: download it and open `index.html`.
 - Accept hint, `failed` only, last. By `ci.provider`; `null` or unknown gets the last text:
   - `github`: Comment `/swiftshot accept` on this pull request to accept every change, or put screenshot ids one per line below it to accept some.
   - `gitlab`: Run the manual `swiftshot-accept` job in this pipeline to accept the changes.
@@ -3488,7 +3575,7 @@ The output layout is the same, so `fastlane deliver` and `frameit` keep working.
 | `output_directory` | `output_directory` |
 | `clear_previous_screenshots` | `clear_previous_screenshots` |
 | `override_status_bar` | `status_bar` (on by default) |
-| `skip_open_summary` | `html: false` |
+| `skip_open_summary` | not needed, swiftshot never opens the summary (`html: false` is not the same: it removes the HTML files, `index.html` of a verify report too) |
 | `concurrent_simulators` | not needed |
 | `launch_arguments` | set state in the preview |
 | `erase_simulator`, `reinstall_app` | not needed |
@@ -3541,7 +3628,7 @@ With `"layout": "fastlane"`, the output is where `fastlane supply` uploads from:
 | `specific_device` | not needed |
 | `use_tests_in_classes`, `use_tests_in_packages` | `previews` or `screens` with `skip` |
 | `launch_arguments` | set state in the preview |
-| `skip_open_summary` | `html: false` |
+| `skip_open_summary` | not needed, swiftshot never opens the summary (`html: false` is not the same: it removes the HTML files, `index.html` of a verify report too) |
 | `use_timestamp_suffix` | not needed, names are stable |
 | `reinstall_app`, `exit_on_test_failure` | not needed |
 

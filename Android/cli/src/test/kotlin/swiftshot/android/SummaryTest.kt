@@ -38,19 +38,40 @@ class SummaryTest {
         val v = verification(listOf(e("added", "b"), e("removed", "a"), e("changed", "z|y`x"), e("error", "m", "boom"), e("added", "😀"), e("added", "～"), e("unchanged", "u")), ci("gitlab"))
         assertEquals(
             "<!-- swiftshot -->\n### Screenshot run had errors\n\n1 changed · 3 added · 1 removed · 1 errors · 1 unchanged\n\n" +
-                "| Status | Screenshot |\n|---|---|\n| error | `m` |\n| changed | `z\\|y'x` |\n| added | `b` |\n| added | `～` |\n| added | `😀` |\n| removed | `a` |\n",
+                "| Status | Screenshot | Pixels |\n|---|---|---|\n| error | `m` | |\n| changed | `z\\|y'x` | |\n| added | `b` | |\n| added | `～` | |\n| added | `😀` | |\n| removed | `a` | |\n",
             Summary.markdown(v, ci("gitlab")))
+    }
+
+    @Test fun pixelsColumnIsAPercentageForChangedRowsOnly() {
+        val changed = e("changed", "a") + mapOf("pixels" to 62L, "canvasSize" to listOf(40L, 80L))
+        val text = Summary.markdown(verification(listOf(changed, e("added", "b"))), null)
+        assertTrue("| changed | `a` | 1.9% |\n| added | `b` | |\n" in text, text)
+    }
+
+    @Test fun almostEverythingChangedNeverReadsAsAll() {
+        val changed = e("changed", "a") + mapOf("pixels" to 1999L, "canvasSize" to listOf(40L, 50L))
+        val text = Summary.markdown(verification(listOf(changed)), null)
+        assertTrue("| changed | `a` | \\>99.9% |\n" in text, text)
+    }
+
+    @Test fun percentIsIntegerMathRoundedHalfUp() {
+        for ((pixels, total, want) in listOf(Triple(0L, 1000L, "0.0%"), Triple(1L, 1001L, "<0.1%"), Triple(1L, 2000L, "<0.1%"), Triple(1L, 1000L, "0.1%"), Triple(3L, 2000L, "0.2%"),
+            Triple(149L, 1000L, "14.9%"), Triple(999L, 1000L, "99.9%"), Triple(1999L, 2000L, ">99.9%"), Triple(9990L, 10000L, "99.9%"), Triple(9991L, 10000L, ">99.9%"), Triple(1L, 1L, "100.0%"))) {
+            assertEquals(want, Summary.percent(pixels, total), "$pixels/$total")
+        }
+        // Far beyond what floats keep exact.
+        assertEquals("33.3%", Summary.percent(1L shl 40, 3L shl 40))
     }
 
     @Test fun entriesWithoutAStringIdAreSkipped() {
         val v = verification(listOf(e("added", "b"), mapOf("status" to "added"), mapOf("id" to 3L, "status" to "changed")))
-        assertEquals(listOf("added" to "b"), Summary.rows(v))
+        assertEquals(listOf(Triple("added", "b", "")), Summary.rows(v))
     }
 
     @Test fun failedHintFollowsTheFullReportLink() {
         val c = ci("github", "https://example.com/run/1")
         val text = Summary.markdown(verification(listOf(e("added", "a")), c), c)
-        assertTrue(text.endsWith("| added | `a` |\n\n[Full report](https://example.com/run/1)\n\n${Summary.acceptHint("github")}\n"), text)
+        assertTrue(text.endsWith("| added | `a` | |\n\n[Full report](https://example.com/run/1)\n\n${Summary.acceptHint("github")}\n"), text)
         val passed = Summary.markdown(verification(listOf(e("unchanged", "a")), c), c)
         assertTrue(passed.endsWith("1 unchanged\n\n[Full report](https://example.com/run/1)\n"), passed)
     }
@@ -62,7 +83,7 @@ class SummaryTest {
 
     @Test fun manyRowsAreCappedAtTwoHundredAndSixtyThousandBytes() {
         val few = Summary.markdown(verification((1..250).map { e("added", "id%03d".format(it)) }), null)
-        assertTrue("| added | `id200` |" in few && "id201" !in few && "| | …and 50 more |" in few, few)
+        assertTrue("| added | `id200` | |" in few && "id201" !in few && "| | …and 50 more | |" in few, few)
         val long = "x".repeat(400)
         val text = Summary.markdown(verification((1..300).map { e("added", "%s%03d".format(long, it)) }), null)
         assertTrue(text.toByteArray().size <= 60_000, "${text.toByteArray().size}")

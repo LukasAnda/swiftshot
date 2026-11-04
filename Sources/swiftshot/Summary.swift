@@ -35,11 +35,27 @@ enum Summary {
         return "\(c["changed"]!) changed · \(c["added"]!) added · \(c["removed"]!) removed · \(c["errors"]!) errors · \(c["unchanged"]!) unchanged"
     }
 
-    /// The rows a run has to show, as (status, id): errors, changed, added, removed; each by id in UTF-8 byte order.
-    static func rows(_ v: Verification) -> [(status: String, id: String)] {
-        v.entries.compactMap { e -> (status: String, id: String)? in
+    /// The share of the canvas that differs: integers only, one decimal rounded half up; `<0.1%` above zero but below 0.1, `>99.9%` below the whole canvas but above 99.9.
+    static func percent(pixels: Int64, total: Int64) -> String {
+        guard total > 0 else { return "" }
+        if pixels > 0 && pixels * 1000 < total { return "<0.1%" }
+        if pixels < total && pixels * 1000 > total * 999 { return ">99.9%" }
+        let tenths = (pixels * 2000 + total) / (2 * total)
+        return "\(tenths / 10).\(tenths % 10)%"
+    }
+
+    /// The Pixels cell of an entry: a changed one's percentage, blank otherwise.
+    private static func pixels(_ e: [String: JSON]) -> String {
+        guard e["status"] == .string("changed"), let p = e["pixels"]?.number, let c = e["canvasSize"]?.array, c.count == 2,
+              let w = c[0].number, let h = c[1].number else { return "" }
+        return percent(pixels: Int64(p), total: Int64(w) * Int64(h))
+    }
+
+    /// The rows a run has to show, as (status, id, Pixels cell): errors, changed, added, removed; each by id in UTF-8 byte order.
+    static func rows(_ v: Verification) -> [(status: String, id: String, pixels: String)] {
+        v.entries.compactMap { e -> (status: String, id: String, pixels: String)? in
             guard let s = e["status"]?.string, order.contains(s), let id = e["id"]?.string else { return nil }
-            return (s, id)
+            return (s, id, pixels(e))
         }.sorted { a, b in
             let (x, y) = (order.firstIndex(of: a.status)!, order.firstIndex(of: b.status)!)
             return x != y ? x < y : utf8Less(a.id, b.id)
@@ -58,9 +74,9 @@ enum Summary {
             var blocks = ["\(marker)\n### \(heading(v.status))", counts(v)]
             if !notes.isEmpty { blocks.append(notes.joined(separator: "\n")) }
             if !rows.isEmpty {
-                var lines = ["| Status | Screenshot |", "|---|---|"]
-                for r in rows.prefix(shown) { lines.append("| \(r.status) | `\(r.id.replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "`", with: "'"))` |") }
-                if shown < rows.count { lines.append("| | …and \(rows.count - shown) more |") }
+                var lines = ["| Status | Screenshot | Pixels |", "|---|---|---|"]
+                for r in rows.prefix(shown) { lines.append("| \(r.status) | `\(r.id.replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "`", with: "'"))` |\(r.pixels.isEmpty ? "" : " \(r.pixels.replacingOccurrences(of: ">", with: "\\>"))") |") }
+                if shown < rows.count { lines.append("| | …and \(rows.count - shown) more | |") }
                 blocks.append(lines.joined(separator: "\n"))
             }
             blocks += tail

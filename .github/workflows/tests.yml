@@ -125,6 +125,8 @@ jobs:
         run: nproc; lscpu | grep "Model name"; free -g; java -version; echo "ANDROID_HOME=$ANDROID_HOME"
       - name: Android unit tests
         run: cd Android && ./gradlew --no-daemon -q :cli:test
+      - name: index.html in a real browser
+        run: python3 -I Android/ci/report-browser.py
       - name: Integration (render, sizes, determinism, budget)
         run: Android/ci/integration.sh "$RUNNER_TEMP/android-it"
       - name: Migration (init, then render the tested previews at the tests' sizes)

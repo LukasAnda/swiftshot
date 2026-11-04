@@ -28,7 +28,8 @@ workflows:
 
 Start it from a trigger on pull requests. `verify` writes `swiftshot-report.zip` to
 `$BITRISE_DEPLOY_DIR` and its test results to the Test Reports tab itself; the deploy step
-uploads both, also when verify failed.
+uploads both, also when verify failed. Unzip the report and open `index.html`; the comment's
+**Full report** link goes to the build.
 
 ## Accept
 

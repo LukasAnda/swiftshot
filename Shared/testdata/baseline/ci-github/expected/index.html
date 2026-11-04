@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; style-src 'sha256-c2gz3CqqJu57XSbP9CkwaX0XZ7yws2K5EGHx2KeXCo4='; script-src 'sha256-KTwe6ISNewmdQVeyjBFVoRJCYQs27BSyAX4xKfE5CsI='; base-uri 'none'; form-action 'none'">
+<title>Swiftshot report</title>
+<style>
+:root{--chrome:#ececec;--panel:#f7f7f7;--ink:#1a1a1a;--soft:#5e5e5e;--line:#d0d0d0;--stage:#808080;--diff:#ff00b4;--added:#0a7040;--removed:#6a6a6a;--error:#c01818;--sel:#fff;--code:#e2e2e2}
+@media (prefers-color-scheme:dark){:root{--chrome:#232323;--panel:#2b2b2b;--ink:#efefef;--soft:#a8a8a8;--line:#3f3f3f;--added:#48c088;--removed:#a0a0a0;--error:#ff7a7a;--sel:#3a3a3a;--code:#1b1b1b}}
+*{box-sizing:border-box}html,body{height:100%}[hidden]{display:none!important}
+body{margin:0;background:var(--chrome);color:var(--ink);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif}
+code,.id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+button,select{font:inherit;color:inherit}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--diff);outline-offset:1px}
+#report{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr auto;height:100vh}
+header{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;padding:14px 16px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em}
+.meta{color:var(--soft);font-size:13px;overflow-wrap:anywhere}
+.filters{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filters select{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:3px 4px;max-width:150px}
+.filters label{display:flex;gap:5px;align-items:center;font-size:13px}
+#notes{max-height:25vh;overflow:auto;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);font-size:13px}
+.note{overflow-wrap:anywhere}.note.bad{color:var(--error);font-weight:600;white-space:pre-wrap}
+main{display:grid;grid-template-columns:320px minmax(0,1fr);min-height:0}
+nav{overflow:auto;border-right:1px solid var(--line);background:var(--panel)}
+nav h2{margin:0;padding:12px 12px 4px;font-size:13px;font-weight:650;color:var(--soft)}
+nav p{margin:0;padding:12px;color:var(--soft)}
+.row{display:grid;grid-template-columns:22px 40px 1fr;gap:8px;align-items:center;padding:7px 12px;border-left:3px solid transparent;cursor:pointer;content-visibility:auto;contain-intrinsic-size:auto 80px}
+.row:hover{background:var(--sel)}.row[aria-current=true]{background:var(--sel);border-left-color:var(--ink)}
+.row img{width:40px;height:66px;object-fit:cover;object-position:top;border-radius:3px;display:block;background:var(--stage)}
+.noimg{width:40px;height:66px;border:1px dashed var(--error);border-radius:3px}
+.name{font-weight:600;overflow-wrap:anywhere}.sub{color:var(--soft);font-size:12px;overflow-wrap:anywhere}
+.px{font-size:12px;color:var(--soft)}.why{font-size:12px;color:var(--error)}
+#stagewrap{display:grid;grid-template-rows:auto 1fr;min-height:0;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.bar .id{overflow-wrap:anywhere}
+#cur{min-width:0}
+.modes{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-left:auto}
+.modes button{background:var(--panel);border:0;border-left:1px solid var(--line);padding:4px 12px;cursor:pointer}.modes button:first-child{border-left:0}.modes button[aria-pressed=true]{background:var(--ink);color:var(--chrome)}
+#stage{background:var(--stage);overflow:auto;display:flex;justify-content:flex-start;align-items:flex-start;gap:32px;padding:24px;container-type:size}
+#stage>:first-child{margin-left:auto}#stage>:last-child{margin-right:auto}
+figure{margin:0;flex:none;position:relative}figcaption{color:#fff;font-size:13px;margin-bottom:6px}
+.shot{position:relative;display:block;height:calc(100vh - 262px);height:calc(100cqh - 24px);min-height:320px;aspect-ratio:var(--ar)}
+.shot img{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+.clip{position:absolute;inset:0}
+.free{aspect-ratio:auto}.free img{position:static;width:auto}
+.mark{position:absolute;pointer-events:none;--c:var(--diff);--l:14px;background:
+linear-gradient(var(--c),var(--c)) 0 0/var(--l) 2px,linear-gradient(var(--c),var(--c)) 0 0/2px var(--l),
+linear-gradient(var(--c),var(--c)) 100% 0/var(--l) 2px,linear-gradient(var(--c),var(--c)) 100% 0/2px var(--l),
+linear-gradient(var(--c),var(--c)) 0 100%/var(--l) 2px,linear-gradient(var(--c),var(--c)) 0 100%/2px var(--l),
+linear-gradient(var(--c),var(--c)) 100% 100%/var(--l) 2px,linear-gradient(var(--c),var(--c)) 100% 100%/2px var(--l);background-repeat:no-repeat}
+.handle{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 0 1px #0006;pointer-events:none}
+.handle::after{content:"";position:absolute;top:50%;left:-9px;width:20px;height:20px;margin-top:-10px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0006}
+input[type=range].sl{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
+.msg{background:var(--panel);padding:16px;border-radius:6px;max-width:560px;align-self:center;overflow-wrap:anywhere}.msg h3{margin:0 0 6px;font-size:15px}.msg pre{margin:8px 0 0;white-space:pre-wrap;font:12px ui-monospace,Menlo,monospace}
+#tray{display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel)}
+#tray pre{margin:0;padding:7px 10px;background:var(--code);border-radius:5px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:78px;overflow:auto}
+#copy{background:var(--ink);color:var(--chrome);border:0;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600}
+#copy:disabled{opacity:.4;cursor:default}
+#tickall{background:none;border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
+@media (max-width:760px){main{grid-template-columns:minmax(0,1fr);grid-template-rows:38vh 1fr}nav{border-right:0;border-bottom:1px solid var(--line)}#report{height:auto;min-height:100vh}.filters{margin-left:0}#tray{grid-template-columns:1fr}.shot{height:auto;min-height:0;width:min(80vw,380px)}.free img{width:100%;height:auto}#stage{container-type:normal}#stage>:first-child,#stage>:last-child{margin:0}}
+@media (prefers-reduced-motion:no-preference){.row{transition:background .08s}}
+</style></head><body>
+<div id="report">
+<div>
+<header>
+<h1 id="verdict"></h1>
+<span class="meta" id="meta"></span>
+<div class="filters">
+<select id="fPlatform" aria-label="Platform" hidden></select><select id="fDevice" aria-label="Device" hidden></select><select id="fLang" aria-label="Language" hidden></select><select id="fApp" aria-label="Appearance" hidden></select><select id="fStatus" aria-label="Status" hidden></select>
+<label id="showAllLabel" hidden><input type="checkbox" id="showAll"> <span id="showAllText"></span></label>
+</div>
+</header>
+<div id="notes" hidden></div>
+</div>
+<main><nav id="list" aria-label="Screenshots"></nav>
+<div id="stagewrap"><div class="bar"><span id="cur"></span><div class="modes" id="modes" role="group" aria-label="Comparison"><button data-m="side" aria-pressed="true">Side by side</button><button data-m="slider" aria-pressed="false">Slider</button><button data-m="diff" aria-pressed="false">Differences</button></div></div>
+<div id="stage"></div></div></main>
+<div id="tray" hidden><strong id="count"></strong><pre id="cmd"></pre><button id="tickall"></button><button id="copy">Copy</button></div>
+</div>
+<script type="application/json" id="data">{
+  "branch": "feature/x",
+  "ci": {
+    "buildUrl": "https://github.com/acme/app/actions/runs/9876543210",
+    "provider": "github",
+    "pullRequest": "7"
+  },
+  "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "counts": {
+    "added": 0,
+    "changed": 0,
+    "errors": 0,
+    "removed": 0,
+    "unchanged": 1
+  },
+  "errors": [],
+  "fingerprint": {
+    "android": {
+      "compose": "1.9.0",
+      "host": "linux-x64",
+      "jdk": "21.0.8",
+      "layoutlib": "16.0.1",
+      "mode": "headless",
+      "platform": "android",
+      "swiftshot": "1.0.0-test"
+    }
+  },
+  "fingerprintMismatch": [],
+  "host": "linux-x64",
+  "localBaseline": false,
+  "schema": 1,
+  "screenshots": [
+    {
+      "appearance": "light",
+      "device": "Pixel 9",
+      "fontScale": 1,
+      "id": "en-US/Pixel 9-Home",
+      "language": "en-US",
+      "module": ":app",
+      "platform": "android",
+      "preview": "Home",
+      "status": "unchanged"
+    }
+  ],
+  "status": "passed",
+  "strayBaselineFiles": 0,
+  "version": "1.0.0-test"
+}
+</script>
+<script>
+"use strict";
+(function(){
+const R=JSON.parse(document.getElementById("data").textContent);
+const ORDER=["error","changed","added","removed","unchanged"],TITLE={error:"Errors",changed:"Changed",added:"Added",removed:"Removed",unchanged:"Unchanged"};
+const $=id=>document.getElementById(id);
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+const plural=(n,w)=>n+" "+w+(n==1?"":"s");
+const counts=R.counts||{},shots=Array.isArray(R.screenshots)?R.screenshots:[],unattributed=(R.errors||[]).filter(e=>e.id==null);
+const groups=new Map(ORDER.map(s=>[s,[]]));
+for(const s of shots){const g=groups.get(s.status);if(g)g.push(s)}
+const all=ORDER.flatMap(s=>groups.get(s));
+const distinct=key=>{const v=new Set();for(const s of all)if(s[key]!=null)v.add(s[key]);return v};
+const SEVERAL={platform:distinct("platform").size>1,module:distinct("module").size>1,runtime:distinct("runtime").size>1};
+
+/* Accept: the ids both the comment recipe and --only can carry (see docs/wiki/Baseline-format.md, index.html). */
+function whyNot(id){
+ if(id.includes(","))return "Can't be ticked: accept splits ids on commas.";
+ if(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(id))return "Can't be ticked: its id has a line break or control character.";
+ if(/^\s|\s$/.test(id))return "Can't be ticked: its id starts or ends with a space.";
+ return null;
+}
+const acceptable=all.filter(s=>s.status=="changed"||s.status=="added"||s.status=="removed");
+const selectable=acceptable.filter(s=>!whyNot(s.id)),selectableSet=new Set(selectable);
+const picked=new Set();
+/* The comment names the commit it was built from, so the recipe can refuse a report that is out of date. */
+const commit=typeof R.commit=="string"&&/^[0-9a-fA-F]{7,64}$/.test(R.commit)?R.commit:null;
+const github=!!R.ci&&R.ci.provider=="github"&&R.ci.pullRequest!=null&&commit!=null;
+const single=s=>"'"+s.replace(/'/g,"'\\''")+"'";
+function fromArg(){
+ if(location.protocol!="file:")return "<report>";
+ let dir;
+ try{dir=decodeURIComponent(location.pathname)}catch(e){return "<report>"}
+ dir=dir.replace(/\/[^\/]*$/,"").replace(/^\/([A-Za-z]:)/,"$1");
+ return /^[A-Za-z0-9_\/.:=@+-]+$/.test(dir)?dir:single(dir);
+}
+/* --only is repeatable: one argument may not pass 128 KiB on Linux, so long lists are split; the whole line stays below LINE. */
+const ARG=100000,LINE=400000,bytes=s=>new TextEncoder().encode(s).length;
+let tooLong=false;
+function chunks(ids){
+ const out=[];let cur=[],n=0;
+ for(const id of ids){
+  const b=bytes(id)+1;
+  if(cur.length&&n+b>ARG){out.push(cur);cur=[];n=0}
+  cur.push(id);n+=b;
+ }
+ if(cur.length)out.push(cur);
+ return out;
+}
+function acceptText(ticked){
+ const every=ticked.length==acceptable.length,ids=ticked.map(s=>s.id);
+ tooLong=false;
+ if(github){const head="/swiftshot accept "+commit;return every?head:head+"\n"+ids.join("\n")}
+ const base="swiftshot accept --from "+fromArg();
+ if(every)return base;
+ const text=base+chunks(ids).map(c=>{const list=c.join(",");return " --only "+(/[$`\\"!]/.test(list)?single(list):'"'+list+'"')}).join("");
+ tooLong=bytes(text)>LINE;
+ return text;
+}
+const shown=()=>vis.filter(s=>selectableSet.has(s));
+function tray(){
+ tooLong=false;
+ const ticked=selectable.filter(s=>picked.has(s)),text=ticked.length?acceptText(ticked):"Tick the screenshots you want to accept. The "+(github?"comment to post":"command to run")+" appears here.";
+ $("count").textContent="Accept "+ticked.length+" of "+selectable.length+(github&&text.length>65536?" (too long for one comment: tick fewer)":"")+(tooLong?" (too long to run as one command: tick fewer)":"");
+ $("copy").disabled=!ticked.length;
+ $("cmd").textContent=text;
+ const sh=shown(),on=sh.some(s=>!picked.has(s)),whole=sh.length==selectable.length;
+ $("tickall").textContent=(on?"Tick ":"Untick ")+(whole?"all ":"")+sh.length+(whole?"":" shown");
+ $("tickall").hidden=sh.length<2;
+}
+function tickAll(){
+ const sh=shown(),on=sh.some(s=>!picked.has(s));
+ for(const s of sh){if(on)picked.add(s);else picked.delete(s);if(s._box)s._box.checked=on}
+ tray();
+}
+function label(t){const c=$("copy");c.textContent=t;setTimeout(()=>{c.textContent="Copy"},1600)}
+function selectTray(){const r=document.createRange();r.selectNodeContents($("cmd"));const g=getSelection();g.removeAllRanges();g.addRange(r);label("Selected: copy it")}
+function copy(){
+ const c=navigator.clipboard;
+ if(c&&c.writeText)c.writeText($("cmd").textContent).then(()=>label("Copied"),selectTray);else selectTray();
+}
+
+/* Image paths are relative to the report and never URL-encoded in result.json. */
+function url(p){
+ if(typeof p!="string"||!p.startsWith("images/"))return null;
+ const parts=p.split("/");
+ if(parts.some(x=>x==""||x=="."||x==".."))return null;
+ try{return parts.map(encodeURIComponent).join("/")}catch(e){return null}
+}
+/* The same integer rounding as summary.md's Pixels column. */
+function percent(s){
+ const c=s.canvasSize;if(!c)return "";
+ const t=c[0]*c[1],p=s.pixels;if(!(t>0))return "";
+ if(p>0&&p*1000<t)return "<0.1%";
+ if(p<t&&p*1000>t*999)return ">99.9%";
+ const tenths=Math.floor((p*2000+t)/(2*t));
+ return Math.floor(tenths/10)+"."+tenths%10+"%";
+}
+function pixelText(s){
+ if(s.status=="unchanged")return s.reason=="tolerance"?plural(s.pixels,"pixel")+" within tolerance":"";
+ if(s.status!="changed")return "";
+ const t=Number(s.pixels).toLocaleString("en-US")+(s.pixels==1?" pixel":" pixels")+" ("+percent(s)+")";
+ if(s.reason=="size"&&s.baselineSize&&s.newSize)return t+", size "+s.baselineSize.join("\u00d7")+" to "+s.newSize.join("\u00d7");
+ return t;
+}
+
+/* The list: rows are built once and kept, so filters and j/k never rebuild them. */
+const list=$("list"),rowShot=new WeakMap();
+let vis=[],cur=null,mode="side",pos=50;
+function subText(s){
+ const a=[];
+ if(SEVERAL.platform&&s.platform)a.push(s.platform);
+ if(SEVERAL.module&&s.module)a.push(s.module);
+ if(s.device)a.push(s.device);
+ if(s.language)a.push(s.language);
+ if(s.appearance)a.push(s.appearance);
+ if(s.textSize&&s.textSize!="default")a.push(s.textSize);
+ if(s.fontScale!=null&&s.fontScale!=1)a.push(s.fontScale+"x");
+ if(SEVERAL.runtime&&s.runtime)a.push(s.runtime);
+ return a.join(", ");
+}
+function row(s){
+ if(s._row)return s._row;
+ const r=el("div","row");r.tabIndex=0;r.dataset.status=s.status;r.setAttribute("aria-current","false");rowShot.set(r,s);
+ const tick=el("span");
+ if(s.status=="changed"||s.status=="added"||s.status=="removed"){
+  if(!whyNot(s.id)){const c=el("input");c.type="checkbox";c.setAttribute("aria-label","Accept "+s.id);c.checked=picked.has(s);tick.append(c);s._box=c}
+ }
+ r.append(tick);
+ const thumb=url(s.new||s.baseline);
+ if(thumb){const i=el("img");i.loading="lazy";i.decoding="async";i.alt="";i.src=thumb;r.append(i)}
+ else r.append(s.status=="error"?el("div","noimg"):el("span"));
+ const d=el("div");
+ d.append(el("div","name",s.preview!=null?s.preview:s.id.slice(s.id.lastIndexOf("/")+1)));
+ const sub=subText(s);if(sub)d.append(el("div","sub",sub));
+ const px=pixelText(s);if(px)d.append(el("div","px",px));
+ if(tick.childElementCount==0&&s.status!="error"&&s.status!="unchanged")d.append(el("div","why",whyNot(s.id)));
+ r.append(d);
+ s._row=r;
+ return r;
+}
+const filters=[["fPlatform","platform","platforms"],["fDevice","device","devices"],["fLang","language","languages"],["fApp","appearance","appearances"],["fStatus","status","statuses"]];
+function filled(){
+ for(const [sel,key,word] of filters){
+  const e=$(sel),v=key=="status"?ORDER.filter(s=>groups.get(s).length):[...distinct(key)];
+  if(v.length<2)continue;
+  e.hidden=false;
+  e.append(el("option",null,"All "+word));e.firstChild.value="";
+  for(const x of v){const o=el("option",null,key=="status"?TITLE[x]:x);o.value=x;e.append(o)}
+  e.onchange=draw;
+ }
+}
+function matches(){
+ const want=filters.map(([sel,key])=>[key,$(sel).value]).filter(f=>f[1]!=="");
+ const showAll=$("showAll").checked||want.some(f=>f[0]=="status"&&f[1]=="unchanged");
+ return [s=>(s.status!="unchanged"||showAll)&&want.every(f=>s[f[0]]===f[1]),want.length>0];
+}
+function setCur(s,scroll){
+ if(cur&&cur._row)cur._row.setAttribute("aria-current","false");
+ cur=s;
+ if(s){row(s).setAttribute("aria-current","true");if(scroll)s._row.scrollIntoView({block:"nearest"})}
+ stage();
+}
+let filtering=false;
+function draw(){
+ const [match,active]=matches();filtering=active;
+ vis=all.filter(match);
+ const frag=document.createDocumentFragment(),n={};
+ for(const s of vis)n[s.status]=(n[s.status]||0)+1;
+ let last=null;
+ vis.forEach((s,i)=>{
+  s._i=i;
+  if(s.status!=last){frag.append(el("h2",null,TITLE[s.status]+" ("+n[s.status]+")"));last=s.status}
+  frag.append(row(s));
+ });
+ if(!vis.length)frag.append(el("p",null,filtering?"Nothing matches these filters.":"Nothing needs a look."));
+ list.replaceChildren(frag);
+ const stay=cur&&vis[cur._i]===cur;
+ if(!stay)setCur(vis.find(s=>s.status=="changed")||vis[0]||null,false);
+ tray();
+}
+
+/* The stage. */
+function msg(title,text,pre){const m=el("div","msg");m.append(el("h3",null,title),document.createTextNode(text));if(pre!=null)m.append(el("pre",null,pre));return m}
+function fig(label,e){const f=el("figure");f.append(el("figcaption",null,label),e);return f}
+function pic(path,alt,size,canvas){
+ const i=el("img");i.alt=alt;const u=url(path);if(u)i.src=u;
+ if(size&&canvas){i.style.width=size[0]/canvas[0]*100+"%";i.style.height=size[1]/canvas[1]*100+"%"}
+ return i;
+}
+/* A changed screenshot's stage is canvas-shaped; each image sits at the top left at its own size. */
+function shot(s){const w=el("div","shot");w.style.setProperty("--ar",s.canvasSize[0]+"/"+s.canvasSize[1]);return w}
+function mark(s){
+ const b=s.boxes,c=s.canvasSize;
+ if(!b||!b.length)return null;
+ let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+ for(const r of b){x0=Math.min(x0,r[0]);y0=Math.min(y0,r[1]);x1=Math.max(x1,r[0]+r[2]);y1=Math.max(y1,r[1]+r[3])}
+ const m=el("div","mark"),P=1.2;
+ m.style.left=x0/c[0]*100-P+"%";m.style.top=y0/c[1]*100-P/2+"%";
+ m.style.width=(x1-x0)/c[0]*100+2*P+"%";m.style.height=(y1-y0)/c[1]*100+P+"%";
+ return m;
+}
+function framed(s,img){const w=shot(s);w.append(img);const m=mark(s);if(m)w.append(m);return w}
+function stage(){
+ const st=$("stage"),s=cur;
+ st.replaceChildren();$("cur").replaceChildren();
+ $("modes").style.visibility=s&&s.status=="changed"?"visible":"hidden";
+ if(!s){
+  if(filtering)st.append(msg("Nothing matches these filters","Clear a filter to see more screenshots."));
+  else if(unattributed.length)st.append(msg("This run has errors","They are listed above; there is nothing to compare."));
+  else st.append(msg("Nothing needs a look",R.status=="passed"?verdict():""));
+  return;
+ }
+ $("cur").append(el("span","id",s.id));
+ const px=pixelText(s);if(px)$("cur").append(" ",el("span","px",px));
+ const baseSize=s.baselineSize||s.canvasSize,newSize=s.newSize||s.canvasSize;
+ if(s.status=="error")st.append(msg("This screenshot has an error","Fix it and run again. There is nothing to accept.",s.message));
+ else if(s.status=="unchanged")st.append(msg("Same as the baseline",s.reason=="tolerance"?"It differs by "+plural(s.pixels,"pixel")+", within the tolerance. The report keeps no image for it.":"The report keeps no image for it."));
+ else if(s.status=="added"){const w=el("div","shot free");w.append(pic(s.new,"New"));st.append(fig("New, not in the baseline",w))}
+ else if(s.status=="removed"){const w=el("div","shot free");w.append(pic(s.baseline,"Baseline"));st.append(fig("In the baseline, not rendered in this run",w))}
+ else if(mode=="side")st.append(fig("Baseline",framed(s,pic(s.baseline,"Baseline",baseSize,s.canvasSize))),fig("New",framed(s,pic(s.new,"New",newSize,s.canvasSize))));
+ else if(mode=="diff")st.append(fig("Changed pixels in red",framed(s,pic(s.diff,"Changed pixels",null,null))));
+ else{
+  const w=shot(s),top=el("div","clip"),h=el("div","handle"),r=el("input","sl");
+  w.append(pic(s.baseline,"Baseline",baseSize,s.canvasSize));
+  top.append(pic(s.new,"New",newSize,s.canvasSize));top.style.clipPath="inset(0 0 0 "+pos+"%)";
+  h.style.left=pos+"%";
+  r.type="range";r.min=0;r.max=100;r.step=.1;r.value=pos;r.setAttribute("aria-label","Position between baseline and new");
+  r.oninput=()=>{pos=+r.value;top.style.clipPath="inset(0 0 0 "+pos+"%)";h.style.left=pos+"%"};
+  w.append(top,h,r);st.append(fig("Baseline on the left, new on the right",w));
+ }
+}
+function setMode(m){
+ mode=m;
+ for(const b of $("modes").children)b.setAttribute("aria-pressed",b.dataset.m==m);
+ stage();
+}
+
+/* The header. */
+function verdict(){
+ const c=counts,rowErrors=(c.errors||0)-unattributed.length,need=(c.changed||0)+(c.added||0)+(c.removed||0)+rowErrors;
+ if(R.status=="passed")return c.unchanged?(c.unchanged==1?"The screenshot matches the baseline":"All "+c.unchanged+" screenshots match the baseline"):"No screenshots differ from the baseline";
+ const parts=[];
+ if(c.changed)parts.push(c.changed+" changed");
+ if(c.added)parts.push(c.added+" added");
+ if(c.removed)parts.push(c.removed+" removed");
+ if(rowErrors)parts.push(plural(rowErrors,"error"));
+ const run=unattributed.length?plural(unattributed.length,"error")+" in the run":"";
+ if(!need)return "This run failed: "+run;
+ return plural(need,"screenshot")+(need==1?" needs":" need")+" a look: "+parts.join(", ")+(run?"; "+run:"");
+}
+function header(){
+ $("verdict").textContent=verdict();
+ const m=$("meta"),code=t=>el("code",null,t);
+ if(R.commit){m.append("Commit ",code(String(R.commit).slice(0,7)));if(R.branch)m.append(" on ",code(R.branch))}
+ else if(R.branch)m.append("On ",code(R.branch));
+ const b=R.ci&&R.ci.buildUrl;
+ if(typeof b=="string"&&/^https?:\/\//i.test(b)){
+  const a=el("a",null,"build");a.href=b;a.rel="noopener noreferrer";
+  if(m.childNodes.length)m.append(", ");
+  m.append(a);
+ }
+ const notes=$("notes"),add=(t,bad)=>notes.append(el("div",bad?"note bad":"note",t));
+ for(const e of unattributed)add(e.message==null?"An error without a message":String(e.message),true);
+ for(const f of R.fingerprintMismatch||[])add("Baseline rendered differently: "+f);
+ if(R.localBaseline)add("Some baseline images were recorded outside CI (local); record or accept them on CI");
+ notes.hidden=!notes.childNodes.length;
+ const u=counts.unchanged||0;
+ if(u){$("showAllLabel").hidden=false;$("showAllText").textContent="Show "+u+" unchanged"}
+ $("tray").hidden=!selectable.length;
+}
+
+list.addEventListener("click",e=>{
+ if(e.target.tagName=="INPUT")return;
+ const r=e.target.closest(".row");if(r)setCur(rowShot.get(r),false);
+});
+list.addEventListener("change",e=>{
+ const s=rowShot.get(e.target.closest(".row"));
+ if(e.target.checked)picked.add(s);else picked.delete(s);
+ tray();
+});
+list.addEventListener("keydown",e=>{
+ if(e.key=="Enter"&&e.target.classList.contains("row"))setCur(rowShot.get(e.target),false);
+});
+$("modes").addEventListener("click",e=>{if(e.target.dataset.m)setMode(e.target.dataset.m)});
+$("showAll").addEventListener("change",draw);
+$("copy").addEventListener("click",copy);
+$("tickall").addEventListener("click",tickAll);
+addEventListener("keydown",e=>{
+ if(e.ctrlKey||e.metaKey||e.altKey)return;
+ const t=e.target;
+ if(t.tagName=="SELECT"||(t.tagName=="INPUT"&&t.type!="checkbox"&&t.type!="range"))return;
+ if(e.key=="j"||e.key=="k"){
+  const next=vis[(cur?cur._i:-1)+(e.key=="j"?1:-1)];
+  if(next)setCur(next,true);
+ }else if(e.key=="1"||e.key=="2"||e.key=="3")setMode(["side","slider","diff"][+e.key-1]);
+});
+
+header();filled();draw();tray();
+})();
+</script></body></html>

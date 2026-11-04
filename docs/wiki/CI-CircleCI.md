@@ -38,7 +38,8 @@ jobs:
 ```
 
 A changed screenshot fails the job. `store_test_results` reads `junit.xml` from the report folder;
-`store_artifacts` keeps the images for the job's Artifacts tab.
+`store_artifacts` keeps the report for the job's Artifacts tab, where `index.html` opens it; the
+comment's **Full report** link goes to the job.
 
 ## Accept
 

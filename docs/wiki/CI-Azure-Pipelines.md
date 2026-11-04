@@ -31,7 +31,8 @@ stages:
 
 `verify` publishes the JUnit results and the summary to the run itself. Add a
 `PublishTestResults@2` task for `screenshots-report/junit.xml` only if you want it in your own
-test run. For Azure Repos, use a branch policy (build validation) instead of `pr:`.
+test run. For Azure Repos, use a branch policy (build validation) instead of `pr:`. Download the
+`swiftshot-report` artifact and open `index.html`; the comment's **Full report** link goes to the run.
 
 ## Accept
 

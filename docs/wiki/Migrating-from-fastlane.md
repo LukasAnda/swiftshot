@@ -33,7 +33,7 @@ The output layout is the same, so `fastlane deliver` and `frameit` keep working.
 | `output_directory` | `output_directory` |
 | `clear_previous_screenshots` | `clear_previous_screenshots` |
 | `override_status_bar` | `status_bar` (on by default) |
-| `skip_open_summary` | `html: false` |
+| `skip_open_summary` | not needed, swiftshot never opens the summary (`html: false` is not the same: it removes the HTML files, `index.html` of a verify report too) |
 | `concurrent_simulators` | not needed |
 | `launch_arguments` | set state in the preview |
 | `erase_simulator`, `reinstall_app` | not needed |
@@ -86,7 +86,7 @@ With `"layout": "fastlane"`, the output is where `fastlane supply` uploads from:
 | `specific_device` | not needed |
 | `use_tests_in_classes`, `use_tests_in_packages` | `previews` or `screens` with `skip` |
 | `launch_arguments` | set state in the preview |
-| `skip_open_summary` | `html: false` |
+| `skip_open_summary` | not needed, swiftshot never opens the summary (`html: false` is not the same: it removes the HTML files, `index.html` of a verify report too) |
 | `use_timestamp_suffix` | not needed, names are stable |
 | `reinstall_app`, `exit_on_test_failure` | not needed |
 

@@ -78,6 +78,9 @@ with `list` and `devices`, see [[Command line]]. The files `verify` writes are i
 
 A change you made on purpose is for a person to accept; a change you didn't is a bug to fix.
 
+The same folder has `index.html`, the report for a person to review. Point them at it instead of
+summarising images you can't compare.
+
 ## Accept
 
 After a person has looked at the report, accepting happens on CI: for example the comment
