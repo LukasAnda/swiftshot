@@ -106,10 +106,14 @@ jobs:
             echo "args=$args"
           } >> "$GITHUB_OUTPUT"
 
+      # A push with GITHUB_TOKEN starts no workflow, so required checks such as unit tests would
+      # not run on the accepted commit. Add a fine-grained token with Contents read and write on
+      # this repository as the SWIFTSHOT_PUSH_TOKEN secret and the push starts them as usual.
       - uses: actions/checkout@v7
         if: steps.prepare.outputs.proceed == 'true'
         with:
           ref: ${{ steps.prepare.outputs.ref }}
+          token: ${{ secrets.SWIFTSHOT_PUSH_TOKEN || github.token }}
 
       # Swiftshot built from this checkout: nothing is released yet to install. The binary finds the
       # agent, no-boot and simhost helpers next to itself, so bin/ goes on PATH whole.
@@ -138,8 +142,8 @@ jobs:
         if: steps.prepare.outputs.proceed == 'true'
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      # A push with GITHUB_TOKEN starts no workflow: render once more here, which posts the
-      # "swiftshot" status on the new commit. An issue_comment run sees the default branch's commit
+      # Without SWIFTSHOT_PUSH_TOKEN the push starts no workflow: render once more here, which posts
+      # the "swiftshot" status on the new commit. An issue_comment run sees the default branch's commit
       # and name, so the pull request's are given. Differences left after a partial accept fail
       # the status, not this job.
       - name: Verify the new baseline
