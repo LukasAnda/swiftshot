@@ -1,0 +1,147 @@
+{
+  "fingerprints": {
+    "962341af8269": {
+      "host": "macos-arm64",
+      "mode": "no-boot",
+      "platform": "ios",
+      "runtime": "24A434",
+      "swiftshot": "dev",
+      "xcode": "27A9275"
+    }
+  },
+  "images": {
+    "ar/iPhone 17 Pro Max-Habit list-dark": {
+      "appearance": "dark",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "ar",
+      "local": false,
+      "platform": "ios",
+      "preview": "Habit list",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "ar/iPhone 17 Pro Max-Habit list-light": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "ar",
+      "local": false,
+      "platform": "ios",
+      "preview": "Habit list",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "ar/iPhone 17 Pro Max-Settings-dark": {
+      "appearance": "dark",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "ar",
+      "local": false,
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "ar/iPhone 17 Pro Max-Settings-light": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "ar",
+      "local": false,
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "ar/iPhone 17 Pro Max-Stats-dark": {
+      "appearance": "dark",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "ar",
+      "local": false,
+      "platform": "ios",
+      "preview": "Stats",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "ar/iPhone 17 Pro Max-Stats-light": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "ar",
+      "local": false,
+      "platform": "ios",
+      "preview": "Stats",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro Max-Habit list-dark": {
+      "appearance": "dark",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Habit list",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro Max-Habit list-light": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Habit list",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro Max-Settings-dark": {
+      "appearance": "dark",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro Max-Settings-light": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Settings",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro Max-Stats-dark": {
+      "appearance": "dark",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Stats",
+      "runtime": "27.0",
+      "textSize": "default"
+    },
+    "en-US/iPhone 17 Pro Max-Stats-light": {
+      "appearance": "light",
+      "device": "iPhone 17 Pro Max",
+      "fingerprint": "962341af8269",
+      "language": "en-US",
+      "local": false,
+      "platform": "ios",
+      "preview": "Stats",
+      "runtime": "27.0",
+      "textSize": "default"
+    }
+  },
+  "schema": 1
+}
