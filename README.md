@@ -176,6 +176,11 @@ Needs Flutter 3.35+ (widget previews) and a JDK 21+. See the
 one included, are made and accepted on CI so results are always the same. See the
 [Screenshot testing](https://github.com/LukasAnda/swiftshot/wiki/Screenshot-testing) wiki page.
 
+![The HTML report: a changed Stats screen side by side with its baseline, the change framed](docs/wiki/images/report.png)
+
+See it working on [this pull request](https://github.com/LukasAnda/swiftshot/pull/34): it lightens
+a chart on the demo app's Stats screen, and the comment lists the 4 screenshots that changed.
+
 On CI, `verify` comments the result on the pull request and shows it in the CI's own results; a
 person accepts the changes the way the CI allows. Recipes:
 

@@ -75,6 +75,8 @@ stays as above.
 
 ## The report
 
+![The HTML report: a changed Stats screen side by side with its baseline, the change framed](images/report.png)
+
 `verify` writes `<output_directory>-report/index.html` (`screenshots-report/index.html` by default).
 Open it: it lists what changed, was added or removed, and what failed, and shows each screenshot side by side with its baseline, on a slider, or
 as the differences. Tick what you want to keep and it builds the accept command, or on GitHub the
@@ -84,6 +86,9 @@ and no network, so a downloaded report works too. `--no-html` leaves it out.
 On a pull request, the comment's **Full report** link goes to the CI build, where the report is kept:
 download it and open `index.html`. The comment's `Pixels` column is the share of the image that
 changed.
+
+See it working on [this pull request](https://github.com/LukasAnda/swiftshot/pull/34) of the
+demo app.
 
 ## Where files go
 
