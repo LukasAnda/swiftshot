@@ -64,7 +64,7 @@ jobs:
         run: |
           files=$(for f in "$RUNNER_TEMP"/calibrations/*/calibration.json; do [ -s "$f" ] && [ "$(tr -d ' \n' < "$f")" != "{}" ] && echo "$f"; done || true)
           [ -n "$files" ] || { echo "Nothing new measured."; exit 0; }
-          make -s bin/swiftshot
+          make -s
           bin/swiftshot emit-table --emit-table Sources/swiftshot/BuiltInDisplays.swift $files
           git --no-pager diff --stat
       # Pull requests opened with the workflow token don't run the tests workflow: check here.

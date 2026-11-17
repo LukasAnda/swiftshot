@@ -1,0 +1,27 @@
+# Temporary: runs the Android unit tests repeatedly to find a flaky test. Removed before merge.
+name: flake-hunt
+on: pull_request
+jobs:
+  hunt:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: Android unit tests, 5 times
+        run: |
+          cd Android
+          export JAVA_HOME="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
+          for _ in 1 2 3 4 5; do
+            ./gradlew --no-daemon -q :cli:test --rerun 2>&1 | grep -v '^w:' | grep -E "FAILED|Exception|expected|at swiftshot" | head -40 || true
+            python3 - <<'PY'
+          import glob, re
+          for f in glob.glob('cli/build/test-results/test/*.xml'):
+              s = open(f).read()
+              for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"[^>]*>\s*<failure message="([^"]{0,600})', s):
+                  print("::error::FLAKE %s.%s: %s" % (m.group(2), m.group(1), m.group(3)))
+          PY
+          done
