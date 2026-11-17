@@ -214,7 +214,7 @@ final class Runner {
         let stdoutPath = output.split(separator: "\n").last(where: { $0.hasPrefix("SWIFTSHOT_RESULT ") })
             .map { String($0.dropFirst("SWIFTSHOT_RESULT ".count)) }
         guard let path = FileManager.default.fileExists(atPath: resultPath) ? resultPath : stdoutPath else {
-            throw CLIError("Agent did not report a result for \(tag). App output:\n\(output.suffix(3000))")
+            throw NoResult(description: "Agent did not report a result for \(tag). App output:\n\(output.suffix(3000))")
         }
         let result = try JSONDecoder().decode(JobResult.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
         try? FileManager.default.removeItem(atPath: path)
@@ -697,7 +697,11 @@ final class Runner {
             let result: JobResult
             do { result = try await launch(job, tag: "device-\(runtime.version)-\(type.name)-\(language)", udid: device.udid, app: app) } catch {
                 pump.cancel()
-                if grabFailed.isSet && attempt < attempts - 1 {
+                // The app ending without a result (a watchOS 27.2 app was seen to exit right after
+                // discovering its previews on a hosted runner) gets the same second chance; twice in
+                // a row is reported.
+                if (grabFailed.isSet || error is NoResult) && attempt < attempts - 1 {
+                    if error is NoResult { Log.warn("\(type.name): \(language): the app ended without a result") }
                     Log.warn("\(type.name): rebooting the simulator and capturing \(language) again")
                     try await reboot(device, app: app)
                     continue
@@ -733,6 +737,9 @@ final class Runner {
         }
         if options.shutdownAfter || shutdownAfter { try? await Simctl.shutdown(device.udid) }
     }
+
+    /// The app ended without writing its result.
+    struct NoResult: Error, CustomStringConvertible { let description: String }
 
     /// Restarts a device-mode simulator the way `prepare` leaves it: status bar overridden and the
     /// app launched once.
