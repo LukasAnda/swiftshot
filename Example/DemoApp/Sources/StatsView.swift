@@ -97,7 +97,7 @@ struct WeekChart: View {
                         ZStack(alignment: .bottom) {
                             Capsule().fill(Color.primary.opacity(0.06))
                             Capsule()
-                                .fill(isToday ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.accent.opacity(0.45)))
+                                .fill(isToday ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.accent.opacity(0.25)))
                                 .frame(height: barHeight * v)
                         }
                         .frame(height: barHeight)
