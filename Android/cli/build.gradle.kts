@@ -15,6 +15,13 @@ tasks.test {
     val testdata = rootProject.file("../Shared/testdata")
     inputs.dir(testdata)
     systemProperty("swiftshot.testdata", testdata.absolutePath)
+    // CI runs Gradle with -q: name a failing test and its stack trace anyway.
+    testLogging {
+        quiet {
+            events("failed")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
+    }
 }
 
 // One self-contained jar: `java -jar swiftshot-android.jar`.
