@@ -96,7 +96,7 @@ final class BaselineIntegrationTests: XCTestCase {
         // The copy: sources and project, not earlier output.
         let source = Self.root.appendingPathComponent("Example/DemoApp")
         try fm.createDirectory(at: project, withIntermediateDirectories: true)
-        for item in try fm.contentsOfDirectory(atPath: source.path) where ![".swiftshot", "screenshots", "fastlane"].contains(item) {
+        for item in try fm.contentsOfDirectory(atPath: source.path) where ![".swiftshot", "screenshots", "screenshots-baseline", "fastlane"].contains(item) {
             try fm.copyItem(at: source.appendingPathComponent(item), to: project.appendingPathComponent(item))
         }
         try "{\"project\": \"DemoApp.xcodeproj\", \"scheme\": \"DemoApp\"}\n".write(to: project.appendingPathComponent("swiftshot.json"), atomically: true, encoding: .utf8)
