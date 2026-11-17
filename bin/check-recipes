@@ -9,7 +9,8 @@ for a Jenkinsfile) is validated by kind:
                            check-jsonschema against Shared/ci-schemas/<kind>.json
   jenkins                  balanced braces only (no schema exists)
 
-The github accept recipe is also run, with `gh` stubbed, on sample comments (needs bash and jq).
+The github accept recipe is also run, with `gh` stubbed, on sample comments (needs bash and jq), and
+this repository's own accept workflow must hold the recipe's `prepare` step byte for byte.
 
 Every CI page must hold a block of its kind and name its accept job exactly as the hint in
 Summary.kt does. Needs python3, check-jsonschema and actionlint on PATH.
@@ -190,10 +191,29 @@ def self_test():
         good = bool(problems)
         print("self-test accept recipe, %-22s %s" % (name, "fails as expected" if good else "WRONG: no sample comment failed"))
         ok = ok and good
+    # The in-repo accept workflow's prepare step: any change to it, or to the recipe's, must fail.
+    for name, target, old, new in (("workflow", ACCEPT_WORKFLOW, "head -n 1", "head -n 2"), ("recipe", ACCEPT_RECIPE, "tr -d '\\r'", "tr -d '\\n'")):
+        with tempfile.TemporaryDirectory() as tmp:
+            for f in (ACCEPT_RECIPE, ACCEPT_WORKFLOW):
+                os.makedirs(os.path.join(tmp, os.path.dirname(f)), exist_ok=True)
+                shutil.copy(os.path.join(ROOT, f), os.path.join(tmp, f))
+            path = os.path.join(tmp, target)
+            with open(path) as f:
+                text = f.read()
+            if old not in text:
+                print("self-test: cannot break the %s's prepare step, %r not found" % (name, old))
+                ok = False
+                continue
+            with open(path, "w") as f:
+                f.write(text.replace(old, new, 1))
+            good = bool(prepare_drift(tmp))
+        print("self-test prepare step, %-18s %s" % ("changed " + name, "fails as expected" if good else "WRONG: no drift found"))
+        ok = ok and good
     return ok
 
 
 ACCEPT_RECIPE = "docs/recipes/github/screenshots-accept.yml"
+ACCEPT_WORKFLOW = ".github/workflows/screenshots-accept.yml"
 HEAD = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
 STUB_GH = r"""#!/bin/bash
 # A gh that answers the calls of the accept recipe's first step.
@@ -218,6 +238,29 @@ def prepare_script(recipe):
             break
         body.append(l[10:])
     return "\n".join(body) + "\n"
+
+
+def prepare_step(text):
+    """The whole step `prepare` (from its `- name:` line to the next step), as written."""
+    lines = text.split("\n")
+    at = next(i for i, l in enumerate(lines) if l.strip() == "id: prepare")
+    start = next(i for i in range(at, -1, -1) if lines[i].startswith("      - "))
+    end = next((i for i in range(at + 1, len(lines)) if lines[i].startswith("      - ")), len(lines))
+    return "\n".join(lines[start:end]).rstrip("\n")
+
+
+def prepare_drift(root):
+    """Problems if the repository's accept workflow's `prepare` step differs from the recipe's."""
+    try:
+        with open(os.path.join(root, ACCEPT_RECIPE)) as f:
+            recipe = prepare_step(f.read())
+        with open(os.path.join(root, ACCEPT_WORKFLOW)) as f:
+            workflow = prepare_step(f.read())
+    except (OSError, StopIteration) as e:
+        return ["cannot compare the prepare steps: %r" % (e,)]
+    if recipe != workflow:
+        return ["the `prepare` step of %s differs from %s; it must be the same, byte for byte" % (ACCEPT_WORKFLOW, ACCEPT_RECIPE)]
+    return []
 
 
 def run_prepare(script, comment, head=HEAD, permission="write"):
@@ -306,6 +349,10 @@ def main():
         sys.exit(__doc__)
     failed = check(ROOT, os.path.join(ROOT, "docs", "wiki"))
     problems = accept_behaviour(ROOT)
+    drift = prepare_drift(ROOT)
+    if not drift:
+        print("ok   accept workflow's prepare step equals the recipe's")
+    problems += drift
     for p in problems:
         print("FAIL accept recipe: %s" % p)
     if not problems:

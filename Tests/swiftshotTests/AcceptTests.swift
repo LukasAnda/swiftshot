@@ -292,6 +292,28 @@ final class AcceptTests: XCTestCase {
         XCTAssertEqual(try git(repo, "rev-list", "--count", "\(verified)..HEAD"), "1")
     }
 
+    /// A project in a subfolder of the repository (the first baseline too, whose directory doesn't exist yet): the commit
+    /// holds the baseline's files with their paths from the repository's root, and nothing else.
+    func testPushFromAProjectInASubfolder() throws {
+        let project = repo.appendingPathComponent("Example/DemoApp")
+        let nested = project.appendingPathComponent("screenshots-baseline")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try git(repo, "init", "-q", "-b", "main")
+        try "app\n".write(to: project.appendingPathComponent("README"), atomically: true, encoding: .utf8)
+        try git(repo, "add", "-A")
+        try git(repo, "commit", "-q", "-m", "initial")
+        try remote()
+        let verified = try head()
+        let code = Accept.run(from: [try report("added").path], only: nil, push: true, author: nil, baseline: nested, log: console, env: [:], gitEnv: gitEnv)
+        XCTAssertEqual(code, 0, errors)
+        XCTAssertEqual(try git(repo, "rev-list", "--count", "\(verified)..HEAD"), "1")
+        let files = try git(repo, "-c", "core.quotePath=false", "show", "--name-only", "--format=", "HEAD").split(separator: "\n").map(String.init)
+        XCTAssertTrue(files.contains("Example/DemoApp/screenshots-baseline/baseline.json"), "\(files)")
+        XCTAssertTrue(files.allSatisfy { $0.hasPrefix("Example/DemoApp/screenshots-baseline/") }, "\(files)")
+        XCTAssertEqual(try git(tmp.appendingPathComponent("remote.git"), "rev-parse", "main"), try head())
+        XCTAssertEqual(try status(), "")
+    }
+
     func testAuthorOverride() throws {
         try repoWith("added")
         let remote = tmp.appendingPathComponent("remote.git")
