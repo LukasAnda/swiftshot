@@ -11,7 +11,7 @@ to suggest something or to say what you need most.
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | [Linux as a full host](#v060--linux-as-a-full-host) | released |
 | [v0.7.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.7.0) | [Flutter](#v070--flutter) | released |
 | [v0.8.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.8.0) | [Migration from Paparazzi and Roborazzi](#v080--migration-from-paparazzi-and-roborazzi) | released |
-| 1.0.0 | [Baseline comparison](#v100--baseline-comparison) | next |
+| [v1.0.0](https://github.com/LukasAnda/swiftshot/releases/tag/v1.0.0) | [Baseline comparison](#v100--baseline-comparison) | released |
 
 ## v0.3.0 · Homebrew
 
@@ -51,7 +51,8 @@ from the project, and a report lists what isn't covered. See [[Migrating|Migrati
 ## v1.0.0 · Baseline comparison
 
 Verify screenshots against a committed baseline, with an HTML diff report and a way to accept
-changes on CI. Works on GitHub, GitLab, Bitbucket, Bitrise, Codemagic and others. The first
-baseline comes from CI, not from Paparazzi or Roborazzi images.
+changes on CI. Works on GitHub, GitLab, Bitbucket, Bitrise, Codemagic, CircleCI, Azure Pipelines
+and Jenkins. The first baseline comes from CI, not from Paparazzi or Roborazzi images. See
+[[Screenshot testing]].
 
 IDE plugins are no longer planned.

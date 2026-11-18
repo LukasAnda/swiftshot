@@ -207,9 +207,9 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - uses: LukasAnda/swiftshot@v0.8.0
+      - uses: LukasAnda/swiftshot@v1.0.0
         with:
-          version: 0.8.0      # or "latest"
+          version: 1.0.0      # or "latest"
       - uses: actions/upload-artifact@v7
         with: { name: ios-screenshots, path: fastlane/screenshots }
 
@@ -219,9 +219,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
-      - uses: LukasAnda/swiftshot@v0.8.0
+      - uses: LukasAnda/swiftshot@v1.0.0
         with:
-          version: 0.8.0
+          version: 1.0.0
       - uses: actions/upload-artifact@v7
         with: { name: android-screenshots, path: fastlane/metadata/android }
 ```
@@ -232,7 +232,7 @@ The action installs the release and runs `swiftshot run` with your `swiftshot.js
 Other CI:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=0.8.0 sh
+curl -fsSL https://raw.githubusercontent.com/LukasAnda/swiftshot/main/install.sh | SWIFTSHOT_VERSION=1.0.0 sh
 ~/.swiftshot/bin/swiftshot run
 ```
 
@@ -519,7 +519,7 @@ the time budget.
 | [v0.6.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.6.0) | Linux as a full host: the same `swiftshot` command, setup and config as on a Mac (released) |
 | [v0.7.0](https://github.com/LukasAnda/swiftshot/milestone/4) | Flutter: widget previews on iOS and Android devices (released) |
 | [v0.8.0](https://github.com/LukasAnda/swiftshot/releases/tag/v0.8.0) | Migration from Paparazzi and Roborazzi: `swiftshot init` sets Swiftshot up to match (released) |
-| 1.0.0 | Baseline comparison: verify against a committed baseline, HTML diff report, accept changes on CI (GitHub, GitLab, Bitbucket, Bitrise, Codemagic and others) |
+| [v1.0.0](https://github.com/LukasAnda/swiftshot/releases/tag/v1.0.0) | Screenshot testing: verify against a committed baseline, HTML diff report, accept changes on CI (GitHub, GitLab, Bitbucket, Bitrise, Codemagic and others) (released) |
 
 Version numbers are targets and can move. Details on the
 [Roadmap](https://github.com/LukasAnda/swiftshot/wiki/Roadmap) wiki page; suggestions are welcome as
